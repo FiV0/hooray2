@@ -9,3 +9,6 @@ build
 .lsp
 .clj-kondo
 **/.nrepl-port
+
+# Claude
+.claude
