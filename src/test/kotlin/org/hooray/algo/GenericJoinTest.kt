@@ -6,6 +6,18 @@ import org.junit.jupiter.api.assertThrows
 
 class GenericJoinTest {
 
+    // Helper function to create a simple extender with a fixed set of values
+    private fun createSimpleExtender(values: List<Int>): PrefixExtender {
+        return object : PrefixExtender {
+            override fun count(prefix: Prefix): Int = values.size
+
+            override fun propose(prefix: Prefix): List<Extension> = values
+
+            override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
+                    = extensions.filter { ext -> values.contains(ext) }
+        }
+    }
+
     @Test
     fun `test empty extenders fails`() {
         val emptyExtenders = emptyList<PrefixExtender>()
@@ -18,29 +30,8 @@ class GenericJoinTest {
 
     @Test
     fun `test two extenders with even and divisible by three`() {
-        // First extender: even numbers up to 12
-        val evenExtender = object : PrefixExtender {
-            private val evens = listOf(2, 4, 6, 8, 10, 12)
-
-            override fun count(prefix: Prefix): Int = evens.size
-
-            override fun propose(prefix: Prefix): List<Extension> = evens
-
-            override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
-                    = extensions.filter { ext -> evens.contains(ext) }
-        }
-
-        // Second extender: numbers divisible by 3 up to 12
-        val divisibleByThreeExtender = object : PrefixExtender {
-            private val divByThree = listOf(3, 6, 9, 12)
-
-            override fun count(prefix: Prefix): Int = divByThree.size
-
-            override fun propose(prefix: Prefix): List<Extension> = divByThree
-
-            override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
-                    = extensions.filter { ext -> divByThree.contains(ext) }
-        }
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
 
         val extenders = listOf(evenExtender, divisibleByThreeExtender)
         val prefixes = listOf(emptyList<Any>())
@@ -53,6 +44,53 @@ class GenericJoinTest {
         val expected = listOf(
             listOf(6),
             listOf(12)
+        )
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun `test GenericJoin with two levels`() {
+        // First level: even numbers and numbers divisible by 3 (same as previous test)
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
+
+        // Second level: single extender that takes the prefix value and returns all values divisible by it up to 12
+        val divisibleByPrefixExtender = object : PrefixExtender {
+            override fun count(prefix: Prefix): Int {
+                val divisor = prefix[0] as Int
+                return (1..12).count { it % divisor == 0 }
+            }
+
+            override fun propose(prefix: Prefix): List<Extension> {
+                val divisor = prefix[0] as Int
+                return (1..12).filter { it % divisor == 0 }
+            }
+
+            override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+                val divisor = prefix[0] as Int
+                return extensions.filter { ext ->
+                    ext is Int && ext % divisor == 0
+                }
+            }
+        }
+
+        val extenders = listOf(
+            listOf(evenExtender, divisibleByThreeExtender),  // First level
+            listOf(divisibleByPrefixExtender)                 // Second level
+        )
+
+        val join = GenericJoin(extenders)
+        val result = join.join()
+
+        // First level produces: [6] and [12]
+        // Second level for prefix [6]: numbers divisible by 6 up to 12 -> 6, 12 -> results: [6, 6], [6, 12]
+        // Second level for prefix [12]: numbers divisible by 12 up to 12 -> 12 -> result: [12, 12]
+        assertEquals(3, result.size)
+
+        val expected = listOf(
+            listOf(6, 6),
+            listOf(6, 12),
+            listOf(12, 12)
         )
         assertEquals(expected, result)
     }
