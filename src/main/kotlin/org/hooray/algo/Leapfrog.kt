@@ -75,6 +75,7 @@ class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<Res
     val singleJoinStack : Stack<LeapfrogSingleJoin> = Stack()
 
     init {
+        require(indexes.isNotEmpty()) { "At least one index is required" }
         require(indexes.all { it.maxLevel() > 0 }) { "All indices must have at least one level!" }
         participants = List(levels) { i ->
             val participants = mutableListOf<LeapfrogIndex>()
@@ -96,7 +97,7 @@ class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<Res
         while (singleJoinStack.isNotEmpty()) {
             val currentJoin = singleJoinStack.peek()
             val level = singleJoinStack.size - 1
-            assert(singleJoinStack.size == candidateTuple.size) { "Level should always match candidate size. Level ${singleJoinStack.size}, candidate size ${candidateTuple.size}" }
+            assert(level == candidateTuple.size) { "Level should always match candidate size. Level $level, candidate size ${candidateTuple.size}" }
             if (currentJoin.search(candidateTuple)) {
                 if (level == levels - 1) {
                     results.add(candidateTuple.toList())
@@ -107,9 +108,9 @@ class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<Res
                     singleJoinStack.push(LeapfrogSingleJoin(participants[level + 1]))
                 }
             } else {
-                candidateTuple.removeLast()
                 participants[level].filter { it.level() > 0 }.map { it.closeLevel() }
                 singleJoinStack.pop()
+                if (candidateTuple.isNotEmpty()) candidateTuple.removeLast()
             }
         }
         return results
