@@ -3,6 +3,10 @@ package org.hooray.algo
 typealias Prefix = ResultTuple
 typealias Extension = Any
 
+// generic-join based on
+// http://www.frankmcsherry.org/dataflow/relational/join/2015/04/11/genericjoin.html
+// https://arxiv.org/abs/1310.3314
+
 interface PrefixExtender {
     fun count(prefix: Prefix): Int
     fun propose(prefix: Prefix) : List<Extension>
