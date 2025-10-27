@@ -110,7 +110,10 @@ class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<Res
             } else {
                 participants[level].filter { it.level() > 0 }.map { it.closeLevel() }
                 singleJoinStack.pop()
-                if (candidateTuple.isNotEmpty()) candidateTuple.removeLast()
+                if (singleJoinStack.isNotEmpty()) {
+                    singleJoinStack.peek().next()
+                    candidateTuple.removeLast()
+                }
             }
         }
         return results
