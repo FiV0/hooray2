@@ -42,10 +42,16 @@ class LeapfrogSingleJoin(private val iterators: List<LeapfrogIterator>) {
 
         var maxKey = iterators[currentIteratorIndex].key()
         var startIndex = currentIteratorIndex
+        currentIteratorIndex = (currentIteratorIndex + 1) % iterators.size
+
 
         while (true) {
+            if (currentIteratorIndex == startIndex) {
+                candidateTuple.add(maxKey)
+                return true
+            }
+
             // Move to next iterator in round-robin fashion
-            currentIteratorIndex = (currentIteratorIndex + 1) % iterators.size
             val currentIterator = iterators[currentIteratorIndex]
 
             // Seek to at least maxKey
@@ -62,10 +68,8 @@ class LeapfrogSingleJoin(private val iterators: List<LeapfrogIterator>) {
             if (UniversalComparator.compare(currentKey , maxKey) > 0) {
                 maxKey = currentKey
                 startIndex = currentIteratorIndex
-            } else if (currentIteratorIndex == startIndex) {
-                candidateTuple.add(currentKey)
-                return true
             }
+            currentIteratorIndex = (currentIteratorIndex + 1) % iterators.size
         }
     }
 }
