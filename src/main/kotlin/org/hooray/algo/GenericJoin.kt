@@ -13,20 +13,20 @@ interface PrefixExtender {
     fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension>
 }
 
+fun applyExtensions(prefix: Prefix, extensions: List<Extension>) : List<ResultTuple> {
+    val result = mutableListOf<ResultTuple>()
+    for(ext in extensions) {
+        val newTuple = prefix.toMutableList()
+        newTuple.add(ext)
+        result.add(newTuple)
+    }
+    return result
+}
+
 class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List<Prefix>) : Join<ResultTuple> {
 
     init {
         require(extenders.isNotEmpty()) { "At least one extender is required" }
-    }
-
-    private fun applyExtensions(prefix: Prefix, extensions: List<Extension>) : List<ResultTuple> {
-        val result = mutableListOf<ResultTuple>()
-        for(ext in extensions) {
-            val newTuple = prefix.toMutableList()
-            newTuple.add(ext)
-            result.add(newTuple)
-        }
-        return result
     }
 
     override fun join(): List<ResultTuple> {
