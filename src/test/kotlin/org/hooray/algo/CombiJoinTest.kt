@@ -67,4 +67,40 @@ class CombiJoinTest {
         )
         assertEquals(expected, result)
     }
+
+    @Test
+    fun `test CombiJoin with two levels`() {
+        // First level: even numbers and numbers divisible by 3 (same as previous test)
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
+
+        // Second level: extender that takes the prefix value and returns all values divisible by it up to 12
+        val divisibleByPrefixExtender = object : CombiJoinExtender {
+            override fun getIterators(prefix: Prefix): LeapfrogIterator {
+                val divisor = prefix[0] as Int
+                val values = (1..12).filter { it % divisor == 0 }
+                return SimpleLeapfrogIterator(values)
+            }
+        }
+
+        val extenders = listOf(
+            listOf(evenExtender, divisibleByThreeExtender),  // First level
+            listOf(divisibleByPrefixExtender)                 // Second level
+        )
+
+        val join = CombiJoin(extenders)
+        val result = join.join()
+
+        // First level produces: [6] and [12]
+        // Second level for prefix [6]: numbers divisible by 6 up to 12 -> 6, 12 -> results: [6, 6], [6, 12]
+        // Second level for prefix [12]: numbers divisible by 12 up to 12 -> 12 -> result: [12, 12]
+        assertEquals(3, result.size)
+
+        val expected = listOf(
+            listOf(6, 6),
+            listOf(6, 12),
+            listOf(12, 12)
+        )
+        assertEquals(expected, result)
+    }
 }
