@@ -22,7 +22,11 @@ dependencies {
     implementation(kotlin("stdlib-jdk8"))
 
     // Clojure
-    implementation( "org.clojure", "clojure", "1.12.0-rc1")
+    implementation( "org.clojure", "clojure", "1.12.3")
+    implementation("org.clojure", "spec.alpha", "0.5.238")
+    implementation("persistent-sorted-set", "persistent-sorted-set", "0.3.0")
+    implementation("org.clojure", "tools.logging", "1.3.0")
+    implementation("ch.qos.logback", "logback-classic", "1.4.5")
     testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
     nrepl("cider", "cider-nrepl", "0.49.1")
 }
