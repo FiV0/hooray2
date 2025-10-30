@@ -1,6 +1,8 @@
 (ns hooray.core
   (:require [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]))
+            [clojure.spec.alpha :as s]
+            [hooray.db :as db])
+  (:import (hooray.db Db)))
 
 (s/def ::type #{:mem})
 (s/def ::storage #{:hash-map :avl :btree})
@@ -8,11 +10,11 @@
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
 
-(defrecord Node [opts ])
+(defrecord Node [!dbs opts])
 
 (defn connect [opts]
   {:pre [(s/valid? ::conn-opts opts)]}
-  (throw (Exception. "Not implemented yet")))
+  (->Node (atom [(db/->db opts)]) opts))
 
 (s/def ::entity (s/keys :req [:db/id]))
 (s/def ::add-transaction #(and (= :db/add (first %)) (vector? %) (= 4 (count %))))
@@ -28,15 +30,14 @@
                        [:db/add "foo" :is/cool true]]))
 
 
-(defn transact [node tx-data]
+(defn transact [{:keys [!dbs] :as node} tx-data]
   {:pre [(instance? Node node) (s/valid? ::tx-data tx-data)]}
-  (throw (Exception. "Not implemented yet")))
+  (swap! !dbs (fn [dbs]
+                (conj dbs (db/transact (last dbs) tx-data)))))
 
-(defn db [node]
+(defn db [{:keys [] :as node}]
   {:pre [(instance? Node node)]}
   (throw (Exception. "Not implemented yet")))
-
-(defrecord Db [])
 
 (defn q [query & inputs]
   {:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
