@@ -1,17 +1,15 @@
 (ns hooray.util.persistent-map
   (:refer-clojure :exclude [sorted-map sorted-map-by])
   (:require [me.tonsky.persistent-sorted-set :as set])
-  (:import
-   (clojure.lang RT IPersistentMap MapEntry SeqIterator)
-   (me.tonsky.persistent_sorted_set PersistentSortedSet ISeek Seq)))
+  (:import (clojure.lang RT IPersistentMap MapEntry SeqIterator)
+           (me.tonsky.persistent_sorted_set PersistentSortedSet Seq)
+           (org.hooray.util IPersistentSortedMapSeq IPersistentSortedMap)))
 
 (deftype PersistentSortedMapSeq [^Seq set-seq]
-  clojure.lang.Seqable
+  IPersistentSortedMapSeq
   (seq [this]
     this)
 
-  clojure.lang.Sequential
-  clojure.lang.ISeq
   (first [this]
     (when-let [e (first set-seq)]
       (MapEntry. (first e) (second e))))
@@ -24,7 +22,6 @@
   (next [this]
     (.seq (.more this)))
 
-  ISeek
   (seek [this k]
     (when-let [new-seq (set/seek set-seq [k nil])]
       (PersistentSortedMapSeq. new-seq))))
@@ -40,22 +37,20 @@
   (toString [this]
     (RT/printString this))
 
-  clojure.lang.IMeta
-  (meta [this]
-    _meta)
-
-  clojure.lang.IObj
-  (withMeta [this meta]
-    (PersistentSortedMap. set meta))
-
-  clojure.lang.Counted
-  (count [this]
-    (count set))
-
   getSet
   (get-set [this] set)
 
-  clojure.lang.IPersistentCollection
+  IPersistentSortedMap
+  (meta [this]
+    _meta)
+
+  (withMeta [this meta]
+    (PersistentSortedMap. set meta))
+
+  (count [this]
+    (count set))
+
+
   (cons [this entry]
     (if (vector? entry)
       (assoc this (nth entry 0) (nth entry 1))
@@ -69,7 +64,6 @@
       (= set (get-set that))
       false))
 
-  clojure.lang.IFn
   (invoke [this k]
     (.valAt this k))
 
@@ -86,17 +80,14 @@
         3 (throw (clojure.lang.ArityException.
                   n (.. this (getClass) (getSimpleName)))))))
 
-  clojure.lang.Seqable
   (seq [this]
     (when (pos? (count set))
       (PersistentSortedMapSeq. (seq set))))
 
-  clojure.lang.Reversible
   (rseq [this]
     (when (pos? (count set))
       (PersistentSortedMapSeq. (rseq set))))
 
-  clojure.lang.ILookup
   (valAt [this k]
     (.valAt this k nil))
 
@@ -106,7 +97,6 @@
       (second n)
       not-found))
 
-  clojure.lang.Associative
   (assoc [this k v]
     ;; the `disjoin` is needed as we o/w don't get an update
     (PersistentSortedMap. (-> set (disj [k]) (conj [k v])) _meta))
@@ -119,15 +109,12 @@
     (when-let [n (get set [k nil])]
       (MapEntry. (first n) (second n))))
 
-  clojure.lang.MapEquivalence
-  clojure.lang.IPersistentMap
   (without [this k]
     (PersistentSortedMap. (disj set [k nil]) _meta))
 
   (assocEx [this k v]
     (throw (UnsupportedOperationException.)))
 
-  Iterable
   (iterator [this] (SeqIterator. (seq this)))
   (forEach [this action] (throw (UnsupportedOperationException.)))
   (spliterator [this] (throw (UnsupportedOperationException.))))
