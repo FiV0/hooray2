@@ -31,8 +31,8 @@ class HashPrefixExtender(val index: SealedHashIndex, val participatesInLevel: Li
                 is SealedHashIndex.HashMapIndex ->
                     when(val newIndex = currentIndex.map[key]) {
                         is HashMap<*, *> -> SealedHashIndex.HashMapIndex(newIndex as HashMap<Any, Any>)
-                        is HashSet<*> -> SealedHashIndex.HashSetIndex(newIndex as kotlin.collections.HashSet<Any> )
-                        else -> throw IllegalArgumentException("Unsupported value type in BTreeMap for key: $key")
+                        is HashSet<*> -> SealedHashIndex.HashSetIndex(newIndex as HashSet<Any> )
+                        else -> throw IllegalArgumentException("Unsupported value type in HashMap for key: $key")
                     }
                 else -> throw IllegalArgumentException("Cannot index into a HashSet with a key")
             }
