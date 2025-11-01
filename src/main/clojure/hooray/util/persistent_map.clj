@@ -5,6 +5,7 @@
            (me.tonsky.persistent_sorted_set PersistentSortedSet Seq)
            (org.hooray.util IPersistentSortedMapSeq IPersistentSortedMap)))
 
+;; TODO may implement ASeq here
 (deftype PersistentSortedMapSeq [^Seq set-seq]
   IPersistentSortedMapSeq
   (seq [this]
