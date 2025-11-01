@@ -1,31 +1,28 @@
 package org.hooray.iterator
 
+import clojure.lang.ISeq
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
-import org.hooray.algo.PrefixExtender
 
-interface AVLMap : Map<Any, Any>
-interface AVLSet : Set<Any>
+interface AVLMap : ISeq, Map<Any, Any>
+interface AVLSet : ISeq,  Set<Any>
+
+interface AVLMapSeq: ISeq
+interface AVLSetSeq: ISeq
 
 sealed interface AVLIndex {
     data class AVLMapIndex(val map: AVLMap): AVLIndex
     data class AVLSetIndex(val set: AVLSet): AVLIndex
 }
 
-class AVLLeapfrogIndex(val index: AVLIndex, val participatesInLevel: List<Int>) : PrefixExtender {
-
-    private fun internalPrefix(prefix: Prefix): Prefix {
-        val newPrefix = mutableListOf<Any>()
-        for (level in participatesInLevel) {
-            if (level < prefix.size) {
-                newPrefix.add(prefix[level])
-            }
-        }
-        return newPrefix
-    }
+class AVLLeapfrogIndex(val avlIndex: AVLIndex, participatesInLevel: List<Int>) : GenericPrefixExtender(
+    when(avlIndex) {
+        is AVLIndex.AVLMapIndex -> SealedIndex.MapIndex(avlIndex.map)
+        is AVLIndex.AVLSetIndex -> SealedIndex.SetIndex(avlIndex.set)
+    }, participatesInLevel) {
 
     private fun indexFromPrefix(prefix: Prefix): AVLIndex {
-        var currentIndex = index
+        var currentIndex = avlIndex
         val internalPrefix = internalPrefix(prefix)
 
         for (key in internalPrefix) {
@@ -42,23 +39,23 @@ class AVLLeapfrogIndex(val index: AVLIndex, val participatesInLevel: List<Int>) 
         return currentIndex
     }
 
-    override fun count(prefix: Prefix) =
-        when (val index= indexFromPrefix(prefix)) {
-            is AVLIndex.AVLMapIndex -> index.map.size
-            is AVLIndex.AVLSetIndex -> index.set.size
-        }
-
-    override fun propose(prefix: Prefix)  =
-        when (val index= indexFromPrefix(prefix)) {
-            is AVLIndex.AVLMapIndex -> index.map.keys.toList()
-            is AVLIndex.AVLSetIndex -> index.set.toList()
-        }
 
     // This is WCO as we start with the smallest extension list so
     // extensions.size <= map.size or set.size
-    override fun extend(prefix: Prefix, extensions: List<Extension>) =
-        when (val index = indexFromPrefix(prefix)) {
-            is AVLIndex.AVLMapIndex -> extensions.filter { ext -> index.map.containsKey(ext) }
-            is AVLIndex.AVLSetIndex -> extensions.filter { ext -> index.set.contains(ext) }
+    override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+        var seq = when (val index = indexFromPrefix(prefix)) {
+            is AVLIndex.AVLMapIndex -> index.map.seq() as AVLMapSeq
+            is AVLIndex.AVLSetIndex -> index.set.seq() as AVLSetSeq
         }
+        val result = mutableListOf<Extension>()
+        for (ext in extensions) {
+            TODO()
+//            seq = seq.seek(ext)
+//            if(seq.isEmpty()) break
+//            if (seq.first() == ext) {
+//                result.add(ext)
+//            }
+        }
+        return result
+    }
 }
