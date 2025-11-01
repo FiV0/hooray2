@@ -1,6 +1,5 @@
 package org.hooray.iterator
 
-import clojure.lang.Symbol
 import me.tonsky.persistent_sorted_set.APersistentSortedSet
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
@@ -13,7 +12,7 @@ sealed interface SealedIndex {
 }
 
 @Suppress("UNCHECKED_CAST")
-class BTreePrefixExtender(val index: SealedIndex, variableOrder: List<Symbol>, val participatesInLevel: List<Int>) : PrefixExtender {
+class BTreePrefixExtender(val index: SealedIndex, val participatesInLevel: List<Int>) : PrefixExtender {
 
     private fun internalPrefix(prefix: Prefix): Prefix {
         val newPrefix = mutableListOf<Any>()
