@@ -2,13 +2,13 @@ package org.hooray.iterator
 
 import clojure.lang.MapEntry
 import clojure.lang.Symbol
-import org.hooray.algo.LeapfrogIndex
-import me.tonsky.persistent_sorted_set.IPersistentSortedSet
+import me.tonsky.persistent_sorted_set.APersistentSortedSet
 import me.tonsky.persistent_sorted_set.Seq
+import org.hooray.algo.LeapfrogIndex
 import org.hooray.algo.LeapfrogIterator
 import org.hooray.util.IPersistentSortedMap
 import org.hooray.util.IPersistentSortedMapSeq
-import java.util.Stack
+import java.util.*
 
 @Suppress("UNCHECKED_CAST")
 class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
@@ -20,12 +20,12 @@ class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val va
         iteratorStack = Stack<LeapfrogIterator>()
         when(variables.size) {
             0 -> throw IllegalArgumentException("At least one variable must be present")
-            1 -> iteratorStack.push(BTreeLeapfrogIteratorSet(index as IPersistentSortedSet<Any, Any>))
+            1 -> iteratorStack.push(BTreeLeapfrogIteratorSet(index as APersistentSortedSet<Any, Any>))
             else -> iteratorStack.push(BTreeLeapFrogIteratorMap(index as IPersistentSortedMap))
         }
     }
 
-    internal class BTreeLeapfrogIteratorSet(btreeSet: IPersistentSortedSet<Any, Any>): LeapfrogIterator {
+    internal class BTreeLeapfrogIteratorSet(btreeSet: APersistentSortedSet<Any, Any>): LeapfrogIterator {
         var seq = btreeSet.seq() as Seq
 
         override fun seek(key: Any) {
@@ -71,7 +71,7 @@ class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val va
         level++
         check(level < maxLevel) { "Cannot open level beyond max level $maxLevel" }
         if(level + 1 == maxLevel) {
-            iteratorStack.push(BTreeLeapfrogIteratorSet(index as IPersistentSortedSet<Any, Any>))
+            iteratorStack.push(BTreeLeapfrogIteratorSet(index as APersistentSortedSet<Any, Any>))
         } else {
             iteratorStack.push(BTreeLeapFrogIteratorMap(index as IPersistentSortedMap))
         }
@@ -88,5 +88,4 @@ class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val va
     override fun maxLevel() = variableOrder.size
 
     override fun participatesInLevel(level: Int) = variables.contains(variableOrder[level])
-
 }
