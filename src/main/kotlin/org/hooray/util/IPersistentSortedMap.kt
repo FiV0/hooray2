@@ -13,4 +13,4 @@ import clojure.lang.Reversible
 import clojure.lang.Seqable
 
 interface IPersistentSortedMap:
-    IMeta, IObj, Counted, IPersistentCollection, IFn, Seqable, Reversible, ILookup, Associative, MapEquivalence, IPersistentMap
+    IMeta, IObj, Counted, IPersistentCollection, IFn, Seqable, Reversible, ILookup, Associative, MapEquivalence, IPersistentMap, Map<Any,Any>
