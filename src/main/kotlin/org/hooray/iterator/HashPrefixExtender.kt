@@ -5,8 +5,8 @@ import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
 
 sealed interface SealedHashIndex {
-    data class HashMapIndex(val hashMap: HashMap<Any, Any>) : SealedHashIndex
-    data class HashSetIndex(val hashSet: HashSet<Any>) : SealedHashIndex
+    data class HashMapIndex(val map: HashMap<Any, Any>) : SealedHashIndex
+    data class HashSetIndex(val set: HashSet<Any>) : SealedHashIndex
 }
 
 @Suppress("UNCHECKED_CAST")
@@ -29,7 +29,7 @@ class HashPrefixExtender(val index: SealedHashIndex, val participatesInLevel: Li
         for (key in internalPrefix) {
             currentIndex = when (currentIndex) {
                 is SealedHashIndex.HashMapIndex ->
-                    when(val newIndex = currentIndex.hashMap[key]) {
+                    when(val newIndex = currentIndex.map[key]) {
                         is HashMap<*, *> -> SealedHashIndex.HashMapIndex(newIndex as HashMap<Any, Any>)
                         is HashSet<*> -> SealedHashIndex.HashSetIndex(newIndex as kotlin.collections.HashSet<Any> )
                         else -> throw IllegalArgumentException("Unsupported value type in BTreeMap for key: $key")
@@ -42,21 +42,21 @@ class HashPrefixExtender(val index: SealedHashIndex, val participatesInLevel: Li
 
     override fun count(prefix: Prefix) =
         when (val index= indexFromPrefix(prefix)) {
-            is SealedHashIndex.HashMapIndex -> index.hashMap.size
-            is SealedHashIndex.HashSetIndex -> index.hashSet.size
+            is SealedHashIndex.HashMapIndex -> index.map.size
+            is SealedHashIndex.HashSetIndex -> index.set.size
         }
 
     override fun propose(prefix: Prefix)  =
         when (val index= indexFromPrefix(prefix)) {
-            is SealedHashIndex.HashMapIndex -> index.hashMap.keys.toList()
-            is SealedHashIndex.HashSetIndex -> index.hashSet.toList()
+            is SealedHashIndex.HashMapIndex -> index.map.keys.toList()
+            is SealedHashIndex.HashSetIndex -> index.set.toList()
         }
 
     // This is WCO as we start with the smallest extension list so
-    // extensions.size <=
+    // extensions.size <= map.size or set.size
     override fun extend(prefix: Prefix, extensions: List<Extension>) =
         when (val index = indexFromPrefix(prefix)) {
-            is SealedHashIndex.HashMapIndex -> extensions.filter { ext -> index.hashMap.containsKey(ext) }
-            is SealedHashIndex.HashSetIndex -> extensions.filter { ext -> index.hashSet.contains(ext) }
+            is SealedHashIndex.HashMapIndex -> extensions.filter { ext -> index.map.containsKey(ext) }
+            is SealedHashIndex.HashSetIndex -> extensions.filter { ext -> index.set.contains(ext) }
         }
 }
