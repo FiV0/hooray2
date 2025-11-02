@@ -11,17 +11,16 @@ import org.hooray.util.IPersistentSortedMapSeq
 import java.util.*
 
 @Suppress("UNCHECKED_CAST")
-class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
+class BTreeLeapfrogIndex(val index: SealedBTreeIndex, val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
     var level = 0
     var iteratorStack: Stack<LeapfrogIterator>
 
     init {
         level = 0
         iteratorStack = Stack<LeapfrogIterator>()
-        when(variables.size) {
-            0 -> throw IllegalArgumentException("At least one variable must be present")
-            1 -> iteratorStack.push(BTreeLeapfrogIteratorSet(index as APersistentSortedSet<Any, Any>))
-            else -> iteratorStack.push(BTreeLeapFrogIteratorMap(index as IPersistentSortedMap))
+        when(index) {
+            is SealedBTreeIndex.BTreeSet -> iteratorStack.push(BTreeLeapfrogIteratorSet(index.set))
+            is SealedBTreeIndex.BTreeMap -> iteratorStack.push(BTreeLeapFrogIteratorMap(index.map))
         }
     }
 
@@ -53,7 +52,9 @@ class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val va
             return key()
         }
 
-        override fun key(): Any = (seq?.first() as MapEntry).`val`()
+        override fun key(): Any = (seq?.first() as MapEntry).key()
+
+        fun value(): Any = (seq?.first() as MapEntry).`val`()
 
         override fun atEnd(): Boolean = seq == null
     }
@@ -70,10 +71,15 @@ class BTreeLeapfrogIndex(val index: Any, val variableOrder: List<Symbol>, val va
         val maxLevel = maxLevel()
         level++
         check(level < maxLevel) { "Cannot open level beyond max level $maxLevel" }
-        if(level + 1 == maxLevel) {
-            iteratorStack.push(BTreeLeapfrogIteratorSet(index as APersistentSortedSet<Any, Any>))
-        } else {
-            iteratorStack.push(BTreeLeapFrogIteratorMap(index as IPersistentSortedMap))
+        when (val currentIndex = iteratorStack.peek() ) {
+            is BTreeLeapFrogIteratorMap -> {
+                when(val newIndex = currentIndex.value()) {
+                    is IPersistentSortedMap -> iteratorStack.push(BTreeLeapFrogIteratorMap(newIndex))
+                    is APersistentSortedSet<*, *> -> iteratorStack.push(BTreeLeapfrogIteratorSet(newIndex as APersistentSortedSet<Any, Any>))
+                    else -> throw IllegalStateException("Unsupported value type in BTreeLeapFrogIteratorMap: ${newIndex?.javaClass}")
+                }
+            }
+            else -> throw IllegalStateException("Cannot open level on BTreeLeapfrogIteratorSet")
         }
     }
 
