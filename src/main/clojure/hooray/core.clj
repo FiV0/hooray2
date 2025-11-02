@@ -35,9 +35,10 @@
   (swap! !dbs (fn [dbs]
                 (conj dbs (db/transact (last dbs) tx-data)))))
 
-(defn db [{:keys [] :as node}]
+(defn db [{:keys [!dbs] :as node}]
   {:pre [(instance? Node node)]}
-  (throw (Exception. "Not implemented yet")))
+  ;; TODO support time travel
+  (last @!dbs))
 
 (defn q [query & inputs]
   {:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}

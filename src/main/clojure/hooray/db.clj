@@ -9,23 +9,25 @@
 
 (defrecord Db [eav aev ave vae])
 
+(def ^:private universal-comp (cast java.util.Comparator UniversalComparator/INSTANCE))
+
 (defn set* [type]
   (case type
     :hash-map (hash-set)
-    :avl (avl/sorted-set-by UniversalComparator)
-    :btree (btree-set/sorted-set-by UniversalComparator)))
+    :avl (avl/sorted-set-by universal-comp)
+    :btree (btree-set/sorted-set-by universal-comp)))
 
 (defn map* [type]
   (case type
     :hash-map (hash-map)
-    :avl (avl/sorted-map-by UniversalComparator)
-    :btree (btree-map/sorted-map-by UniversalComparator)))
+    :avl (avl/sorted-map-by universal-comp)
+    :btree (btree-map/sorted-map-by universal-comp)))
 
 (defn ->update-in-fn [type]
   (case type
     :hash-map (util/create-update-in hash-map)
-    :avl (util/create-update-in avl/sorted-map)
-    :btree (util/create-update-in btree-map/sorted-map)))
+    :avl (util/create-update-in #(avl/sorted-map-by universal-comp))
+    :btree (util/create-update-in #(btree-map/sorted-map universal-comp))))
 
 (defn ->db [{:keys [storage]}]
   (->Db (map* storage) (map* storage) (map* storage) (map* storage)))

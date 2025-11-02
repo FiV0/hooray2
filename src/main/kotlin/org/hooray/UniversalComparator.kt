@@ -1,7 +1,6 @@
 package org.hooray
 
 import clojure.lang.Keyword
-import clojure.lang.MapEntry
 import clojure.lang.PersistentVector
 import clojure.lang.Symbol
 import clojure.lang.Util
