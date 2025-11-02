@@ -28,7 +28,7 @@ dependencies {
     implementation("persistent-sorted-set", "persistent-sorted-set", "0.3.0")
     implementation("org.clojure", "tools.logging", "1.3.0")
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
-    implementation("com.github.FiV0", "data.avl", "v0.0.23")
+    implementation("com.github.FiV0", "data.avl", "v0.0.25")
     testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
     nrepl("cider", "cider-nrepl", "0.49.1")
 }
