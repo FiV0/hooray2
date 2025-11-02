@@ -11,7 +11,7 @@ import org.hooray.util.IPersistentSortedMapSeq
 import java.util.*
 
 @Suppress("UNCHECKED_CAST")
-class BTreeLeapfrogIndex(val index: SealedBTreeIndex, val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
+class BTreeLeapfrogIndex(index: BTreeIndex, val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
     var level = 0
     var iteratorStack: Stack<LeapfrogIterator>
 
@@ -19,8 +19,8 @@ class BTreeLeapfrogIndex(val index: SealedBTreeIndex, val variableOrder: List<Sy
         level = 0
         iteratorStack = Stack<LeapfrogIterator>()
         when(index) {
-            is SealedBTreeIndex.BTreeSet -> iteratorStack.push(BTreeLeapfrogIteratorSet(index.set))
-            is SealedBTreeIndex.BTreeMap -> iteratorStack.push(BTreeLeapFrogIteratorMap(index.map))
+            is BTreeIndex.BTreeSet -> iteratorStack.push(BTreeLeapfrogIteratorSet(index.set))
+            is BTreeIndex.BTreeMap -> iteratorStack.push(BTreeLeapFrogIteratorMap(index.map))
         }
     }
 

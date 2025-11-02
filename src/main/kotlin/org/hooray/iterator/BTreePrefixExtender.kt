@@ -6,28 +6,28 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.util.IPersistentSortedMap
 
-sealed interface SealedBTreeIndex {
-    data class BTreeMap(val map: IPersistentSortedMap) : SealedBTreeIndex
-    data class BTreeSet(val set: APersistentSortedSet<Any, Any>) : SealedBTreeIndex
+sealed interface BTreeIndex {
+    data class BTreeMap(val map: IPersistentSortedMap) : BTreeIndex
+    data class BTreeSet(val set: APersistentSortedSet<Any, Any>) : BTreeIndex
 }
 
 @Suppress("UNCHECKED_CAST")
-class BTreePrefixExtender(val bTreeIndex: SealedBTreeIndex, participatesInLevel: List<Int>) :
+class BTreePrefixExtender(val bTreeIndex: BTreeIndex, participatesInLevel: List<Int>) :
     GenericPrefixExtender(when(bTreeIndex) {
-        is SealedBTreeIndex.BTreeMap -> SealedIndex.MapIndex(bTreeIndex.map)
-        is SealedBTreeIndex.BTreeSet -> SealedIndex.SetIndex(bTreeIndex.set as Set<Any>)
+        is BTreeIndex.BTreeMap -> SealedIndex.MapIndex(bTreeIndex.map)
+        is BTreeIndex.BTreeSet -> SealedIndex.SetIndex(bTreeIndex.set as Set<Any>)
     }, participatesInLevel) {
 
-    private fun indexFromPrefix(prefix: Prefix): SealedBTreeIndex {
+    private fun indexFromPrefix(prefix: Prefix): BTreeIndex {
         var currentIndex = bTreeIndex
         val internalPrefix = internalPrefix(prefix)
 
         for (key in internalPrefix) {
             currentIndex = when (currentIndex) {
-                is SealedBTreeIndex.BTreeMap ->
+                is BTreeIndex.BTreeMap ->
                     when(val newIndex = currentIndex.map[key]) {
-                        is IPersistentSortedMap -> SealedBTreeIndex.BTreeMap(newIndex)
-                        is APersistentSortedSet<*, *> -> SealedBTreeIndex.BTreeSet(newIndex as APersistentSortedSet<Any, Any>)
+                        is IPersistentSortedMap -> BTreeIndex.BTreeMap(newIndex)
+                        is APersistentSortedSet<*, *> -> BTreeIndex.BTreeSet(newIndex as APersistentSortedSet<Any, Any>)
                         else -> throw IllegalArgumentException("Unsupported value type in BTreePrefixExtender for key: $key")
                     }
                 else -> throw IllegalArgumentException("Cannot index into a BTreeSet with a key")
@@ -41,8 +41,8 @@ class BTreePrefixExtender(val bTreeIndex: SealedBTreeIndex, participatesInLevel:
 
     override fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension> {
         var (seq, keyFn) = when (val index = indexFromPrefix(prefix)) {
-            is SealedBTreeIndex.BTreeMap -> Pair(index.map.seq() as Seq, ::mapKey)
-            is SealedBTreeIndex.BTreeSet -> Pair(index.set.seq() as Seq, ::setKey)
+            is BTreeIndex.BTreeMap -> Pair(index.map.seq() as Seq, ::mapKey)
+            is BTreeIndex.BTreeSet -> Pair(index.set.seq() as Seq, ::setKey)
         }
         val result = mutableListOf<Extension>()
         for (ext in extensions) {
