@@ -30,8 +30,8 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
             currentIndex = when (currentIndex) {
                 is SealedIndex.MapIndex ->
                     when(val newIndex = currentIndex.map[key]) {
-                        is HashMap<*, *> -> SealedIndex.MapIndex(newIndex as HashMap<Any, Any>)
-                        is HashSet<*> -> SealedIndex.SetIndex(newIndex as HashSet<Any> )
+                        is Map<*, *> -> SealedIndex.MapIndex(newIndex as Map<Any, Any>)
+                        is Set<*> -> SealedIndex.SetIndex(newIndex as Set<Any> )
                         else -> throw IllegalArgumentException("Unsupported value type in HashMap for key: $key")
                     }
                 else -> throw IllegalArgumentException("Cannot index into a HashSet with a key")
