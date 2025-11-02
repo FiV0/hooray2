@@ -1,24 +1,21 @@
 package org.hooray.iterator
 
-import clojure.lang.ISeq
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
-
-interface AVLMap : ISeq, Map<Any, Any>
-interface AVLSet : ISeq,  Set<Any>
-
-interface AVLMapSeq: ISeq
-interface AVLSetSeq: ISeq
+import clojure.data.avl.AVLMap
+import clojure.data.avl.AVLSet
+import clojure.data.avl.IAVLSeq
 
 sealed interface AVLIndex {
     data class AVLMapIndex(val map: AVLMap): AVLIndex
     data class AVLSetIndex(val set: AVLSet): AVLIndex
 }
 
+@Suppress("UNCHECKED_CAST")
 class AVLLeapfrogIndex(val avlIndex: AVLIndex, participatesInLevel: List<Int>) : GenericPrefixExtender(
     when(avlIndex) {
-        is AVLIndex.AVLMapIndex -> SealedIndex.MapIndex(avlIndex.map)
-        is AVLIndex.AVLSetIndex -> SealedIndex.SetIndex(avlIndex.set)
+        is AVLIndex.AVLMapIndex -> SealedIndex.MapIndex(avlIndex.map as Map<Any, Any>)
+        is AVLIndex.AVLSetIndex -> SealedIndex.SetIndex(avlIndex.set as Set<Any>)
     }, participatesInLevel) {
 
     private fun indexFromPrefix(prefix: Prefix): AVLIndex {
@@ -39,22 +36,21 @@ class AVLLeapfrogIndex(val avlIndex: AVLIndex, participatesInLevel: List<Int>) :
         return currentIndex
     }
 
+    private fun mapKey(s: IAVLSeq) = (s.first() as clojure.lang.MapEntry).`val`()
+    private fun setKey(s: IAVLSeq) = s.first()
 
-    // This is WCO as we start with the smallest extension list so
-    // extensions.size <= map.size or set.size
     override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
-        var seq = when (val index = indexFromPrefix(prefix)) {
-            is AVLIndex.AVLMapIndex -> index.map.seq() as AVLMapSeq
-            is AVLIndex.AVLSetIndex -> index.set.seq() as AVLSetSeq
+        var (seq, keyFn) = when (val index = indexFromPrefix(prefix)) {
+            is AVLIndex.AVLMapIndex -> Pair(index.map.seq() as IAVLSeq, ::mapKey)
+            is AVLIndex.AVLSetIndex -> Pair(index.set.seq() as IAVLSeq, ::setKey)
         }
         val result = mutableListOf<Extension>()
         for (ext in extensions) {
-            TODO()
-//            seq = seq.seek(ext)
-//            if(seq.isEmpty()) break
-//            if (seq.first() == ext) {
-//                result.add(ext)
-//            }
+            seq = seq.seek(ext)
+            if(seq.isEmpty()) break
+            if (keyFn(seq) == ext) {
+                result.add(ext)
+            }
         }
         return result
     }
