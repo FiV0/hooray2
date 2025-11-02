@@ -22,8 +22,8 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
         return newPrefix
     }
 
-    private fun indexFromPrefix(prefix: Prefix): SealedIndex {
-        var currentIndex = index
+    private fun indexFromPrefix(prefix: Prefix): SealedIndex? {
+        var currentIndex : SealedIndex? = index
         val internalPrefix = internalPrefix(prefix)
 
         for (key in internalPrefix) {
@@ -32,6 +32,7 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
                     when(val newIndex = currentIndex.map[key]) {
                         is Map<*, *> -> SealedIndex.MapIndex(newIndex as Map<Any, Any>)
                         is Set<*> -> SealedIndex.SetIndex(newIndex as Set<Any> )
+                        null -> null
                         else -> throw IllegalArgumentException("Unsupported value type in HashMap for key: $key")
                     }
                 else -> throw IllegalArgumentException("Cannot index into a HashSet with a key")
@@ -42,13 +43,16 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
 
     override open fun count(prefix: Prefix) =
         when (val index= indexFromPrefix(prefix)) {
+            null -> 0
             is SealedIndex.MapIndex -> index.map.size
             is SealedIndex.SetIndex -> index.set.size
         }
 
     override open fun propose(prefix: Prefix)  =
         when (val index= indexFromPrefix(prefix)) {
-            is SealedIndex.MapIndex -> index.map.keys.toList()
+            null -> emptyList()
+            // we don't just use .keys as that does not preserve order in case of sorted collections
+            is SealedIndex.MapIndex -> index.map.iterator().asSequence().map { it.key }.toList()
             is SealedIndex.SetIndex -> index.set.toList()
         }
 
@@ -56,6 +60,7 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
     // extensions.size <= map.size or set.size
     override open fun extend(prefix: Prefix, extensions: List<Extension>) =
         when (val index = indexFromPrefix(prefix)) {
+            null -> emptyList()
             is SealedIndex.MapIndex -> extensions.filter { ext -> index.map.containsKey(ext) }
             is SealedIndex.SetIndex -> extensions.filter { ext -> index.set.contains(ext) }
         }

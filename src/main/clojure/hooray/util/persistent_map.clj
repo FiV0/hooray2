@@ -191,5 +191,6 @@
       (seek 1))
 
   (sorted-map 1 (sorted-map 2 3))
+  ;; TODO this is broken, one can't model the set via entries here
   (get (sorted-map 1 (sorted-map 2 3)) 1)
   (into [] (sorted-map 1 2 2 3)))

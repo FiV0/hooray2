@@ -18,8 +18,8 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
         is AVLIndex.AVLSetIndex -> SealedIndex.SetIndex(avlIndex.set as Set<Any>)
     }, participatesInLevel) {
 
-    private fun indexFromPrefix(prefix: Prefix): AVLIndex {
-        var currentIndex = avlIndex
+    private fun indexFromPrefix(prefix: Prefix): AVLIndex? {
+        var currentIndex: AVLIndex? = avlIndex
         val internalPrefix = internalPrefix(prefix)
 
         for (key in internalPrefix) {
@@ -28,6 +28,7 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
                     when(val newIndex = currentIndex.map[key]) {
                         is AVLMap -> AVLIndex.AVLMapIndex(newIndex)
                         is AVLSet -> AVLIndex.AVLSetIndex(newIndex)
+                        null -> null
                         else -> throw IllegalArgumentException("Unsupported value type in AVLMap for key: $key")
                     }
                 else -> throw IllegalArgumentException("Cannot index into a BTreeSet with a key")
@@ -43,6 +44,7 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
         var (seq, keyFn) = when (val index = indexFromPrefix(prefix)) {
             is AVLIndex.AVLMapIndex -> Pair(index.map.seq() as IAVLSeq, ::mapKey)
             is AVLIndex.AVLSetIndex -> Pair(index.set.seq() as IAVLSeq, ::setKey)
+            null -> return emptyList()
         }
         val result = mutableListOf<Extension>()
         for (ext in extensions) {
