@@ -76,7 +76,7 @@ class BTreeLeapfrogIndex(index: BTreeIndex, val variableOrder: List<Symbol>, val
                 when(val newIndex = currentIndex.value()) {
                     is IPersistentSortedMap -> iteratorStack.push(BTreeLeapFrogIteratorMap(newIndex))
                     is APersistentSortedSet<*, *> -> iteratorStack.push(BTreeLeapfrogIteratorSet(newIndex as APersistentSortedSet<Any, Any>))
-                    else -> throw IllegalStateException("Unsupported value type in BTreeLeapFrogIteratorMap: ${newIndex?.javaClass}")
+                    else -> throw IllegalStateException("Unsupported value type in BTreeLeapFrogIteratorMap: ${newIndex.javaClass}")
                 }
             }
             else -> throw IllegalStateException("Cannot open level on BTreeLeapfrogIteratorSet")
