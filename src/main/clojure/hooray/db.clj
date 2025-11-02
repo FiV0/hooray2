@@ -7,7 +7,7 @@
            (clojure.data.avl AVLMap)
            (hooray.util.persistent_map PersistentSortedMap)))
 
-(defrecord Db [eav aev ave vae])
+(defrecord Db [eav aev ave vae opts])
 
 (def ^:private universal-comp (cast java.util.Comparator UniversalComparator/INSTANCE))
 
@@ -29,8 +29,8 @@
     :avl (util/create-update-in #(avl/sorted-map-by universal-comp))
     :btree (util/create-update-in #(btree-map/sorted-map universal-comp))))
 
-(defn ->db [{:keys [storage]}]
-  (->Db (map* storage) (map* storage) (map* storage) (map* storage)))
+(defn ->db [{:keys [storage] :as opts}]
+  (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts))
 
 (defn- map->triples [m]
   (let [eid (or (:db/id m) (throw (ex-info "Entity map must have :db/id" {:entity m})))]

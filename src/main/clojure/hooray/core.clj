@@ -1,7 +1,8 @@
 (ns hooray.core
   (:require [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [hooray.db :as db])
+            [hooray.db :as db]
+            [hooray.query :as query])
   (:import (hooray.db Db)))
 
 (s/def ::type #{:mem})
@@ -44,4 +45,4 @@
   {:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
   (when (> (count inputs) 1)
     (log/warn "Hooray currently only supports one source!"))
-  (throw (Exception. "Not implemented yet")))
+  (query/query (first inputs) query))
