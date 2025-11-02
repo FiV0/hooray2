@@ -170,26 +170,26 @@
 
 (defn sorted-map
   ([] (PersistentSortedMap. (set/sorted-set-by #(compare (first %1) (first %2))) {}))
-  ([& kvs] (into (sorted-map) kvs)))
+  ([& kvs] (into (sorted-map) (partitionv 2 kvs))))
 
 (comment
-  (seq (sorted-map [1 2] [3 4]))
-  (-> (seq (sorted-map [1 2] [3 4]))
+  (seq (sorted-map 1 2 3 4))
+  (-> (seq (sorted-map 1 2 3 4))
       (seek 2)))
 
 (defn sorted-map-by
   ([cmp] (PersistentSortedMap. (set/sorted-set-by #(cmp (first %1) (first %2))) {}))
-  ([cmp & kvs] (into (sorted-map-by cmp) kvs)))
+  ([cmp & kvs] (into (sorted-map-by cmp) (partitionv 2 kvs))))
 
 (comment
   (def key-fn -)
   (def cmp #(compare (key-fn %1) (key-fn %2)))
 
-  (sorted-map-by cmp [1 2] [2 3])
-  (-> (sorted-map-by cmp [1 2] [2 3])
+  (sorted-map-by cmp 1 2 2 3)
+  (-> (sorted-map-by cmp 1 2 2 3)
       seq
       (seek 1))
 
-  (sorted-map [1 (sorted-map [2 3])])
-  (get (sorted-map [1 (sorted-map [2 3])]) 1)
-  (into [] (sorted-map [1 2] [2 3])))
+  (sorted-map 1 (sorted-map 2 3))
+  (get (sorted-map 1 (sorted-map 2 3)) 1)
+  (into [] (sorted-map 1 2 2 3)))
