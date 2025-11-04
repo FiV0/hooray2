@@ -28,13 +28,13 @@
 ;; [1 x y] -> eav entity needs to come before attribute
 ;; For simplicity let's just forget about attribute variables for now
 
-(defn- variable-order [{wheres :where :as conformed-query}]
+(defn variable-order [{wheres :where :as _conformed-query}]
   (-> (for [{:keys [e a v] :as where} wheres]
         (match [e a v]
           [[:constant _] [:constant _] [:constant _]] []
-          [[:constant _] [:constant _] [:variable v]] [v]
-          [[:constant v] [:constant _] [:constant _]] [v]
-          [[:variable v1] [:constant _] [:variable v2]] [v1 v2]
+          [[:constant _] [:constant _] [:variable value]] [value]
+          [[:variable entity] [:constant _] [:constant _]] [entity]
+          [[:variable entity] [:constant _] [:variable value]] [entity value]
           [_ [:variable _] _] (throw (UnsupportedOperationException. "Currently varialbles in attribute position are not supported"))
           :else (throw (ex-info "Unknown where clause" {:where where}))))
       flatten
