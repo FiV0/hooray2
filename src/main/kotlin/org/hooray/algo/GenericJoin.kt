@@ -1,5 +1,7 @@
 package org.hooray.algo
 
+import org.hooray.iterator.LevelParticipation
+
 typealias Prefix = ResultTuple
 typealias Extension = Any
 
@@ -7,7 +9,7 @@ typealias Extension = Any
 // http://www.frankmcsherry.org/dataflow/relational/join/2015/04/11/genericjoin.html
 // https://arxiv.org/abs/1310.3314
 
-interface PrefixExtender {
+interface PrefixExtender : LevelParticipation {
     fun count(prefix: Prefix): Int
     fun propose(prefix: Prefix) : List<Extension>
     fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension>
@@ -45,10 +47,22 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
     }
 }
 
-class GenericJoin(val extenders: List<List<PrefixExtender>>) : Join<ResultTuple> {
+class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<ResultTuple> {
+
+    private val extenderSets : List<List<PrefixExtender>> = List(levels) { level ->
+        val participants = mutableListOf<PrefixExtender>()
+        for (extender in extenders) {
+            if (extender.participatesInLevel(level)) {
+                participants.add(extender)
+            }
+        }
+        participants
+    }
+
     override fun join(): List<ResultTuple> {
         var prefixes: List<Prefix> = listOf(emptyList())
-        for (extenderSet in extenders) {
+
+        for (extenderSet in extenderSets) {
             val singleJoin = GenericSingleJoin(extenderSet, prefixes)
             val newTuples = singleJoin.join()
             prefixes = newTuples

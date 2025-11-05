@@ -1,6 +1,7 @@
 package org.hooray.algo
 
 import org.hooray.UniversalComparator
+import org.hooray.iterator.LevelParticipation
 import java.util.Stack
 
 // leapfrog-trie-join based on
@@ -20,9 +21,7 @@ interface LayeredIndex {
     fun maxLevel(): Int
 }
 
-interface LeapfrogIndex : LeapfrogIterator, LayeredIndex {
-    fun participatesInLevel(level: Int): Boolean
-}
+interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation
 
 class LeapfrogSingleJoin(private val iterators: List<LeapfrogIterator>) {
     private var currentIteratorIndex = 0

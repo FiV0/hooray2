@@ -10,7 +10,7 @@ sealed interface SealedIndex {
 }
 
 @Suppress("UNCHECKED_CAST")
-open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel: List<Int>) : PrefixExtender {
+open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel: List<Int>) : PrefixExtender, LevelParticipation {
 
     protected fun internalPrefix(prefix: Prefix): Prefix {
         val newPrefix = mutableListOf<Any>()
@@ -64,4 +64,6 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
             is SealedIndex.MapIndex -> extensions.filter { ext -> index.map.containsKey(ext) }
             is SealedIndex.SetIndex -> extensions.filter { ext -> index.set.contains(ext) }
         }
+
+    override fun participatesInLevel(level: Int) = participatesInLevel.contains(level)
 }

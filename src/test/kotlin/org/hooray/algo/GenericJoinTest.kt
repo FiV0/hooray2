@@ -7,7 +7,7 @@ import org.junit.jupiter.api.assertThrows
 class GenericJoinTest {
 
     // Helper function to create a simple extender with a fixed set of values
-    private fun createSimpleExtender(values: List<Int>): PrefixExtender {
+    private fun createSimpleExtender(values: List<Int>, participatesInLevel: Int): PrefixExtender {
         return object : PrefixExtender {
             override fun count(prefix: Prefix): Int = values.size
 
@@ -15,6 +15,8 @@ class GenericJoinTest {
 
             override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
                     = extensions.filter { ext -> values.contains(ext) }
+
+            override fun participatesInLevel(level: Int) = level == participatesInLevel
         }
     }
 
@@ -30,8 +32,8 @@ class GenericJoinTest {
 
     @Test
     fun `test two extenders with even and divisible by three`() {
-        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
-        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12), 0)
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12), 0)
 
         val extenders = listOf(evenExtender, divisibleByThreeExtender)
         val prefixes = listOf(emptyList<Any>())
@@ -51,8 +53,8 @@ class GenericJoinTest {
     @Test
     fun `test GenericJoin with two levels`() {
         // First level: even numbers and numbers divisible by 3 (same as previous test)
-        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
-        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12), 0)
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12), 0)
 
         // Second level: single extender that takes the prefix value and returns all values divisible by it up to 12
         val divisibleByPrefixExtender = object : PrefixExtender {
@@ -72,14 +74,16 @@ class GenericJoinTest {
                     ext is Int && ext % divisor == 0
                 }
             }
+
+            override fun participatesInLevel(level: Int) = level == 1
         }
 
         val extenders = listOf(
-            listOf(evenExtender, divisibleByThreeExtender),  // First level
-            listOf(divisibleByPrefixExtender)                 // Second level
+            evenExtender, divisibleByThreeExtender,  // First level
+            divisibleByPrefixExtender                // Second level
         )
 
-        val join = GenericJoin(extenders)
+        val join = GenericJoin(extenders, 2)
         val result = join.join()
 
         // First level produces: [6] and [12]

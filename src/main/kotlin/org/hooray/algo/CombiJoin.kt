@@ -1,10 +1,11 @@
 package org.hooray.algo
 
 import org.hooray.UniversalComparator
+import org.hooray.iterator.LevelParticipation
 
 // A combination of Leapfrog on every level but overall strategy of GenericJoin
 
-interface CombiJoinExtender {
+interface CombiJoinExtender : LevelParticipation {
     fun getIterators(prefix: Prefix) : LeapfrogIterator
 }
 
@@ -60,11 +61,21 @@ class CombiSingleJoin(private val iterators: List<LeapfrogIterator>) {
     }
 }
 
-class CombiJoin (val extenders: List<List<CombiJoinExtender>>): Join<ResultTuple> {
+class CombiJoin (val extenders: List<CombiJoinExtender>, levels: Int): Join<ResultTuple> {
+
+    private val extenderSets : List<List<CombiJoinExtender>> = List(levels) { level ->
+        val participants = mutableListOf<CombiJoinExtender>()
+        for (extender in extenders) {
+            if (extender.participatesInLevel(level)) {
+                participants.add(extender)
+            }
+        }
+        participants
+    }
 
     override fun join(): List<ResultTuple> {
         var prefixes: List<Prefix> = listOf(emptyList())
-        for (extenderSet in extenders) {
+        for (extenderSet in extenderSets) {
             val newPrefixes = mutableListOf<Prefix>()
             for (prefix in prefixes) {
                 val singleJoin = CombiSingleJoin(extenderSet.map { it.getIterators(prefix) } )

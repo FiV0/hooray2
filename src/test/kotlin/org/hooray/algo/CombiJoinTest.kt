@@ -32,11 +32,13 @@ class CombiJoinTest {
         }
     }
 
-    private fun createSimpleExtender(values: List<Int>): CombiJoinExtender {
+    private fun createSimpleExtender(values: List<Int>, participateInLevel: Int): CombiJoinExtender {
         return object : CombiJoinExtender {
             override fun getIterators(prefix: Prefix): LeapfrogIterator {
                 return SimpleLeapfrogIterator(values)
             }
+
+            override fun participatesInLevel(level: Int) = level == participateInLevel
         }
     }
 
@@ -51,12 +53,12 @@ class CombiJoinTest {
 
     @Test
     fun `test two extenders with even and divisible by three`() {
-        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
-        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12), 0)
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12), 0)
 
         val extenders = listOf(evenExtender, divisibleByThreeExtender)
 
-        val join = CombiJoin(listOf(extenders))
+        val join = CombiJoin(extenders, 1)
         val result = join.join()
 
         assertEquals(2, result.size)
@@ -71,8 +73,8 @@ class CombiJoinTest {
     @Test
     fun `test CombiJoin with two levels`() {
         // First level: even numbers and numbers divisible by 3 (same as previous test)
-        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12))
-        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12))
+        val evenExtender = createSimpleExtender(listOf(2, 4, 6, 8, 10, 12), 0)
+        val divisibleByThreeExtender = createSimpleExtender(listOf(3, 6, 9, 12), 0)
 
         // Second level: extender that takes the prefix value and returns all values divisible by it up to 12
         val divisibleByPrefixExtender = object : CombiJoinExtender {
@@ -81,14 +83,16 @@ class CombiJoinTest {
                 val values = (1..12).filter { it % divisor == 0 }
                 return SimpleLeapfrogIterator(values)
             }
+
+            override fun participatesInLevel(level: Int) = level == 1
         }
 
         val extenders = listOf(
-            listOf(evenExtender, divisibleByThreeExtender),  // First level
-            listOf(divisibleByPrefixExtender)                 // Second level
+            evenExtender, divisibleByThreeExtender,  // First level
+            divisibleByPrefixExtender                // Second level
         )
 
-        val join = CombiJoin(extenders)
+        val join = CombiJoin(extenders, 2)
         val result = join.join()
 
         // First level produces: [6] and [12]
