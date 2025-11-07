@@ -1,7 +1,9 @@
 (ns hooray.query
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.core.match :refer [match]])
-  (:import (org.hooray.iterator
+  (:import (org.hooray.algo GenericJoin LeapfrogJoin)
+           (org.hooray.iterator
             AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender GenericPrefixExtender
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
             BTreeIndex
@@ -98,12 +100,17 @@
     (fn [row]
       (zipmap keys-in-var-order row))))
 
+(defn- order-result-fn [find var-to-index]
+  (fn [row]
+    (mapv (fn [var] (nth row (var-to-index var))) find)))
+
+(defn join [iterators {:keys [storage algo] :as opts}])
+
 (defn query [db query]
   {:pre [(s/valid? ::query query)]}
   (let [{:keys [where] :as conformed-query} (s/conform ::query query)
         var-order (variable-order conformed-query)
-        iterators (map (partial where-to-iterator db var-order) where)]
-    (unsupported-ex)))
+        iterators (map (partial where-to-iterator db var-order) where)]))
 
 (comment
   (def q '{:find [x y z]
