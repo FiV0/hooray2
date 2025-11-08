@@ -49,9 +49,13 @@
 ;; All tests copied from XTDB
 ;; https://github.com/xtdb/xtdb/blob/094e36f2f93d6543c899e2ba96947747125423a2/test/test/xtdb/query_test.clj
 ;; likely initially from Datascript
+(create-ns 'xt)
+(alias 'xt 'xt)
+(create-ns 'tpch)
+(alias 'tpch 'tpch)
 
 (def ^:dynamic *opts* {:type :mem :storage :hash :algo :generic})
-(def ^:dynamic *node*)
+(def ^:dynamic *node* nil)
 
 (defn with-node
   ([f] (with-node *opts* f))
@@ -63,56 +67,55 @@
 
 (deftest test-sanity-check
   (h/transact *node* [{:db/id 1 :name "Ivan"}])
-  (t/is (= nil (type (h/db *node*))))
-  (t/is (= nil (h/q '{:find [e]
-                      :where [[e :name "Ivan"]]} (h/db *node*)))))
+  (t/is (= #{[1]} (h/q '{:find [e]
+                         :where [[e :name "Ivan"]]} (h/db *node*)))))
 
-#_ (t/deftest test-basic-query
-     (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                       {:xt/id :petr :name "Petr" :last-name "Petrov"}]))
+(deftest test-basic-query
+  (h/transact *node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                      {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
-     (t/testing "Can query value by single field"
-       (t/is (= #{["Ivan"]} (xt/q (xt/db *api*) '{:find [name]
-                                                  :where [[e :name "Ivan"]
-                                                          [e :name name]]})))
-       (t/is (= #{["Petr"]} (xt/q (xt/db *api*) '{:find [name]
-                                                  :where [[e :name "Petr"]
-                                                          [e :name name]]}))))
+  (t/testing "Can query value by single field"
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[e :name "Ivan"]
+                                        [e :name name]]} (h/db *node*))))
+    (t/is (= #{["Petr"]} (h/q '{:find [name]
+                                :where [[e :name "Petr"]
+                                        [e :name name]]} (h/db *node*)))))
 
-     (t/testing "Can query entity by single field"
-       (t/is (= #{[:ivan]} (xt/q (xt/db *api*) '{:find [e]
-                                                 :where [[e :name "Ivan"]]})))
-       (t/is (= #{[:petr]} (xt/q (xt/db *api*) '{:find [e]
-                                                 :where [[e :name "Petr"]]}))))
+  (t/testing "Can query entity by single field"
+    (t/is (= #{[:ivan]} (h/q '{:find [e]
+                               :where [[e :name "Ivan"]]} (h/db *node*))))
+    (t/is (= #{[:petr]} (h/q '{:find [e]
+                               :where [[e :name "Petr"]]} (h/db *node*)))))
 
-     (t/testing "Can query using multiple terms"
-       (t/is (= #{["Ivan" "Ivanov"]} (xt/q (xt/db *api*) '{:find [name last-name]
-                                                           :where [[e :name name]
-                                                                   [e :last-name last-name]
-                                                                   [e :name "Ivan"]
-                                                                   [e :last-name "Ivanov"]]}))))
+  (t/testing "Can query using multiple terms"
+    (t/is (= #{["Ivan" "Ivanov"]} (h/q '{:find [name last-name]
+                                         :where [[e :name name]
+                                                 [e :last-name last-name]
+                                                 [e :name "Ivan"]
+                                                 [e :last-name "Ivanov"]]} (h/db *node*)))))
+  #_
+  (t/testing "Negate query based on subsequent non-matching clause"
+    (t/is (= #{} (h/q '{:find [e]
+                        :where [[e :name "Ivan"]
+                                [e :last-name "Ivanov-does-not-match"]]} (h/db *node*)))))
 
-     (t/testing "Negate query based on subsequent non-matching clause"
-       (t/is (= #{} (xt/q (xt/db *api*) '{:find [e]
-                                          :where [[e :name "Ivan"]
-                                                  [e :last-name "Ivanov-does-not-match"]]}))))
+  (t/testing "Can query for multiple results"
+    (t/is (= #{["Ivan"] ["Petr"]}
+             (h/q '{:find [name] :where [[e :name name]]} (h/db *node*)))))
 
-     (t/testing "Can query for multiple results"
-       (t/is (= #{["Ivan"] ["Petr"]}
-                (xt/q (xt/db *api*) '{:find [name] :where [[e :name name]]}))))
+  (h/transact *node* [{:db/id :smith :name "Smith" :last-name "Smith"}])
 
+  (t/testing "Can query across fields for same value"
+    (t/is (= #{[:smith]}
+             (h/q '{:find [p1] :where [[p1 :name name]
+                                       [p1 :last-name name]]} (h/db *node*)))))
 
-     (fix/transact! *api* (fix/people [{:xt/id :smith :name "Smith" :last-name "Smith"}]))
-     (t/testing "Can query across fields for same value"
-       (t/is (= #{[:smith]}
-                (xt/q (xt/db *api*) '{:find [p1] :where [[p1 :name name]
-                                                         [p1 :last-name name]]}))))
-
-     (t/testing "Can query across fields for same value when value is passed in"
-       (t/is (= #{[:smith]}
-                (xt/q (xt/db *api*) '{:find [p1] :where [[p1 :name name]
-                                                         [p1 :last-name name]
-                                                         [p1 :name "Smith"]]})))))
+  (t/testing "Can query across fields for same value when value is passed in"
+    (t/is (= #{[:smith]}
+             (h/q '{:find [p1] :where [[p1 :name name]
+                                       [p1 :last-name name]
+                                       [p1 :name "Smith"]]} (h/db *node*))))))
 
 #_ (t/deftest test-returning-maps
   (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
