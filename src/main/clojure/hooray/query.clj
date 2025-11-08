@@ -102,8 +102,7 @@
 
       :else (throw (ex-info "Unknown where clause" {:where where})))))
 
-(defn- zipmap-fn
-  [find keys var-to-index key-fn]
+(defn- zipmap-fn [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
     (throw (IllegalArgumentException. "find and keys must have same size!")))
   (let [keys-in-var-order (->> (zipmap find keys)
