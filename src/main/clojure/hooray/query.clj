@@ -1,7 +1,8 @@
 (ns hooray.query
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.core.match :refer [match]])
+            [clojure.core.match :refer [match]]
+            [hooray.db :as db])
   (:import (org.hooray.algo Join GenericJoin LeapfrogJoin)
            (org.hooray.iterator
             AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender GenericPrefixExtender
@@ -23,10 +24,14 @@
 (s/def ::find (s/and vector?
                      (s/+ ::variable)))
 
+(s/def ::keys (s/and vector?
+                     (s/+ symbol?)))
+
 (s/def ::where (s/and vector?
                       (s/+ ::triple-pattern)))
 
-(s/def ::query (s/keys :req-un [::find ::where]))
+(s/def ::query (s/keys :req-un [::find ::where]
+                       :opt-un [::keys]))
 
 ;; We don't (yet) support a where clause of the form
 ;; [1 x "Alice"]
@@ -54,49 +59,54 @@
   ([msg] (throw (UnsupportedOperationException. msg))))
 
 (defn create-iterator [{:keys [storage algo] :as _opts} index var-order participates-in-level]
-  (match [storage algo (count participates-in-level)]
-    [:hash  _ depth]
-    (GenericPrefixExtender. (if (< depth 2) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
+  (match [storage algo]
+    [:hash  _]
+    (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
 
-    [:avl :generic depth]
-    (GenericPrefixExtender. (if (< depth 2) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
+    [:avl :generic]
+    (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
 
-    [:btree :generic depth]
-    (GenericPrefixExtender. (if (< depth 2) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
+    [:btree :generic]
+    (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
 
-    [:avl :leapfrog depth]
-    (AVLLeapfrogIndex. (if (< depth 2) (AVLIndex$AVLSetIndex. index) (AVLIndex$AVLMapIndex. index))
+    [:avl :leapfrog]
+    (AVLLeapfrogIndex. (if (set? index) (AVLIndex$AVLSetIndex. index) (AVLIndex$AVLMapIndex. index))
                        var-order (set (for [level participates-in-level]
                                         (nth var-order level))))
 
-    [:btree :leapfrog _depth]
+    [:btree :leapfrog]
     (unsupported-ex "BTrees not yet supported!")
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
 (defn- where-to-iterator [{:keys [eav ave aev opts] :as _db} var-order {:keys [e a v] :as where}]
-  (let [var-to-index (zipmap var-order (range))]
+  (let [empty-set (db/set* (:storage opts))
+        empty-map (db/map* (:storage opts))
+        var-to-index (zipmap var-order (range))]
     (match [e a v]
       [[:constant _] [:constant _] [:constant _]]
       (unsupported-ex)
 
       [[:constant e-const] [:constant a-const] [:variable v-var]]
-      (create-iterator opts (get-in eav [e-const a-const]) var-order [(get var-to-index v-var)])
+      (create-iterator opts (get-in eav [e-const a-const] empty-set) var-order [(get var-to-index v-var)])
 
       [[:variable e-var] [:constant a-const] [:constant v-const]]
-      (create-iterator opts (get-in ave [a-const v-const]) var-order [(get var-to-index e-var)])
+      (create-iterator opts (get-in ave [a-const v-const] empty-set) var-order [(get var-to-index e-var)])
 
       [[:variable e-var] [:constant a-const] [:variable v-var]]
       (let [e-index (var-to-index e-var)
             v-index (var-to-index v-var)
             [index participates-in-level] (if (< e-index v-index)  [aev [e-index v-index]] [ave [v-index e-index]])]
-        (create-iterator opts (get index a-const) var-order participates-in-level))
+        (create-iterator opts (get index a-const empty-map) var-order participates-in-level))
 
       :else (throw (ex-info "Unknown where clause" {:where where})))))
 
-(defn- zipmap-keys-fn [find var-to-index]
-  (let [keys-in-var-order (->> (sort-by var-to-index find)
-                               (map keyword)) ]
+(defn- zipmap-keys-fn [find keys var-to-index]
+  (when (not= (count find) (count keys))
+    (throw (IllegalArgumentException. "find and keys must have same size!")))
+  (let [keys-in-var-order (->> (zipmap find keys)
+                               (sort-by (comp var-to-index key))
+                               (map (comp keyword val))) ]
     (fn [row]
       (zipmap keys-in-var-order row))))
 
@@ -112,13 +122,16 @@
 
 (defn query [{:keys [opts] :as db} query]
   {:pre [(s/valid? ::query query)]}
-  (let [{:keys [find where] :as conformed-query} (s/conform ::query query)
+  (let [{:keys [find keys where] :as conformed-query} (s/conform ::query query)
         var-order (variable-order conformed-query)
         var-to-index (zipmap var-order (range))
         iterators (map (partial where-to-iterator db var-order) where)
-        order-fn (order-result-fn find var-to-index)]
-    (set (cond->> (join iterators (count var-order) opts)
-           true (map order-fn)))))
+        result-transform-fn (cond
+                              (seq keys) (zipmap-keys-fn find keys var-to-index)
+                              :else (order-result-fn find var-to-index))]
+    (->> (join iterators (count var-order) opts)
+         (map result-transform-fn)
+         set)))
 
 (comment
   (def q '{:find [x y z]

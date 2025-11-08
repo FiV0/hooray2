@@ -94,7 +94,7 @@
                                                  [e :last-name last-name]
                                                  [e :name "Ivan"]
                                                  [e :last-name "Ivanov"]]} (h/db *node*)))))
-  #_
+
   (t/testing "Negate query based on subsequent non-matching clause"
     (t/is (= #{} (h/q '{:find [e]
                         :where [[e :name "Ivan"]
@@ -117,43 +117,40 @@
                                        [p1 :last-name name]
                                        [p1 :name "Smith"]]} (h/db *node*))))))
 
-#_ (t/deftest test-returning-maps
-  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:xt/id :petr :name "Petr" :last-name "Petrov"}]))
+(deftest test-returning-maps
+  (h/transact *node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                      {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
-  (let [db (xt/db *api*)]
+  (let [db (h/db *node*)]
     (t/is (= #{{:user/name "Ivan", :user/last-name "Ivanov"}
                {:user/name "Petr", :user/last-name "Petrov"}}
-             (xt/q (xt/db *api*)
-                   '{:find [?name ?last-name]
-                     :keys [user/name user/last-name]
-                     :where [[e :name ?name]
-                             [e :last-name ?last-name]]})))
+             (h/q '{:find [?name ?last-name]
+                    :keys [user/name user/last-name]
+                    :where [[e :name ?name]
+                            [e :last-name ?last-name]]} db)))
 
+    #_#_#_
     (t/is (= #{{'user/name "Ivan", 'user/last-name "Ivanov"}
                {'user/name "Petr", 'user/last-name "Petrov"}}
-             (xt/q (xt/db *api*)
-                   '{:find [?name ?last-name]
-                     :syms [user/name user/last-name]
-                     :where [[e :name ?name]
-                             [e :last-name ?last-name]]})))
+             (h/q '{:find [?name ?last-name]
+                    :syms [user/name user/last-name]
+                    :where [[e :name ?name]
+                            [e :last-name ?last-name]]} (h/db *node*))))
 
     (t/is (= #{{"name" "Ivan", "last-name" "Ivanov"}
                {"name" "Petr", "last-name" "Petrov"}}
-             (xt/q (xt/db *api*)
-                   '{:find [?name ?last-name]
-                     :strs [name last-name]
-                     :where [[e :name ?name]
-                             [e :last-name ?last-name]]})))
+             (h/q '{:find [?name ?last-name]
+                    :strs [name last-name]
+                    :where [[e :name ?name]
+                            [e :last-name ?last-name]]} (h/db *node*))))
 
     (t/is (thrown? IllegalArgumentException
-                   (xt/q db
-                         '{:find [name last-name]
-                           :keys [name]
-                           :where [[e :name name]
-                                   [e :last-name last-name]
-                                   [e :name "Ivan"]
-                                   [e :last-name "Ivanov"]]}))
+                   (h/q '{:find [name last-name]
+                          :keys [name]
+                          :where [[e :name name]
+                                  [e :last-name last-name]
+                                  [e :name "Ivan"]
+                                  [e :last-name "Ivanov"]]} db))
           "throws on arity mismatch")))
 
 #_ (t/deftest test-query-with-arguments
