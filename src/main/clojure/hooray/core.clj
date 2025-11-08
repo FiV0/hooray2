@@ -6,7 +6,7 @@
   (:import (hooray.db Db)))
 
 (s/def ::type #{:mem})
-(s/def ::storage #{:hash-map :avl :btree})
+(s/def ::storage #{:hash :avl :btree})
 (s/def ::algo #{:hash :leapfrog :generic :combi})
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
@@ -42,7 +42,19 @@
   (last @!dbs))
 
 (defn q [query & inputs]
-  {:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
+  (prn (instance? Db (first inputs)))
+  #_{:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
   (when (> (count inputs) 1)
     (log/warn "Hooray currently only supports one source!"))
   (query/query (first inputs) query))
+
+
+(comment
+  (def test-db (db (connect {:type :mem :storage :hash :algo :generic})))
+  (instance? Db test-db)
+  (q '{:find [a]
+       :where [[a :foo "bar"]]}
+     test-db)
+
+
+  )

@@ -13,19 +13,19 @@
 
 (defn set* [type]
   (case type
-    :hash-map (hash-set)
+    :hash (hash-set)
     :avl (avl/sorted-set-by universal-comp)
     :btree (btree-set/sorted-set-by universal-comp)))
 
 (defn map* [type]
   (case type
-    :hash-map (hash-map)
+    :hash (hash-map)
     :avl (avl/sorted-map-by universal-comp)
     :btree (btree-map/sorted-map-by universal-comp)))
 
 (defn ->update-in-fn [type]
   (case type
-    :hash-map (util/create-update-in hash-map)
+    :hash (util/create-update-in hash-map)
     :avl (util/create-update-in #(avl/sorted-map-by universal-comp))
     :btree (util/create-update-in #(btree-map/sorted-map universal-comp))))
 
@@ -41,7 +41,7 @@
   (cond
     (instance? AVLMap (:eav db)) :avl
     (instance? PersistentSortedMap (:eav db)) :btree
-    :else :hash-map))
+    :else :hash))
 
 ;; TODO: Do this with transcients
 (defn index-triple-add [db [e a v :as _triple]]

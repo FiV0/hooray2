@@ -2,7 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.core.match :refer [match]])
-  (:import (org.hooray.algo GenericJoin LeapfrogJoin)
+  (:import (org.hooray.algo Join GenericJoin LeapfrogJoin)
            (org.hooray.iterator
             AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender GenericPrefixExtender
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
@@ -83,7 +83,7 @@
       [[:constant e-const] [:constant a-const] [:variable v-var]]
       (create-iterator opts (get-in eav [e-const a-const]) var-order [(get var-to-index v-var)])
 
-      [[:constant e-var] [:constant a-const] [:constant v-const]]
+      [[:variable e-var] [:constant a-const] [:constant v-const]]
       (create-iterator opts (get-in ave [a-const v-const]) var-order [(get var-to-index e-var)])
 
       [[:variable e-var] [:constant a-const] [:variable v-var]]
@@ -104,13 +104,21 @@
   (fn [row]
     (mapv (fn [var] (nth row (var-to-index var))) find)))
 
-(defn join [iterators {:keys [storage algo] :as opts}])
+(defn join [iterators levels {:keys [algo] :as _opts}]
+  (let [^Join join-algo (case algo
+                          :generic (GenericJoin. iterators levels)
+                          :leapfrog (LeapfrogJoin. iterators levels))]
+    (.join join-algo)))
 
-(defn query [db query]
+(defn query [{:keys [opts] :as db} query]
   {:pre [(s/valid? ::query query)]}
-  (let [{:keys [where] :as conformed-query} (s/conform ::query query)
+  (let [{:keys [find where] :as conformed-query} (s/conform ::query query)
         var-order (variable-order conformed-query)
-        iterators (map (partial where-to-iterator db var-order) where)]))
+        var-to-index (zipmap var-order (range))
+        iterators (map (partial where-to-iterator db var-order) where)
+        order-fn (order-result-fn find var-to-index)]
+    (set (cond->> (join iterators (count var-order) opts)
+           true (map order-fn)))))
 
 (comment
   (def q '{:find [x y z]
