@@ -129,7 +129,6 @@
                     :where [[e :name ?name]
                             [e :last-name ?last-name]]} db)))
 
-    #_#_#_
     (t/is (= #{{'user/name "Ivan", 'user/last-name "Ivanov"}
                {'user/name "Petr", 'user/last-name "Petrov"}}
              (h/q '{:find [?name ?last-name]

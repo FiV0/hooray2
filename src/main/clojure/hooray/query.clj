@@ -101,12 +101,13 @@
 
       :else (throw (ex-info "Unknown where clause" {:where where})))))
 
-(defn- zipmap-keys-fn [find keys var-to-index]
+(defn- zipmap-fn
+  [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
     (throw (IllegalArgumentException. "find and keys must have same size!")))
   (let [keys-in-var-order (->> (zipmap find keys)
                                (sort-by (comp var-to-index key))
-                               (map (comp keyword val))) ]
+                               (map (comp key-fn val))) ]
     (fn [row]
       (zipmap keys-in-var-order row))))
 
@@ -122,16 +123,17 @@
 
 (defn query [{:keys [opts] :as db} query]
   {:pre [(s/valid? ::query query)]}
-  (let [{:keys [find keys where] :as conformed-query} (s/conform ::query query)
+  (let [{:keys [find keys strs syms where] :as conformed-query} (s/conform ::query query)
         var-order (variable-order conformed-query)
         var-to-index (zipmap var-order (range))
         iterators (map (partial where-to-iterator db var-order) where)
-        result-transform-fn (cond
-                              (seq keys) (zipmap-keys-fn find keys var-to-index)
-                              :else (order-result-fn find var-to-index))]
-    (->> (join iterators (count var-order) opts)
-         (map result-transform-fn)
-         set)))
+        order-fn (order-result-fn find var-to-index)]
+    (cond->> (join iterators (count var-order) opts)
+      true (map order-fn)
+      (seq keys) (map (zipmap-fn find keys var-to-index keyword))
+      (seq strs) (map (zipmap-fn find strs var-to-index str))
+      (seq syms) (map (zipmap-fn find syms var-to-index symbol))
+      true set)))
 
 (comment
   (def q '{:find [x y z]
