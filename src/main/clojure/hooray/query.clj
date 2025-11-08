@@ -24,14 +24,15 @@
 (s/def ::find (s/and vector?
                      (s/+ ::variable)))
 
-(s/def ::keys (s/and vector?
-                     (s/+ symbol?)))
+(s/def ::keys (s/and vector? (s/+ symbol?)))
+(s/def ::strs (s/and vector? (s/+ symbol?)))
+(s/def ::syms (s/and vector? (s/+ symbol?)))
 
 (s/def ::where (s/and vector?
                       (s/+ ::triple-pattern)))
 
 (s/def ::query (s/keys :req-un [::find ::where]
-                       :opt-un [::keys]))
+                       :opt-un [::keys ::strs ::syms]))
 
 ;; We don't (yet) support a where clause of the form
 ;; [1 x "Alice"]
