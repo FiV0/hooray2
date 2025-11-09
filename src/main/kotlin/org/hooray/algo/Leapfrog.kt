@@ -21,7 +21,60 @@ interface LayeredIndex {
     fun maxLevel(): Int
 }
 
-interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation
+interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
+    companion object {
+        fun createSingleLevel(values: List<Int>, maxLevels: Int = 1): LeapfrogIndex {
+            val sortedValues = values.sortedWith(UniversalComparator)
+            return object : LeapfrogIndex {
+                private var currentIndex = 0
+                private var currentLevel = 0
+
+                override fun seek(key: Any) {
+                    // Find the first value >= key
+                    while (currentIndex < sortedValues.size && UniversalComparator.compare(sortedValues[currentIndex], key) < 0) {
+                        currentIndex++
+                    }
+                }
+
+                override fun next(): Any {
+                    if (currentIndex < sortedValues.size) {
+                        currentIndex++
+                    }
+                    return if (atEnd()) Unit else sortedValues[currentIndex]
+                }
+
+                override fun key(): Any {
+                    return if (atEnd()) throw IllegalStateException("At end") else sortedValues[currentIndex]
+                }
+
+                override fun atEnd(): Boolean {
+                    return currentIndex >= sortedValues.size
+                }
+
+                override fun openLevel() {
+                    currentLevel++
+                }
+
+                override fun closeLevel() {
+                    currentLevel--
+                    currentIndex = 0
+                }
+
+                override fun level(): Int {
+                    return currentLevel
+                }
+
+                override fun maxLevel(): Int {
+                    return maxLevels
+                }
+
+                override fun participatesInLevel(level: Int): Boolean {
+                    return level < maxLevels
+                }
+            }
+        }
+    }
+}
 
 class LeapfrogSingleJoin(private val iterators: List<LeapfrogIterator>) {
     private var currentIteratorIndex = 0
