@@ -35,6 +35,9 @@ dependencies {
     implementation("persistent-sorted-set", "persistent-sorted-set", "0.3.0")
     implementation("com.github.FiV0", "data.avl", "v0.0.25")
 
+    // dev
+    devImplementation( "com.datomic", "local", "1.0.291")
+
     testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
     nrepl("cider", "cider-nrepl", "0.49.1")
 }
