@@ -42,8 +42,7 @@
   (last @!dbs))
 
 (defn q [query & inputs]
-  (prn (instance? Db (first inputs)))
-  #_{:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
+  {:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
   (when (> (count inputs) 1)
     (log/warn "Hooray currently only supports one source!"))
   (query/query (first inputs) query))
