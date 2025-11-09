@@ -13,3 +13,6 @@ build
 
 # Claude
 .claude
+
+#data
+data/
