@@ -35,7 +35,7 @@
 (s/def ::tuple-binding (s/and vector? (s/+ ::scalar-binding)))
 (s/def ::relation-binding (s/and vector? (s/+ ::tuple-binding)))
 
-(s/def ::in (s/and vector? (s/+ (s/or
+(s/def ::in (s/and vector? (s/* (s/or
                                  :scale-binding ::scalar-binding
                                  :collection-binding ::collection-binding
                                  :tuple-binding ::tuple-binding
@@ -118,17 +118,31 @@
 
       :else (throw (ex-info "Unknown where clause" {:where where})))))
 
+(defn- transpose [mtx]
+  (apply mapv vector mtx))
+
 (defn- in->iterators [in var-to-index args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))
     (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
-  (letfn [(in->iterator [[[type var] arg]]
-            (match [[type var] algo]
-              [[:scale-binding var] :leapfrog] (LeapfrogIndex/createSingleLevel [arg] (var-to-index var))
-              [[:scale-binding var] :generic] (PrefixExtender/createSingleLevel [arg] (var-to-index var))
-              [[:collection-binding var] :leapfrog] (LeapfrogIndex/createSingleLevel arg (var-to-index var))
-              [[:collection-binding var] :generic] (PrefixExtender/createSingleLevel arg (var-to-index var))))]
-    (->> (zipmap in args)
-         (map in->iterator))))
+  (let [create-iterator (case algo
+                          :leapfrog (fn [var args] (LeapfrogIndex/createSingleLevel args (var-to-index var)))
+                          :generic (fn [var args] (PrefixExtender/createSingleLevel args (var-to-index var))))]
+    (letfn [(in->iterator [[[type var] arg]]
+              (case type
+                :scale-binding [(create-iterator var [arg])]
+                :collection-binding [(create-iterator var arg)]
+                :tuple-binding (if-not (= (count var) (count arg))
+                                 (throw (IllegalArgumentException. (format ":tuple %s and args %s must have same length!"
+                                                                           (pr-str var) (pr-str arg))))
+                                 (->> (zipmap var arg)
+                                      (map (fn [[var arg]] (create-iterator var [arg])))))
+                ;; TODO error handling for :relation-binding
+                :relation-binding (let [args-by-position (transpose arg)]
+                                    (->> (zipmap (first var) args-by-position)
+                                         (map (fn [[var args]]
+                                                (create-iterator var args)))))))]
+      (->> (zipmap in args)
+           (mapcat in->iterator)))))
 
 (defn- zipmap-fn [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
@@ -166,7 +180,7 @@
 
 (comment
   (def q '{:find [x y z]
-           :in [x]
+           :in [[x y]]
            :where [[x :person/name y]
                    [x :person/age z]]})
 

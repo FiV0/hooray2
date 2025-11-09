@@ -192,57 +192,79 @@
                                        (h/db *node*)
                                        [:ivan :petr]))))
 
-  #_#_#_#_#_#_#_
   (t/testing "Can match on both entity and value position"
-    (t/is (= #{["Ivan"]} (h/q {:find '[name]
-                               :where '[[e :name name]]
-                               :args [{:e :ivan
-                                       :name "Ivan"}]} (h/db *node*))))
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :in [e name]
+                                :where [[e :name name]]}
+                              (h/db *node*)
+                              :ivan "Ivan")))
 
-    (t/is (= #{} (h/q {:find '[name]
-                       :where '[[e :name name]]
-                       :args [{:e :ivan
-                               :name "Petr"}]} (h/db *node*)))))
+    (t/is (= #{} (h/q '{:find [name]
+                        :in [e name]
+                        :where [[e :name name]]
+                        :args [{:e :ivan
+                                :name "Petr"}]}
+                      (h/db *node*)
+                      :ivan "Petr"))))
 
   (t/testing "Can query entity by single field with several arguments"
-    (t/is (= #{[:ivan]
-               [:petr]} (h/q '{:find [e]
-                               :where [[e :name name]]
-                               :args [{:name "Ivan"}
-                                      {:name "Petr"}]} (h/db *node*)))))
+    (t/is (= #{[:ivan] [:petr]}
+             (h/q '{:find [e]
+                    :in [[name ...]]
+                    :where [[e :name name]]}
+                  (h/db *node*)
+                  ["Ivan" "Petr"]))))
 
   (t/testing "Can query entity by single field with literals"
     (t/is (= #{[:ivan]} (h/q '{:find [e]
+                               :in [[name ...]]
                                :where [[e :name name]
-                                       [e :last-name "Ivanov"]]
-                               :args [{:name "Ivan"}
-                                      {:name "Petr"}]} (h/db *node*))))
+                                       [e :last-name "Ivanov"]]}
+                             (h/db *node*)
+                             ["Ivan" "Petr"])))
 
-    (t/is (= #{["Ivan"]} (h/q {:find '[name]
-                               :where '[[e :name name]
-                                        [e :last-name "Ivanov"]]
-                               :args [{:e :ivan}
-                                      {:e :petr}]} (h/db *node*)))))
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :in [[e ...]]
+                                :where [[e :name name]
+                                        [e :last-name "Ivanov"]]}
+                              (h/db *node*)
+                              [:ivan :petr]))))
 
   (t/testing "Can query entity by non existent argument"
     (t/is (= #{} (h/q '{:find [e]
-                        :where [[e :name name]]
-                        :args [{:name "Bob"}]} (h/db *node*)))))
+                        :in [name]
+                        :where [[e :name name]]}
+                      (h/db *node*)
+                      "Bob"))))
+
 
   (t/testing "Can query entity with empty arguments"
-    (t/is (= #{[:ivan]
-               [:petr]} (h/q '{:find [e]
-                               :where [[e :name name]]
-                               :args []} (h/db *node*)))))
+    (t/is (= #{[:ivan] [:petr]}
+             (h/q '{:find [e]
+                    :in []
+                    :where [[e :name name]]}
+                  (h/db *node*)))))
 
   (t/testing "Can query entity with tuple arguments"
+    (t/is (= #{[:ivan]} (h/q '{:find [e]
+                               :in [[name last-name]]
+                               :where [[e :name name]
+                                       [e :last-name last-name]]}
+                             (h/db *node*)
+                             ["Ivan" "Ivanov"]))))
+
+  (t/testing "Can query entity with collection arguments"
     (t/is (= #{[:ivan]
                [:petr]} (h/q '{:find [e]
+                               :in [[[name last-name]]]
                                :where [[e :name name]
                                        [e :last-name last-name]]
                                :args [{:name "Ivan" :last-name "Ivanov"}
-                                      {:name "Petr" :last-name "Petrov"}]} (h/db *node*)))))
+                                      {:name "Petr" :last-name "Petrov"}]}
+                             (h/db *node*)
+                             [["Ivan" "Ivanov"] ["Petr" "Petrov"]]))))
 
+  #_
   (t/testing "Can query predicates based on arguments alone"
     (t/is (= #{["Ivan"]} (h/q '{:find [name]
                                 :where [[(re-find #"I" name)]]
