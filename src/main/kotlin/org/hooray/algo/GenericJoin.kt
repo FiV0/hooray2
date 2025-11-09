@@ -1,5 +1,6 @@
 package org.hooray.algo
 
+import org.hooray.UniversalComparator
 import org.hooray.iterator.LevelParticipation
 
 typealias Prefix = ResultTuple
@@ -13,6 +14,22 @@ interface PrefixExtender : LevelParticipation {
     fun count(prefix: Prefix): Int
     fun propose(prefix: Prefix) : List<Extension>
     fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension>
+
+    companion object {
+        fun createSingleLevel(values: List<Int>, participatesInLevel: Int): PrefixExtender {
+            val sortedValues = values.sortedWith(UniversalComparator)
+            return object : PrefixExtender {
+                override fun count(prefix: Prefix): Int = sortedValues.size
+
+                override fun propose(prefix: Prefix): List<Extension> = sortedValues
+
+                override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
+                        = extensions.filter { ext -> sortedValues.contains(ext) }
+
+                override fun participatesInLevel(level: Int) = level == participatesInLevel
+            }
+        }
+    }
 }
 
 fun applyExtensions(prefix: Prefix, extensions: List<Extension>) : List<ResultTuple> {
