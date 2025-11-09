@@ -150,133 +150,147 @@
                                   [e :last-name last-name]
                                   [e :name "Ivan"]
                                   [e :last-name "Ivanov"]]} db))
-          "throws on arity mismatch")))
+          "throws on arity mismatch")
 
-#_ (t/deftest test-query-with-arguments
-  (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
-                                                      {:name "Petr" :last-name "Petrov"}]))]
+    (t/is (thrown? IllegalArgumentException
+                   (h/q '{:find [name]
+                          :keys [name]
+                          :strs [name]
+                          :where [[e :name name]]} db))
+          ":keys and :strs can't both be present")))
 
-    (t/testing "Can query entity by single field"
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*) '{:find [e]
-                                                        :where [[e :name name]]
-                                                        :args [{:name "Ivan"}]})))
-      (t/is (= #{[(:xt/id petr)]} (xt/q (xt/db *api*) '{:find [e]
-                                                        :where [[e :name name]]
-                                                        :args [{:name "Petr"}]}))))
+(deftest test-query-with-arguments
+  (h/transact *node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                      {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
-    (t/testing "Can query entity by entity position"
-      (t/is (= #{["Ivan"]
-                 ["Petr"]} (xt/q (xt/db *api*) {:find '[name]
-                                                :where '[[e :name name]]
-                                                :args [{:e (:xt/id ivan)}
-                                                       {:e (:xt/id petr)}]})))
+  (t/testing "Can query entity by single field"
+    (t/is (= #{[:ivan]} (h/q '{:find [e]
+                               :in [name]
+                               :where [[e :name name]]}
+                             (h/db *node*)
+                             "Ivan")))
 
-      (t/is (= #{["Ivan" "Ivanov"]
-                 ["Petr" "Petrov"]} (xt/q (xt/db *api*) {:find '[name last-name]
-                                                         :where '[[e :name name]
-                                                                  [e :last-name last-name]]
-                                                         :args [{:e (:xt/id ivan)}
-                                                                {:e (:xt/id petr)}]}))))
+    (t/is (= #{[:petr]} (h/q '{:find [e]
+                               :in [name]
+                               :where [[e :name name]]}
+                             (h/db *node*)
+                             "Petr"))))
 
-    (t/testing "Can match on both entity and value position"
-      (t/is (= #{["Ivan"]} (xt/q (xt/db *api*) {:find '[name]
-                                                :where '[[e :name name]]
-                                                :args [{:e (:xt/id ivan)
-                                                        :name "Ivan"}]})))
+  (t/testing "Can query entity by entity position"
+    (t/is (= #{["Ivan"]
+               ["Petr"]} (h/q '{:find [name]
+                                :in [[e ...]]
+                                :where [[e :name name]]}
+                              (h/db *node*)
+                              [:ivan :petr])))
 
-      (t/is (= #{} (xt/q (xt/db *api*) {:find '[name]
-                                        :where '[[e :name name]]
-                                        :args [{:e (:xt/id ivan)
-                                                :name "Petr"}]}))))
+    (t/is (= #{["Ivan" "Ivanov"]
+               ["Petr" "Petrov"]} (h/q '{:find [name last-name]
+                                         :in [[e ...]]
+                                         :where [[e :name name]
+                                                 [e :last-name last-name]]}
+                                       (h/db *node*)
+                                       [:ivan :petr]))))
 
-    (t/testing "Can query entity by single field with several arguments"
-      (t/is (= #{[(:xt/id ivan)]
-                 [(:xt/id petr)]} (xt/q (xt/db *api*) '{:find [e]
-                                                        :where [[e :name name]]
-                                                        :args [{:name "Ivan"}
-                                                               {:name "Petr"}]}))))
+  #_#_#_#_#_#_#_
+  (t/testing "Can match on both entity and value position"
+    (t/is (= #{["Ivan"]} (h/q {:find '[name]
+                               :where '[[e :name name]]
+                               :args [{:e :ivan
+                                       :name "Ivan"}]} (h/db *node*))))
 
-    (t/testing "Can query entity by single field with literals"
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*) '{:find [e]
-                                                        :where [[e :name name]
-                                                                [e :last-name "Ivanov"]]
-                                                        :args [{:name "Ivan"}
-                                                               {:name "Petr"}]})))
+    (t/is (= #{} (h/q {:find '[name]
+                       :where '[[e :name name]]
+                       :args [{:e :ivan
+                               :name "Petr"}]} (h/db *node*)))))
 
-      (t/is (= #{["Ivan"]} (xt/q (xt/db *api*) {:find '[name]
-                                                :where '[[e :name name]
-                                                         [e :last-name "Ivanov"]]
-                                                :args [{:e (:xt/id ivan)}
-                                                       {:e (:xt/id petr)}]}))))
+  (t/testing "Can query entity by single field with several arguments"
+    (t/is (= #{[:ivan]
+               [:petr]} (h/q '{:find [e]
+                               :where [[e :name name]]
+                               :args [{:name "Ivan"}
+                                      {:name "Petr"}]} (h/db *node*)))))
 
-    (t/testing "Can query entity by non existent argument"
-      (t/is (= #{} (xt/q (xt/db *api*) '{:find [e]
-                                         :where [[e :name name]]
-                                         :args [{:name "Bob"}]}))))
+  (t/testing "Can query entity by single field with literals"
+    (t/is (= #{[:ivan]} (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :last-name "Ivanov"]]
+                               :args [{:name "Ivan"}
+                                      {:name "Petr"}]} (h/db *node*))))
 
-    (t/testing "Can query entity with empty arguments"
-      (t/is (= #{[(:xt/id ivan)]
-                 [(:xt/id petr)]} (xt/q (xt/db *api*) '{:find [e]
-                                                        :where [[e :name name]]
-                                                        :args []}))))
+    (t/is (= #{["Ivan"]} (h/q {:find '[name]
+                               :where '[[e :name name]
+                                        [e :last-name "Ivanov"]]
+                               :args [{:e :ivan}
+                                      {:e :petr}]} (h/db *node*)))))
 
-    (t/testing "Can query entity with tuple arguments"
-      (t/is (= #{[(:xt/id ivan)]
-                 [(:xt/id petr)]} (xt/q (xt/db *api*) '{:find [e]
-                                                        :where [[e :name name]
-                                                                [e :last-name last-name]]
-                                                        :args [{:name "Ivan" :last-name "Ivanov"}
-                                                               {:name "Petr" :last-name "Petrov"}]}))))
+  (t/testing "Can query entity by non existent argument"
+    (t/is (= #{} (h/q '{:find [e]
+                        :where [[e :name name]]
+                        :args [{:name "Bob"}]} (h/db *node*)))))
 
-    (t/testing "Can query predicates based on arguments alone"
-      (t/is (= #{["Ivan"]} (xt/q (xt/db *api*) '{:find [name]
-                                                 :where [[(re-find #"I" name)]]
-                                                 :args [{:name "Ivan"}
-                                                        {:name "Petr"}]})))
+  (t/testing "Can query entity with empty arguments"
+    (t/is (= #{[:ivan]
+               [:petr]} (h/q '{:find [e]
+                               :where [[e :name name]]
+                               :args []} (h/db *node*)))))
 
-      (t/is (= #{["Ivan"]} (xt/q (xt/db *api*) '{:find [name]
-                                                 :where [[(re-find #"I" name)]
-                                                         [(= last-name "Ivanov")]]
-                                                 :args [{:name "Ivan" :last-name "Ivanov"}
-                                                        {:name "Petr" :last-name "Petrov"}]})))
+  (t/testing "Can query entity with tuple arguments"
+    (t/is (= #{[:ivan]
+               [:petr]} (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :last-name last-name]]
+                               :args [{:name "Ivan" :last-name "Ivanov"}
+                                      {:name "Petr" :last-name "Petrov"}]} (h/db *node*)))))
 
-      (t/is (= #{["Ivan"]
-                 ["Petr"]} (xt/q (xt/db *api*) '{:find [name]
-                                                 :where [[(string? name)]]
-                                                 :args [{:name "Ivan"}
-                                                        {:name "Petr"}]})))
+  (t/testing "Can query predicates based on arguments alone"
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[(re-find #"I" name)]]
+                                :args [{:name "Ivan"}
+                                       {:name "Petr"}]} (h/db *node*))))
 
-      (t/is (= #{["Ivan" "Ivanov"]
-                 ["Petr" "Petrov"]} (xt/q (xt/db *api*) '{:find [name
-                                                                 last-name]
-                                                          :where [[(not= last-name name)]]
-                                                          :args [{:name "Ivan" :last-name "Ivanov"}
-                                                                 {:name "Petr" :last-name "Petrov"}]})))
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[(re-find #"I" name)]
+                                        [(= last-name "Ivanov")]]
+                                :args [{:name "Ivan" :last-name "Ivanov"}
+                                       {:name "Petr" :last-name "Petrov"}]} (h/db *node*))))
 
-      (t/is (= #{["Ivan"]} (xt/q (xt/db *api*) '{:find [name]
-                                                 :where [[(string? name)]
-                                                         [(re-find #"I" name)]]
-                                                 :args [{:name "Ivan"}
-                                                        {:name "Petr"}]})))
+    (t/is (= #{["Ivan"]
+               ["Petr"]} (h/q '{:find [name]
+                                :where [[(string? name)]]
+                                :args [{:name "Ivan"}
+                                       {:name "Petr"}]} (h/db *node*))))
 
-      (t/is (= #{} (xt/q (xt/db *api*) '{:find [name]
-                                         :where [[(number? name)]]
-                                         :args [{:name "Ivan"}
-                                                {:name "Petr"}]})))
+    (t/is (= #{["Ivan" "Ivanov"]
+               ["Petr" "Petrov"]} (h/q '{:find [name last-name]
+                                         :where [[(not= last-name name)]]
+                                         :args [{:name "Ivan" :last-name "Ivanov"}
+                                                {:name "Petr" :last-name "Petrov"}]} (h/db *node*))))
 
-      (t/is (= #{} (xt/q (xt/db *api*) '{:find [name]
-                                         :where [(not [(string? name)])]
-                                         :args [{:name "Ivan"}
-                                                {:name "Petr"}]})))
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[(string? name)]
+                                        [(re-find #"I" name)]]
+                                :args [{:name "Ivan"}
+                                       {:name "Petr"}]} (h/db *node*))))
 
-      (t/testing "Can use range constraints on arguments"
-        (t/is (= #{} (xt/q (xt/db *api*) '{:find [age]
-                                           :where [[(>= age 21)]]
-                                           :args [{:age 20}]})))
+    (t/is (= #{} (h/q '{:find [name]
+                        :where [[(number? name)]]
+                        :args [{:name "Ivan"}
+                               {:name "Petr"}]} (h/db *node*))))
 
-        (t/is (= #{[22]} (xt/q (xt/db *api*) '{:find [age]
-                                               :where [[(>= age 21)]]
-                                               :args [{:age 22}]})))))))
+    (t/is (= #{} (h/q '{:find [name]
+                        :where [(not [(string? name)])]
+                        :args [{:name "Ivan"}
+                               {:name "Petr"}]} (h/db *node*))))
+
+    (t/testing "Can use range constraints on arguments"
+      (t/is (= #{} (h/q '{:find [age]
+                          :where [[(>= age 21)]]
+                          :args [{:age 20}]} (h/db *node*))))
+
+      (t/is (= #{[22]} (h/q '{:find [age]
+                              :where [[(>= age 21)]]
+                              :args [{:age 22}]} (h/db *node*)))))))
 
 #_ (t/deftest test-query-with-in-bindings
   (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}

@@ -16,6 +16,7 @@ interface PrefixExtender : LevelParticipation {
     fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension>
 
     companion object {
+        @JvmStatic
         fun createSingleLevel(values: List<Int>, participatesInLevel: Int): PrefixExtender {
             val sortedValues = values.sortedWith(UniversalComparator)
             return object : PrefixExtender {

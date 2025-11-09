@@ -23,6 +23,7 @@ interface LayeredIndex {
 
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
     companion object {
+        @JvmStatic
         fun createSingleLevel(values: List<Int>, maxLevels: Int = 1): LeapfrogIndex {
             val sortedValues = values.sortedWith(UniversalComparator)
             return object : LeapfrogIndex {

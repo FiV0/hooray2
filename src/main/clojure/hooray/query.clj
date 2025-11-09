@@ -3,7 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.core.match :refer [match]]
             [hooray.db :as db])
-  (:import (org.hooray.algo Join GenericJoin LeapfrogJoin)
+  (:import (org.hooray.algo Join GenericJoin LeapfrogJoin PrefixExtender LeapfrogIndex)
            (org.hooray.iterator
             AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender GenericPrefixExtender
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
@@ -28,11 +28,29 @@
 (s/def ::strs (s/and vector? (s/+ symbol?)))
 (s/def ::syms (s/and vector? (s/+ symbol?)))
 
+
+(s/def ::scalar-binding ::variable)
+(s/def ::collection-binding (s/and (s/tuple ::scalar-binding #{'...})
+                                   (s/conformer first #(vector % '...))))
+(s/def ::tuple-binding (s/and vector? (s/+ ::scalar-binding)))
+(s/def ::relation-binding (s/and vector? (s/+ ::tuple-binding)))
+
+(s/def ::in (s/and vector? (s/+ (s/or
+                                 :scale-binding ::scalar-binding
+                                 :collection-binding ::collection-binding
+                                 :tuple-binding ::tuple-binding
+                                 :relation-binding ::relation-binding))))
+
 (s/def ::where (s/and vector?
                       (s/+ ::triple-pattern)))
 
 (s/def ::query (s/keys :req-un [::find ::where]
-                       :opt-un [::keys ::strs ::syms]))
+                       :opt-un [::in ::keys ::strs ::syms]))
+
+(defn validate-query [query]
+  (when (> (count (select-keys query [:keys :strs :syms])) 1)
+    (throw (IllegalArgumentException. "Exactly one of :keys, :strs and :syms must be present!")))
+  true)
 
 ;; We don't (yet) support a where clause of the form
 ;; [1 x "Alice"]
@@ -52,8 +70,6 @@
           :else (throw (ex-info "Unknown where clause" {:where where}))))
       flatten
       distinct))
-
-;; (defrecord Db [eav aev ave vae opts])
 
 (defn unsupported-ex
   ([] (throw (UnsupportedOperationException.)))
@@ -80,7 +96,7 @@
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
-(defn- where-to-iterator [{:keys [eav ave aev opts] :as _db} var-order {:keys [e a v] :as where}]
+(defn- where->iterator [{:keys [eav ave aev opts] :as _db} var-order {:keys [e a v] :as where}]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
         var-to-index (zipmap var-order (range))]
@@ -102,6 +118,18 @@
 
       :else (throw (ex-info "Unknown where clause" {:where where})))))
 
+(defn- in->iterators [in var-to-index args {:keys [algo] :as _opts}]
+  (when (not= (count in) (count args))
+    (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
+  (letfn [(in->iterator [[[type var] arg]]
+            (match [[type var] algo]
+              [[:scale-binding var] :leapfrog] (LeapfrogIndex/createSingleLevel [arg] (var-to-index var))
+              [[:scale-binding var] :generic] (PrefixExtender/createSingleLevel [arg] (var-to-index var))
+              [[:collection-binding var] :leapfrog] (LeapfrogIndex/createSingleLevel arg (var-to-index var))
+              [[:collection-binding var] :generic] (PrefixExtender/createSingleLevel arg (var-to-index var))))]
+    (->> (zipmap in args)
+         (map in->iterator))))
+
 (defn- zipmap-fn [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
     (throw (IllegalArgumentException. "find and keys must have same size!")))
@@ -121,12 +149,13 @@
                           :leapfrog (LeapfrogJoin. iterators levels))]
     (.join join-algo)))
 
-(defn query [{:keys [opts] :as db} query]
-  {:pre [(s/valid? ::query query)]}
-  (let [{:keys [find keys strs syms where] :as conformed-query} (s/conform ::query query)
+(defn query [{:keys [opts] :as db} query args]
+  {:pre [(s/valid? ::query query) (validate-query query)]}
+  (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
         var-order (variable-order conformed-query)
         var-to-index (zipmap var-order (range))
-        iterators (map (partial where-to-iterator db var-order) where)
+        iterators (concat (in->iterators in var-to-index args opts)
+                          (map (partial where->iterator db var-order) where))
         order-fn (order-result-fn find var-to-index)]
     (cond->> (join iterators (count var-order) opts)
       true (map order-fn)
@@ -137,6 +166,7 @@
 
 (comment
   (def q '{:find [x y z]
+           :in [x]
            :where [[x :person/name y]
                    [x :person/age z]]})
 

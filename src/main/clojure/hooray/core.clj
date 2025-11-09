@@ -41,11 +41,9 @@
   ;; TODO support time travel
   (last @!dbs))
 
-(defn q [query & inputs]
-  {:pre [(>= (count inputs) 1) (instance? Db (first inputs))]}
-  (when (> (count inputs) 1)
-    (log/warn "Hooray currently only supports one source!"))
-  (query/query (first inputs) query))
+(defn q [query db & args]
+  {:pre [(instance? Db db)]}
+  (query/query db query args))
 
 
 (comment
