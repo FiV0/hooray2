@@ -26,6 +26,7 @@ dependencies {
     implementation( "org.clojure", "clojure", "1.12.3")
     implementation("org.clojure", "spec.alpha", "0.5.238")
     implementation("org.clojure", "core.match","1.1.0")
+    implementation("org.clojure", "math.combinatorics", "0.3.0")
 
     // logging
     implementation("org.clojure", "tools.logging", "1.3.0")
