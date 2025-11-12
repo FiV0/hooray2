@@ -303,96 +303,100 @@
         (t/is (= #{[22]} (h/q '{:find [age]
                                 :where [[(>= age 21)]]
                                 :args [{:age 22}]} (h/db fix/*node*)))))))
+#_
+(t/deftest test-query-with-in-bindings
+  (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
+                                                      {:name "Petr" :last-name "Petrov"}]))]
 
-#_(t/deftest test-query-with-in-bindings
-    (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
-                                                        {:name "Petr" :last-name "Petrov"}]))]
+    (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
+                                      '{:find [e]
+                                        :in [$ name]
+                                        :where [[e :name name]]}
+                                      "Ivan")))
 
+    (t/testing "the db var is optional"
       (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
                                         '{:find [e]
-                                          :in [$ name]
+                                          :in [name]
                                           :where [[e :name name]]}
-                                        "Ivan")))
+                                        "Ivan"))))
 
-      (t/testing "the db var is optional"
-        (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                          '{:find [e]
-                                            :in [name]
-                                            :where [[e :name name]]}
-                                          "Ivan"))))
+    (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
+                                      '{:find [e]
+                                        :in [$ name last-name]
+                                        :where [[e :name name]
+                                                [e :last-name last-name]]}
+                                      "Ivan" "Ivanov")))
 
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                        '{:find [e]
-                                          :in [$ name last-name]
+    (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
+                                      '{:find [e]
+                                        :in [$ [name]]
+                                        :where [[e :name name]]}
+                                      ["Ivan"])))
+
+    (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
+             (xt/q (xt/db *api*)
+                   '{:find [e]
+                     :in [$ [[name]]]
+                     :where [[e :name name]]}
+                   [["Ivan"] ["Petr"]])))
+
+    (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
+             (xt/q (xt/db *api*)
+                   '{:find [e]
+                     :in [$ [name ...]]
+                     :where [[e :name name]]}
+                   ["Ivan" "Petr"])))
+
+    (t/testing "can access the db"
+      (t/is (= #{["class xtdb.query.QueryDatasource"]} (xt/q (xt/db *api*) '{:find [ts]
+                                                                             :in [$]
+                                                                             :where [[(str t) ts]
+                                                                                     [(type $) t]]}))))
+    (t/testing "where clause is optional"
+      (t/is (= #{[1]} (xt/q (xt/db *api*)
+                            '{:find [x]
+                              :in [$ x]}
+                            1))))
+
+    (t/testing "can use both args and in"
+      (t/is (= #{[2]} (xt/q (xt/db *api*)
+                            '{:find [x]
+                              :in [$ [x ...]]
+                              :args [{:x 1}
+                                     {:x 2}]}
+                            [2 3]))))
+
+    (t/testing "var bindings need to be distinct"
+      (t/is (thrown-with-msg?
+             IllegalArgumentException
+             #"In binding variables not distinct"
+             (xt/q (xt/db *api*) '{:find [x]
+                                   :in [$ [x x]]} [1 1]))))))
+
+(t/deftest test-multiple-results
+  (h/transact fix/*node* [{:db/id :ivan1 :name "Ivan" :last-name "1"}
+                          {:db/id :ivan2 :name "Ivan" :last-name "2"}])
+
+  (t/is (= 2
+           (count (h/q '{:find [e] :where [[e :name "Ivan"]]}
+                       (h/db fix/*node*))))))
+
+(t/deftest test-query-using-keywords
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :sex :male}
+                          {:db/id :petr :name "Petr" :sex :male}
+                          {:db/id :doris :name "Doris" :sex :female}
+                          {:db/id :jane :name "Jane" :sex :female}])
+
+  (t/testing "Can query by single field"
+    (t/is (= #{["Ivan"] ["Petr"]} (h/q  '{:find [name]
                                           :where [[e :name name]
-                                                  [e :last-name last-name]]}
-                                        "Ivan" "Ivanov")))
-
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                        '{:find [e]
-                                          :in [$ [name]]
-                                          :where [[e :name name]]}
-                                        ["Ivan"])))
-
-      (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
-               (xt/q (xt/db *api*)
-                     '{:find [e]
-                       :in [$ [[name]]]
-                       :where [[e :name name]]}
-                     [["Ivan"] ["Petr"]])))
-
-      (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
-               (xt/q (xt/db *api*)
-                     '{:find [e]
-                       :in [$ [name ...]]
-                       :where [[e :name name]]}
-                     ["Ivan" "Petr"])))
-
-      (t/testing "can access the db"
-        (t/is (= #{["class xtdb.query.QueryDatasource"]} (xt/q (xt/db *api*) '{:find [ts]
-                                                                               :in [$]
-                                                                               :where [[(str t) ts]
-                                                                                       [(type $) t]]}))))
-      (t/testing "where clause is optional"
-        (t/is (= #{[1]} (xt/q (xt/db *api*)
-                              '{:find [x]
-                                :in [$ x]}
-                              1))))
-
-      (t/testing "can use both args and in"
-        (t/is (= #{[2]} (xt/q (xt/db *api*)
-                              '{:find [x]
-                                :in [$ [x ...]]
-                                :args [{:x 1}
-                                       {:x 2}]}
-                              [2 3]))))
-
-      (t/testing "var bindings need to be distinct"
-        (t/is (thrown-with-msg?
-               IllegalArgumentException
-               #"In binding variables not distinct"
-               (xt/q (xt/db *api*) '{:find [x]
-                                     :in [$ [x x]]} [1 1]))))))
-
-#_(t/deftest test-multiple-results
-    (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "1"}
-                                      {:name "Ivan" :last-name "2"}]))
-    (t/is (= 2
-             (count (xt/q (xt/db *api*) '{:find [e] :where [[e :name "Ivan"]]})))))
-
-#_(t/deftest test-query-using-keywords
-    (fix/transact! *api* (fix/people [{:name "Ivan" :sex :male}
-                                      {:name "Petr" :sex :male}
-                                      {:name "Doris" :sex :female}
-                                      {:name "Jane" :sex :female}]))
-
-    (t/testing "Can query by single field"
-      (t/is (= #{["Ivan"] ["Petr"]} (xt/q (xt/db *api*) '{:find [name]
-                                                          :where [[e :name name]
-                                                                  [e :sex :male]]})))
-      (t/is (= #{["Doris"] ["Jane"]} (xt/q (xt/db *api*) '{:find [name]
-                                                           :where [[e :name name]
-                                                                   [e :sex :female]]})))))
+                                                  [e :sex :male]]}
+                                        (h/db fix/*node*))))
+    (t/is (= #{["Doris"] ["Jane"]} (h/q '{:find [name]
+                                          :where [[e :name name]
+                                                  [e :sex :female]]}
+                                        (h/db fix/*node*))))))
 
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
@@ -405,35 +409,45 @@
                            q)))
         (t/is (= #{[(:xt/id malcolm)]} (xt/q (xt/db *api*) q))))))
 
-#_(t/deftest test-query-across-entities-using-join
-  ;; Five people, two of which share the same name:
-    (fix/transact! *api* (fix/people [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}]))
+(t/deftest test-query-across-entities-using-join
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :age 30 :salary 50000}
+                          {:db/id :petr :name "Petr" :age 25 :salary 45000}
+                          {:db/id :sergei :name "Sergei" :age 35 :salary 55000}
+                          {:db/id :denis1 :name "Denis" :age 28 :salary 48000}
+                          {:db/id :denis2 :name "Denis" :age 32 :salary 52000}])
 
-    (t/testing "Five people, without a join"
-      (t/is (= 5 (count (xt/q (xt/db *api*) '{:find [p1]
-                                              :where [[p1 :name name]
-                                                      [p1 :age age]
-                                                      [p1 :salary salary]]})))))
+  (t/testing "Five people, without a join"
+    (t/is (= 5 (count (h/q '{:find [p1]
+                             :where [[p1 :name name]
+                                     [p1 :age age]
+                                     [p1 :salary salary]]}
+                           (h/db fix/*node*))))))
 
-    (t/testing "Five people, a cartesian product - joining without unification"
-      (t/is (= 25 (count (xt/q (xt/db *api*) '{:find [p1 p2]
-                                               :where [[p1 :name]
-                                                       [p2 :name]]})))))
+  #_
+  (t/testing "Five people, a cartesian product - joining without unification"
+    (t/is (= 25 (count (h/q '{:find [p1 p2]
+                              :where [[p1 :name]
+                                      [p2 :name]]}
+                            (h/db fix/*node*))))))
 
-    (t/testing "A single first result, joined to all possible subsequent results in next term"
-      (t/is (= 5 (count (xt/q (xt/db *api*) '{:find [p1 p2]
-                                              :where [[p1 :name "Ivan"]
-                                                      [p2 :name]]})))))
+  #_#_#_
+  (t/testing "A single first result, joined to all possible subsequent results in next term"
+    (t/is (= 5 (count (h/q '{:find [p1 p2]
+                             :where [[p1 :name "Ivan"]
+                                     [p2 :name]]}
+                           (h/db fix/*node*))))))
 
-    (t/testing "A single first result, with no subsequent results in next term"
-      (t/is (= 0 (count (xt/q (xt/db *api*) '{:find [p1]
-                                              :where [[p1 :name "Ivan"]
-                                                      [p2 :name "does-not-match"]]})))))
+  (t/testing "A single first result, with no subsequent results in next term"
+    (t/is (= 0 (count (h/q '{:find [p1]
+                             :where [[p1 :name "Ivan"]
+                                     [p2 :name "does-not-match"]]}
+                           (h/db fix/*node*))))))
 
-    (t/testing "Every person joins once, plus 2 more matches"
-      (t/is (= 7 (count (xt/q (xt/db *api*) '{:find [p1 p2]
-                                              :where [[p1 :name name]
-                                                      [p2 :name name]]}))))))
+  (t/testing "Every person joins once, plus 2 more matches"
+    (t/is (= 7 (count (h/q '{:find [p1 p2]
+                             :where [[p1 :name name]
+                                     [p2 :name name]]}
+                           (h/db fix/*node*)))))))
 
 #_(t/deftest test-join-over-two-attributes
     (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
