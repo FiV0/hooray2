@@ -21,13 +21,16 @@
                                       :a ::pattern-element
                                       :v ::pattern-element)))
 
+(s/def ::not-pattern (s/and list?
+                            (s/cat :type #{'not}
+                                   :patterns (s/+ ::triple-pattern))))
+
 (s/def ::find (s/and vector?
                      (s/+ ::variable)))
 
 (s/def ::keys (s/and vector? (s/+ symbol?)))
 (s/def ::strs (s/and vector? (s/+ symbol?)))
 (s/def ::syms (s/and vector? (s/+ symbol?)))
-
 
 (s/def ::scalar-binding ::variable)
 (s/def ::collection-binding (s/and (s/tuple ::scalar-binding #{'...})
@@ -42,7 +45,9 @@
                                  :relation-binding ::relation-binding))))
 
 (s/def ::where (s/and vector?
-                      (s/+ ::triple-pattern)))
+                      (s/+ ::triple-pattern)
+                      #_(s/+ (s/or :triple ::triple-pattern
+                                   :not ::not-pattern))))
 
 (s/def ::query (s/keys :req-un [::find ::where]
                        :opt-un [::in ::keys ::strs ::syms]))
