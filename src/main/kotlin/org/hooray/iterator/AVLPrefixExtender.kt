@@ -47,6 +47,7 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
             is AVLIndex.AVLSetIndex -> Pair(index.set.seq() as IAVLSeq, ::setKey)
             null -> return emptyList()
         }
+        // TODO should we use mutableSetOf here, as we are doing Datalog?
         val result = mutableListOf<Extension>()
         for (ext in extensions) {
             seq = seq.seek(ext)
