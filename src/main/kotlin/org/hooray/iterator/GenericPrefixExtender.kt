@@ -51,7 +51,7 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
     override open fun propose(prefix: Prefix)  =
         when (val index= indexFromPrefix(prefix)) {
             null -> emptyList()
-            // we don't just use .keys as that does not preserve order in case of sorted collections
+            // we don't just use keys, as that does not preserve order in case of sorted collections
             is SealedIndex.MapIndex -> index.map.iterator().asSequence().map { it.key }.toList()
             is SealedIndex.SetIndex -> index.set.toList()
         }

@@ -25,6 +25,7 @@ interface PrefixExtender : LevelParticipation {
                 override fun propose(prefix: Prefix): List<Extension> = sortedValues
 
                 override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
+                // TODO this doesn't make use of the fact that sortedValues is sorted
                         = extensions.filter { ext -> sortedValues.contains(ext) }
 
                 override fun participatesInLevel(level: Int) = level == participatesInLevel
