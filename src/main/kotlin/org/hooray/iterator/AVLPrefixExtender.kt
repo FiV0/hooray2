@@ -5,6 +5,7 @@ import org.hooray.algo.Prefix
 import clojure.data.avl.AVLMap
 import clojure.data.avl.AVLSet
 import clojure.data.avl.IAVLSeq
+import org.hooray.UniversalComparator
 
 sealed interface AVLIndex {
     data class AVLMapIndex(val map: AVLMap): AVLIndex
@@ -50,7 +51,7 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
         for (ext in extensions) {
             seq = seq.seek(ext)
             if(seq.isEmpty()) break
-            if (keyFn(seq) == ext) {
+            if (UniversalComparator.compare(keyFn(seq), ext) == 0) {
                 result.add(ext)
             }
         }
