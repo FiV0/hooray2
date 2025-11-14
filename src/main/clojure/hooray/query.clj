@@ -23,7 +23,21 @@
 
 (s/def ::not-pattern (s/and list?
                             (s/cat :type #{'not}
-                                   :patterns (s/+ ::triple-pattern))))
+                                   :patterns (s/+ ::pattern))))
+
+(s/def ::and-pattern (s/and list?
+                            (s/cat :type #{'and}
+                                   :patterns (s/+ ::pattern))))
+
+(s/def ::or-pattern (s/and list?
+                           (s/cat :type #{'or}
+                                  :patterns (s/+ ::pattern
+                                                 #_(s/or :pattern ::pattern
+                                                         :and ::and-pattern)))))
+
+(s/def ::pattern (s/or :triple ::triple-pattern
+                       :not ::not-pattern
+                       :or ::or-pattern))
 
 (s/def ::find (s/and vector?
                      (s/+ ::variable)))
