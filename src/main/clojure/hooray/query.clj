@@ -5,7 +5,8 @@
             [hooray.db :as db])
   (:import (org.hooray.algo Join GenericJoin LeapfrogJoin PrefixExtender LeapfrogIndex)
            (org.hooray.iterator
-            AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender GenericPrefixExtender
+            AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender
+            GenericPrefixExtender GenericPrefixExtenderOr
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
             BTreeIndex
             AVLIndex AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex)))
@@ -23,17 +24,24 @@
 
 (s/def ::not-pattern (s/and list?
                             (s/cat :type #{'not}
-                                   :patterns (s/+ ::pattern))))
+                                   :patterns (s/+ ::pattern))
+                            (s/conformer (fn [{:keys [patterns]}] patterns)
+                                         (fn [patterns] {:type 'not :patterns patterns}))))
 
 (s/def ::and-pattern (s/and list?
                             (s/cat :type #{'and}
-                                   :patterns (s/+ ::pattern))))
+                                   :patterns (s/+ ::pattern))
+                            (s/conformer (fn [{:keys [patterns]}] patterns)
+                                         (fn [patterns] {:type 'and :patterns patterns}))))
+
 
 (s/def ::or-pattern (s/and list?
                            (s/cat :type #{'or}
                                   :patterns (s/+ ::pattern
                                                  #_(s/or :pattern ::pattern
-                                                         :and ::and-pattern)))))
+                                                         :and ::and-pattern)))
+                           (s/conformer (fn [{:keys [patterns]}] patterns)
+                                        (fn [patterns] {:type 'or :patterns patterns}))))
 
 (s/def ::pattern (s/or :triple ::triple-pattern
                        :not ::not-pattern
@@ -59,7 +67,8 @@
                                  :relation-binding ::relation-binding))))
 
 (s/def ::where (s/and vector?
-                      (s/+ ::triple-pattern)
+                      (s/+ ::pattern)
+                      #_(s/+ ::triple-pattern)
                       #_(s/+ (s/or :triple ::triple-pattern
                                    :not ::not-pattern))))
 
@@ -78,17 +87,23 @@
 ;; [1 x y] -> eav entity needs to come before attribute
 ;; For simplicity let's just forget about attribute variables for now
 
-(defn variable-order [{wheres :where :as _conformed-query}]
-  (-> (for [{:keys [e a v] :as where} wheres]
-        (match [e a v]
-          [[:constant _] [:constant _] [:constant _]] []
-          [[:constant _] [:constant _] [:variable value-var]] [value-var]
-          [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
-          [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
-          [_ [:variable _] _] (throw (UnsupportedOperationException. "Currently varialbles in attribute position are not supported"))
-          :else (throw (ex-info "Unknown where clause" {:where where}))))
+(defn variable-order [patterns]
+  (-> (for [[type value] patterns]
+        (case type
+          :triple (let [{:keys [e a v]} value]
+                    (match [e a v]
+                      [[:constant _] [:constant _] [:constant _]] []
+                      [[:constant _] [:constant _] [:variable value-var]] [value-var]
+                      [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
+                      [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
+                      [_ [:variable _] _] (throw (UnsupportedOperationException. "Currently varialbles in attribute position are not supported"))))
+
+          :or (variable-order value)))
       flatten
       distinct))
+
+(defn free-variables [patterns]
+  (set (variable-order patterns)))
 
 (defn unsupported-ex
   ([] (throw (UnsupportedOperationException.)))
@@ -115,27 +130,30 @@
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
-(defn- where->iterator [{:keys [eav ave aev opts] :as _db} var-order {:keys [e a v] :as where}]
+(defn- pattern->iterator [{:keys [eav ave aev opts] :as db} var-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
         var-to-index (zipmap var-order (range))]
-    (match [e a v]
-      [[:constant _] [:constant _] [:constant _]]
-      (unsupported-ex)
+    (case type
+      :triple (let [{:keys [e a v]} pattern]
+                (match [e a v]
+                  [[:constant _] [:constant _] [:constant _]]
+                  (unsupported-ex)
 
-      [[:constant e-const] [:constant a-const] [:variable v-var]]
-      (create-iterator opts (get-in eav [e-const a-const] empty-set) var-order [(get var-to-index v-var)])
+                  [[:constant e-const] [:constant a-const] [:variable v-var]]
+                  (create-iterator opts (get-in eav [e-const a-const] empty-set) var-order [(get var-to-index v-var)])
 
-      [[:variable e-var] [:constant a-const] [:constant v-const]]
-      (create-iterator opts (get-in ave [a-const v-const] empty-set) var-order [(get var-to-index e-var)])
+                  [[:variable e-var] [:constant a-const] [:constant v-const]]
+                  (create-iterator opts (get-in ave [a-const v-const] empty-set) var-order [(get var-to-index e-var)])
 
-      [[:variable e-var] [:constant a-const] [:variable v-var]]
-      (let [e-index (var-to-index e-var)
-            v-index (var-to-index v-var)
-            [index participates-in-level] (if (< e-index v-index)  [aev [e-index v-index]] [ave [v-index e-index]])]
-        (create-iterator opts (get index a-const empty-map) var-order participates-in-level))
+                  [[:variable e-var] [:constant a-const] [:variable v-var]]
+                  (let [e-index (var-to-index e-var)
+                        v-index (var-to-index v-var)
+                        [index participates-in-level] (if (< e-index v-index)  [aev [e-index v-index]] [ave [v-index e-index]])]
+                    (create-iterator opts (get index a-const empty-map) var-order participates-in-level))
 
-      :else (throw (ex-info "Unknown where clause" {:where where})))))
+                  :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
+      :or (GenericPrefixExtenderOr. (mapv (partial pattern->iterator db var-order) pattern)))))
 
 (defn- transpose [mtx]
   (apply mapv vector mtx))
@@ -184,11 +202,11 @@
 
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query query)]}
-  (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
-        var-order (variable-order conformed-query)
+  (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query query)
+        var-order (variable-order where)
         var-to-index (zipmap var-order (range))
         iterators (concat (in->iterators in var-to-index args opts)
-                          (map (partial where->iterator db var-order) where))
+                          (map (partial pattern->iterator db var-order) where))
         order-fn (order-result-fn find var-to-index)]
     (cond->> (join iterators (count var-order) opts)
       true (map order-fn)
