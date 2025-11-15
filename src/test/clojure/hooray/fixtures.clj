@@ -1,6 +1,6 @@
 (ns hooray.fixtures
   (:require [hooray.core :as h]
-            [hooray.util :as util]
+            [hooray.test-util :as tu]
             [clojure.tools.logging :as log]))
 
 (def ^:dynamic *opts* {:type :mem :storage :hash :algo :generic})
@@ -27,8 +27,8 @@
 
 (defn with-timing-logged [f]
   (let [{:keys [time-taken-ms]} (with-timing f)]
-    (log/infof "Test took %s" (util/format-time time-taken-ms))))
+    (log/infof "Test took %s" (tu/format-time time-taken-ms))))
 
 (defmacro with-timing-logged* [& body]
   `(let [{:keys [~'time-taken-ms]} (with-timing (fn [] ~@body))]
-     (log/infof "Test took %s" (util/format-time ~'time-taken-ms))))
+     (log/infof "Test took %s" (tu/format-time ~'time-taken-ms))))

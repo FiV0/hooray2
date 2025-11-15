@@ -1,4 +1,4 @@
-(ns hooray.util
+(ns hooray.test-util
   (:import (java.util.concurrent TimeUnit)))
 
 (defonce year (* (.. TimeUnit/DAYS (toMillis 1)) 365))
