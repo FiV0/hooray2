@@ -4,7 +4,7 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
 
-class GenericPrefixExtenderOr(val children: List<GenericPrefixExtender>) : PrefixExtender, LevelParticipation {
+open class GenericPrefixExtenderOr(open val children: List<GenericPrefixExtender>) : PrefixExtender, LevelParticipation {
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
