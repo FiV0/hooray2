@@ -37,9 +37,16 @@
 
 (s/def ::or-pattern (s/and list?
                            (s/cat :type #{'or}
-                                  :patterns (s/+ ::pattern
-                                                 #_(s/or :pattern ::pattern
-                                                         :and ::and-pattern)))
+                                  :patterns (s/+ (s/and (s/or :pattern ::pattern
+                                                              :and ::and-pattern)
+                                                        (s/conformer (fn [[type value]]
+                                                                       (case type
+                                                                         :pattern value
+                                                                         :and [type value]))
+                                                                     (fn [pattern-or-and]
+                                                                       (if (= :and (first pattern-or-and))
+                                                                         pattern-or-and
+                                                                         [:pattern pattern-or-and]))))))
                            (s/conformer (fn [{:keys [patterns]}] patterns)
                                         (fn [patterns] {:type 'or :patterns patterns}))))
 
@@ -98,7 +105,7 @@
                       [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
                       [_ [:variable _] _] (throw (UnsupportedOperationException. "Currently varialbles in attribute position are not supported"))))
 
-          :or (variable-order value)))
+          (:or :and) (variable-order value)))
       flatten
       distinct))
 

@@ -496,6 +496,43 @@
                                    [(identity :optional) l]))]}
                 (h/db fix/*node*)))))
 
+(t/deftest test-or-query-can-use-and
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :sex :male}
+                          {:db/id :bob :name "Bob" :sex :male}
+                          {:db/id :ivana :name "Ivana" :sex :female}])
+
+  (t/is (= '[[:triple {:a [:constant :name], :e [:variable e], :v [:variable name]}]
+             [:or
+              [[:triple {:a [:constant :sex], :e [:variable e], :v [:constant :female]}]
+               [:and
+                [[:triple {:a [:constant :sex], :e [:variable e], :v [:constant :male]}]
+                 [:triple {:a [:constant :name], :e [:variable e], :v [:constant "Ivan"]}]]]]]]
+           (s/conform :hooray.query/where '[[e :name name]
+                                            (or [e :sex :female]
+                                                (and [e :sex :male]
+                                                     [e :name "Ivan"]))])))
+  #_
+  (t/is (= #{["Ivan"]
+             ["Ivana"]}
+           (h/q '{:find [name]
+                  :where [[e :name name]
+                          (or [e :sex :female]
+                              (and [e :sex :male]
+                                   [e :name "Ivan"]))]}
+                (h/db fix/*node*))))
+  #_#_
+  (t/is (= #{[:ivan]}
+           (h/q '{:find [e]
+                  :where [(or [e :name "Ivan"])]}
+                (h/db fix/*node*))))
+
+  (t/is (= #{}
+           (h/q '{:find [name]
+                  :where [[e :name name]
+                          (or (and [e :sex :female]
+                                   [e :name "Ivan"]))]}
+                (h/db fix/*node*)))))
+
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
                                    #inst "1986-10-22")]
@@ -597,6 +634,7 @@
                    [[1 0]
                     [2 1]
                     [3 1]]))))
+
 #_(t/deftest test-not-query
     (t/is (= '[[:triple {:e e :a :name :v name}]
                [:triple {:e e :a :name :v "Ivan"}]
@@ -694,28 +732,7 @@
                                               :where [[e :last-name last-name]
                                                       (not [:ivan-ivanov-1 :last-name last-name])]}))))))
 
-#_(t/deftest test-or-query-can-use-and
-    (let [[ivan] (fix/transact! *api* (fix/people [{:name "Ivan" :sex :male}
-                                                   {:name "Bob" :sex :male}
-                                                   {:name "Ivana" :sex :female}]))]
 
-      (t/is (= #{["Ivan"]
-                 ["Ivana"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             (or [e :sex :female]
-                                                 (and [e :sex :male]
-                                                      [e :name "Ivan"]))]})))
-
-      (t/is (= #{[(:xt/id ivan)]}
-               (xt/q (xt/db *api*) '{:find [e]
-                                     :where [(or [e :name "Ivan"])]})))
-
-      (t/is (= #{}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             (or (and [e :sex :female]
-                                                      [e :name "Ivan"]))]})))))
 
 #_(t/deftest test-ors-must-use-same-vars
     (fix/submit+await-tx [[::xt/put {:xt/id 1, :type :a}]
