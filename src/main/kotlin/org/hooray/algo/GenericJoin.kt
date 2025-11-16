@@ -31,6 +31,23 @@ interface PrefixExtender : LevelParticipation {
                 override fun participatesInLevel(level: Int) = level == participatesInLevel
             }
         }
+
+        fun createTupleExtender(tuple: ResultTuple): PrefixExtender {
+            return object : PrefixExtender {
+                private fun isPrefixMatching(prefix: Prefix): Boolean =
+                    prefix.size <= tuple.size && tuple.take(prefix.size) == prefix
+
+                override fun count(prefix: Prefix): Int = if (isPrefixMatching(prefix)) 1 else 0
+
+                override fun propose(prefix: Prefix): List<Extension> =
+                    if (isPrefixMatching(prefix)) listOf(tuple[prefix.size]) else emptyList()
+
+                override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> =
+                    if (isPrefixMatching(prefix) && extensions.contains(tuple[prefix.size])) listOf(tuple[prefix.size]) else emptyList()
+
+                override fun participatesInLevel(level: Int) = level < tuple.size
+            }
+        }
     }
 }
 
@@ -88,4 +105,8 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
         }
         return prefixes
     }
+}
+
+interface ResultTupleFilter : LevelParticipation {
+    fun filter(results: List<ResultTuple>): Boolean
 }

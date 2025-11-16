@@ -37,4 +37,3 @@ open class GenericPrefixExtenderAnd(val children: List<GenericPrefixExtender>) :
 
     override fun participatesInLevel(level: Int) = children.any { it.participatesInLevel(level) }
 }
-
