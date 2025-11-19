@@ -108,5 +108,5 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
 }
 
 interface ResultTupleFilter : LevelParticipation {
-    fun filter(results: List<ResultTuple>): Boolean
+    fun filter(results: List<ResultTuple>): List<ResultTuple>
 }
