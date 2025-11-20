@@ -5,7 +5,7 @@ import org.hooray.algo.PrefixExtender
 import org.hooray.algo.ResultTuple
 import org.hooray.algo.ResultTupleFilter
 
-open class GenericResultTupleRemover(val children: List<GenericPrefixExtender>) : ResultTupleFilter , LevelParticipation {
+open class GenericResultTupleRemover(val children: List<PrefixExtender>) : ResultTupleFilter , LevelParticipation {
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
     }
