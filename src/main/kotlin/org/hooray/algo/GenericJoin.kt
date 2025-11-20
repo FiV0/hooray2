@@ -106,7 +106,3 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
         return prefixes
     }
 }
-
-interface ResultTupleFilter : LevelParticipation {
-    fun filter(results: List<ResultTuple>): List<ResultTuple>
-}
