@@ -137,7 +137,7 @@
         (recur patterns (into positive-vars (free-variables pattern)))
         :or (let [or-branches (mapv free-variables pattern-value)]
               (when-not (every? #(= (first or-branches) %) (rest or-branches))
-                (let [msg "Branches of or must have same free variables!"]
+                (let [msg "Branches of `or` must have same free variables!"]
                   (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/incorrect,
                                        :cognitect.anomalies/message msg,
                                        :db/error :db.error/invalid-query}))))

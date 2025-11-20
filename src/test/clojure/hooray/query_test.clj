@@ -643,49 +643,50 @@
                              :where [[e :last-name last-name]
                                      (not [:ivan-ivanov-1 :last-name last-name])]}
                            (h/db fix/*node*)))))))
-#_
+
 (t/deftest test-ors-must-use-same-vars
-  (fix/submit+await-tx [[::xt/put {:xt/id 1, :type :a}]
-                        [::xt/put {:xt/id 2, :type :b}]
-                        [::xt/put {:xt/id 3, :type :b, :extra :val}]
-                        [::xt/put {:xt/id 4, :type :c}]])
+  (h/transact fix/*node* [{:db/id 1, :type :a}
+                          {:db/id 2, :type :b}
+                          {:db/id 3, :type :b, :extra :val}
+                          {:db/id 4, :type :c}])
 
   (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"`or` branches must have the same free variables"
-         (xt/q (xt/db *api*) '{:find [e]
-                               :where [[e :name name]
-                                       (or [e1 :last-name "Ivanov"]
-                                           [e2 :last-name "Ivanov"])]})))
+         ExceptionInfo
+         #"Branches of `or` must have same free variables!"
+         (h/q '{:find [e]
+                :where [[e :name name]
+                        (or [e1 :last-name "Ivanov"]
+                            [e2 :last-name "Ivanov"])]}
+              (h/db fix/*node*))))
 
+  #_#_#_
   (t/is (thrown-with-msg?
-         IllegalArgumentException
-         #"`or` branches must have the same free variables"
-         (xt/q (xt/db *api*) '{:find [x]
-                               :where [(or-join [x]
-                                                [e1 :last-name "Ivanov"])]})))
+         ExceptionInfo
+         #"Branches of `or` must have same free variables!"
+         (h/q '{:find [x]
+                :where [(or-join [x]
+                                 [e1 :last-name "Ivanov"])]}
+              (h/db fix/*node*))))
 
   (t/is (= #{[1] [3]}
-           (xt/q (xt/db *api*)
-                 '{:find [?e]
-                   :where [[?e :type ?type]
-                           (or-join [?e ?type]
-                                    [(= ?type :a)]
-                                    [(= ?e 3)])]}))
+           (h/q '{:find [?e]
+                  :where [[?e :type ?type]
+                          (or-join [?e ?type]
+                                   [(= ?type :a)]
+                                   [(= ?e 3)])]}
+                (h/db fix/*node*)))
         "don't need to mention all bound or vars though")
 
   (t/is (= #{[1] [3]}
-           (xt/q (xt/db *api*)
-                 '{:find [?e]
-                   :where [[?e :type ?type]
-                           (or-join [?e ?type]
-                                    (and [(= ?type :a)]
-                                         [(any? ?e)])
-                                    (and [(= ?e 3)]
-                                         [(any? ?type)]))]}))
+           (h/q '{:find [?e]
+                  :where [[?e :type ?type]
+                          (or-join [?e ?type]
+                                   (and [(= ?type :a)]
+                                        [(any? ?e)])
+                                   (and [(= ?e 3)]
+                                        [(any? ?type)]))]}
+                (h/db fix/*node*)))
         "we used to have to use a lot of `any?` - check for backwards compatibility"))
-
-
 
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
