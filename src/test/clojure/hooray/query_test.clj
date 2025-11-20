@@ -511,7 +511,6 @@
                                             (or [e :sex :female]
                                                 (and [e :sex :male]
                                                      [e :name "Ivan"]))])))
-  #_
   (t/is (= #{["Ivan"]
              ["Ivana"]}
            (h/q '{:find [name]
@@ -520,7 +519,7 @@
                               (and [e :sex :male]
                                    [e :name "Ivan"]))]}
                 (h/db fix/*node*))))
-  #_#_
+
   (t/is (= #{[:ivan]}
            (h/q '{:find [e]
                   :where [(or [e :name "Ivan"])]}

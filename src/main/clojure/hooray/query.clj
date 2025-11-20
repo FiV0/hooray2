@@ -6,7 +6,7 @@
   (:import (org.hooray.algo Join GenericJoin LeapfrogJoin PrefixExtender LeapfrogIndex)
            (org.hooray.iterator
             AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender
-            GenericPrefixExtender GenericPrefixExtenderOr
+            GenericPrefixExtender GenericPrefixExtenderOr GenericPrefixExtenderAnd
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
             BTreeIndex
             AVLIndex AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex)))
@@ -160,7 +160,8 @@
                     (create-iterator opts (get index a-const empty-map) var-order participates-in-level))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
-      :or (GenericPrefixExtenderOr. (mapv (partial pattern->iterator db var-order) pattern)))))
+      :or (GenericPrefixExtenderOr. (mapv (partial pattern->iterator db var-order) pattern))
+      :and (GenericPrefixExtenderAnd. (mapv (partial pattern->iterator db var-order) pattern)))))
 
 (defn- transpose [mtx]
   (apply mapv vector mtx))
