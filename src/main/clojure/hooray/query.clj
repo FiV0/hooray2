@@ -84,10 +84,10 @@
 
 ;; We don't (yet) support a where clause of the form
 ;; [1 x "Alice"]
-;; This is a very unlikely with Datomic as you will likely know you attributes
+;; This is a very unlikely with Datomic as you will know your attributes.
 ;; [x y "Alice"] -> vae, in this case attribute variable needs to come before entity
 ;; [1 x y] -> eav entity needs to come before attribute
-;; For simplicity let's just forget about attribute variables for now
+;; For simplicity let's just forget about attribute variables for now.
 
 (defn variable-order [patterns]
   (-> (for [[type value] patterns]

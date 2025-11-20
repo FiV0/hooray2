@@ -604,6 +604,7 @@
                                    :where [[?e :db/id]
                                            (not [?x :ref ?e])]}
                                  (h/db n))))))
+        ;; This throws in Datomic
         #_
         (t/is (= 3 (count (h/q '{:find [e]
                                  :where [[e :name name]
