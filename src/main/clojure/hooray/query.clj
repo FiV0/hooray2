@@ -1,14 +1,26 @@
 (ns hooray.query
   (:require
    [clojure.core.match :refer [match]]
+   [clojure.set]
    [clojure.spec.alpha :as s]
    [hooray.db :as db])
   (:import
-   (org.hooray.algo GenericJoin LeapfrogJoin Join LeapfrogIndex PrefixExtender)
-   (org.hooray.iterator AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex AVLLeapfrogIndex
-                        GenericPrefixExtender GenericPrefixExtenderAnd GenericPrefixExtenderOr GenericPrefixExtenderNot
-                        SealedIndex$MapIndex
-                        SealedIndex$SetIndex)))
+   (org.hooray.algo
+    GenericJoin
+    Join
+    LeapfrogIndex
+    LeapfrogJoin
+    PrefixExtender)
+   (org.hooray.iterator
+    AVLIndex$AVLMapIndex
+    AVLIndex$AVLSetIndex
+    AVLLeapfrogIndex
+    GenericPrefixExtender
+    GenericPrefixExtenderAnd
+    GenericPrefixExtenderNot
+    GenericPrefixExtenderOr
+    SealedIndex$MapIndex
+    SealedIndex$SetIndex)))
 
 (s/def ::variable symbol?)
 (s/def ::constant (complement symbol?))
@@ -77,11 +89,6 @@
 (s/def ::query (s/keys :req-un [::find ::where]
                        :opt-un [::in ::keys ::strs ::syms]))
 
-(defn validate-query [query]
-  (when (> (count (select-keys query [:keys :strs :syms])) 1)
-    (throw (IllegalArgumentException. "Exactly one of :keys, :strs and :syms must be present!")))
-  true)
-
 ;; We don't (yet) support a where clause of the form
 ;; [1 x "Alice"]
 ;; This is a very unlikely with Datomic as you will know your attributes.
@@ -89,27 +96,61 @@
 ;; [1 x y] -> eav entity needs to come before attribute
 ;; For simplicity let's just forget about attribute variables for now.
 
-(defn variable-order [patterns]
-  (-> (for [[type value] patterns]
-        (case type
-          :triple (let [{:keys [e a v]} value]
-                    (match [e a v]
-                      [[:constant _] [:constant _] [:constant _]] []
-                      [[:constant _] [:constant _] [:variable value-var]] [value-var]
-                      [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
-                      [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
-                      [_ [:variable _] _] (throw (UnsupportedOperationException. "Currently varialbles in attribute position are not supported"))))
+(defn unsupported-ex
+  ([] (unsupported-ex "Unsupported operation!"))
+  ([msg] (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/unsupported,
+                              :cognitect.anomalies/message msg,
+                              :db/error :db.error/unsupported}))))
 
-          (:or :and :not) (variable-order value)))
-      flatten
+(declare variable-order*)
+
+(defn variable-order [[type value]]
+  (-> (case type
+        :triple (let [{:keys [e a v]} value]
+                  (match [e a v]
+                    [[:constant _] [:constant _] [:constant _]] []
+                    [[:constant _] [:constant _] [:variable value-var]] [value-var]
+                    [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
+                    [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
+                    [_ [:variable _] _] (unsupported-ex "Currently varialbles in attribute position are not supported")))
+
+        (:or :and :not) (variable-order* value))
       distinct))
 
-(defn free-variables [patterns]
-  (set (variable-order patterns)))
+(defn variable-order* [patterns]
+  (->> (map variable-order patterns)
+       flatten
+       distinct))
 
-(defn unsupported-ex
-  ([] (throw (UnsupportedOperationException.)))
-  ([msg] (throw (UnsupportedOperationException. msg))))
+(defn free-variables [pattern]
+  (set (variable-order pattern)))
+
+(defn free-variables* [patterns]
+  (->> (map free-variables patterns)
+       (reduce clojure.set/union)))
+
+(defn validate-patterns [patterns]
+  (loop [[[type pattern-value :as pattern] & patterns] patterns positive-vars #{}]
+    (when type
+      (case type
+        (:triple :and :not)
+        (recur patterns (into positive-vars (free-variables pattern)))
+        :or (let [or-branches (mapv free-variables pattern-value)]
+              (when-not (every? #(= (first or-branches) %) (rest or-branches))
+                (let [msg "Branches of or must have same free variables!"]
+                  (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/incorrect,
+                                       :cognitect.anomalies/message msg,
+                                       :db/error :db.error/invalid-query}))))
+              (recur patterns (into positive-vars (free-variables pattern))))))))
+
+(defn validate-query [{:keys [where] :as conformed-query}]
+  (when (> (count (select-keys conformed-query [:keys :strs :syms])) 1)
+    (let [msg "Only one of :keys, :strs and :syms must be present!"]
+      (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/incorrect,
+                           :cognitect.anomalies/message msg,
+                           :db/error :db.error/invalid-query}))))
+  (validate-patterns where)
+  true)
 
 (defn create-iterator [{:keys [storage algo] :as _opts} index var-order participates-in-level]
   (match [storage algo]
@@ -205,9 +246,9 @@
     (.join join-algo)))
 
 (defn query [{:keys [opts] :as db} query args]
-  {:pre [(s/valid? ::query query) (validate-query query)]}
+  {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query query)
-        var-order (variable-order where)
+        var-order (variable-order* where)
         var-to-index (zipmap var-order (range))
         compiled-patterns (concat (in->iterators in var-to-index args opts)
                                   (map (partial compile-pattern db var-order) where))

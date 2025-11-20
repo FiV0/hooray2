@@ -3,35 +3,36 @@
             [clojure.spec.alpha :as s]
             [hooray.query :as query]
             [hooray.fixtures :as fix]
-            [hooray.core :as h]))
+            [hooray.core :as h])
+  (:import (clojure.lang ExceptionInfo)))
 
 (deftest variable-order-test
   (testing "no variables - all constants"
     (let [where (s/conform ::query/where [[1 :person/name "Alice"]])]
-      (is (= [] (query/variable-order where)))))
+      (is (= [] (query/variable-order* where)))))
 
   (testing "single variable in value position"
     (let [where (s/conform ::query/where '[[1 :person/name x]])]
-      (is (= '[x] (query/variable-order where)))))
+      (is (= '[x] (query/variable-order* where)))))
 
   (testing "single variable in entity position (constant value)"
     (let [where (s/conform ::query/where '[[x :person/name "Alice"]])]
-      (is (= '[x] (query/variable-order where)))))
+      (is (= '[x] (query/variable-order* where)))))
 
   (testing "two variables - entity and value positions"
     (let [where (s/conform ::query/where '[[x :person/name y]])]
-      (is (= '[x y] (query/variable-order where)))))
+      (is (= '[x y] (query/variable-order* where)))))
 
   (testing "multiple where clauses with same variable"
     (let [where (s/conform ::query/where
                            '[[x :person/name y]
                              [x :person/age z]])]
-      (is (= '[x y z] (query/variable-order where)))))
+      (is (= '[x y z] (query/variable-order* where)))))
 
   (testing "variable in attribute position throws exception"
     (let [where (s/conform ::query/where '[[x y "Alice"]])]
-      (is (thrown? UnsupportedOperationException
-                   (query/variable-order where))
+      (is (thrown? ExceptionInfo
+                   (query/variable-order* where))
           "Should throw when variable is in attribute position"))))
 
 ;; All tests copied from XTDB
@@ -131,7 +132,7 @@
                                   [e :last-name "Ivanov"]]} db))
           "throws on arity mismatch")
 
-    (t/is (thrown? IllegalArgumentException
+    (t/is (thrown? ExceptionInfo
                    (h/q '{:find [name]
                           :keys [name]
                           :strs [name]
@@ -290,6 +291,7 @@
         (t/is (= #{[22]} (h/q '{:find [age]
                                 :where [[(>= age 21)]]
                                 :args [{:age 22}]} (h/db fix/*node*)))))))
+
 #_(t/deftest test-query-with-in-bindings
     (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
                                                         {:name "Petr" :last-name "Petrov"}]))]
@@ -641,6 +643,48 @@
                              :where [[e :last-name last-name]
                                      (not [:ivan-ivanov-1 :last-name last-name])]}
                            (h/db fix/*node*)))))))
+#_
+(t/deftest test-ors-must-use-same-vars
+  (fix/submit+await-tx [[::xt/put {:xt/id 1, :type :a}]
+                        [::xt/put {:xt/id 2, :type :b}]
+                        [::xt/put {:xt/id 3, :type :b, :extra :val}]
+                        [::xt/put {:xt/id 4, :type :c}]])
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"`or` branches must have the same free variables"
+         (xt/q (xt/db *api*) '{:find [e]
+                               :where [[e :name name]
+                                       (or [e1 :last-name "Ivanov"]
+                                           [e2 :last-name "Ivanov"])]})))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #"`or` branches must have the same free variables"
+         (xt/q (xt/db *api*) '{:find [x]
+                               :where [(or-join [x]
+                                                [e1 :last-name "Ivanov"])]})))
+
+  (t/is (= #{[1] [3]}
+           (xt/q (xt/db *api*)
+                 '{:find [?e]
+                   :where [[?e :type ?type]
+                           (or-join [?e ?type]
+                                    [(= ?type :a)]
+                                    [(= ?e 3)])]}))
+        "don't need to mention all bound or vars though")
+
+  (t/is (= #{[1] [3]}
+           (xt/q (xt/db *api*)
+                 '{:find [?e]
+                   :where [[?e :type ?type]
+                           (or-join [?e ?type]
+                                    (and [(= ?type :a)]
+                                         [(any? ?e)])
+                                    (and [(= ?e 3)]
+                                         [(any? ?type)]))]}))
+        "we used to have to use a lot of `any?` - check for backwards compatibility"))
+
 
 
 #_(t/deftest test-basic-query-at-t
@@ -745,46 +789,7 @@
                     [2 1]
                     [3 1]]))))
 
-#_(t/deftest test-ors-must-use-same-vars
-    (fix/submit+await-tx [[::xt/put {:xt/id 1, :type :a}]
-                          [::xt/put {:xt/id 2, :type :b}]
-                          [::xt/put {:xt/id 3, :type :b, :extra :val}]
-                          [::xt/put {:xt/id 4, :type :c}]])
 
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"`or` branches must have the same free variables"
-           (xt/q (xt/db *api*) '{:find [e]
-                                 :where [[e :name name]
-                                         (or [e1 :last-name "Ivanov"]
-                                             [e2 :last-name "Ivanov"])]})))
-
-    (t/is (thrown-with-msg?
-           IllegalArgumentException
-           #"`or` branches must have the same free variables"
-           (xt/q (xt/db *api*) '{:find [x]
-                                 :where [(or-join [x]
-                                                  [e1 :last-name "Ivanov"])]})))
-
-    (t/is (= #{[1] [3]}
-             (xt/q (xt/db *api*)
-                   '{:find [?e]
-                     :where [[?e :type ?type]
-                             (or-join [?e ?type]
-                                      [(= ?type :a)]
-                                      [(= ?e 3)])]}))
-          "don't need to mention all bound or vars though")
-
-    (t/is (= #{[1] [3]}
-             (xt/q (xt/db *api*)
-                   '{:find [?e]
-                     :where [[?e :type ?type]
-                             (or-join [?e ?type]
-                                      (and [(= ?type :a)]
-                                           [(any? ?e)])
-                                      (and [(= ?e 3)]
-                                           [(any? ?type)]))]}))
-          "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
 #_(t/deftest test-ors-can-introduce-new-bindings
     (let [[_petr ivan _ivanova] (fix/transact! *api* (fix/people [{:name "Petr" :last-name "Smith" :sex :male}
