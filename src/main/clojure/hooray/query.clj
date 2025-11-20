@@ -6,7 +6,7 @@
   (:import (org.hooray.algo Join GenericJoin LeapfrogJoin PrefixExtender LeapfrogIndex)
            (org.hooray.iterator
             AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender
-            GenericPrefixExtender GenericPrefixExtenderOr GenericPrefixExtenderAnd
+            GenericPrefixExtender GenericPrefixExtenderOr GenericPrefixExtenderAnd GenericResultTupleRemover
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
             BTreeIndex
             AVLIndex AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex)))
@@ -137,7 +137,7 @@
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
-(defn- pattern->iterator [{:keys [eav ave aev opts] :as db} var-order [type pattern]]
+(defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
         var-to-index (zipmap var-order (range))]
@@ -160,8 +160,9 @@
                     (create-iterator opts (get index a-const empty-map) var-order participates-in-level))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
-      :or (GenericPrefixExtenderOr. (mapv (partial pattern->iterator db var-order) pattern))
-      :and (GenericPrefixExtenderAnd. (mapv (partial pattern->iterator db var-order) pattern)))))
+      :or (GenericPrefixExtenderOr. (mapv (partial compile-pattern db var-order) pattern))
+      :and (GenericPrefixExtenderAnd. (mapv (partial compile-pattern db var-order) pattern))
+      :not (GenericResultTupleRemover. (mapv (partial compile-pattern db var-order) pattern)))))
 
 (defn- transpose [mtx]
   (apply mapv vector mtx))
@@ -214,7 +215,7 @@
         var-order (variable-order where)
         var-to-index (zipmap var-order (range))
         iterators (concat (in->iterators in var-to-index args opts)
-                          (map (partial pattern->iterator db var-order) where))
+                          (map (partial compile-pattern db var-order) where))
         order-fn (order-result-fn find var-to-index)]
     (cond->> (join iterators (count var-order) opts)
       true (map order-fn)
