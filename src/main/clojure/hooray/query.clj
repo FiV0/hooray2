@@ -1,15 +1,14 @@
 (ns hooray.query
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
-            [clojure.core.match :refer [match]]
-            [hooray.db :as db])
-  (:import (org.hooray.algo Join GenericJoin LeapfrogJoin PrefixExtender LeapfrogIndex)
-           (org.hooray.iterator
-            AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender
-            GenericPrefixExtender GenericPrefixExtenderOr GenericPrefixExtenderAnd GenericResultTupleRemover
-            SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
-            BTreeIndex
-            AVLIndex AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex)))
+  (:require
+   [clojure.core.match :refer [match]]
+   [clojure.spec.alpha :as s]
+   [hooray.db :as db])
+  (:import
+   (org.hooray.algo GenericJoin LeapfrogJoin Join LeapfrogIndex PrefixExtender)
+   (org.hooray.iterator AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex AVLLeapfrogIndex
+                        GenericPrefixExtender GenericPrefixExtenderAnd GenericPrefixExtenderOr GenericPrefixExtenderNot
+                        SealedIndex$MapIndex
+                        SealedIndex$SetIndex)))
 
 (s/def ::variable symbol?)
 (s/def ::constant (complement symbol?))
@@ -73,11 +72,7 @@
                                  :tuple-binding ::tuple-binding
                                  :relation-binding ::relation-binding))))
 
-(s/def ::where (s/and vector?
-                      (s/+ ::pattern)
-                      #_(s/+ ::triple-pattern)
-                      #_(s/+ (s/or :triple ::triple-pattern
-                                   :not ::not-pattern))))
+(s/def ::where (s/and vector? (s/+ ::pattern)))
 
 (s/def ::query (s/keys :req-un [::find ::where]
                        :opt-un [::in ::keys ::strs ::syms]))
@@ -105,7 +100,7 @@
                       [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
                       [_ [:variable _] _] (throw (UnsupportedOperationException. "Currently varialbles in attribute position are not supported"))))
 
-          (:or :and) (variable-order value)))
+          (:or :and :not) (variable-order value)))
       flatten
       distinct))
 
@@ -162,7 +157,7 @@
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       :or (GenericPrefixExtenderOr. (mapv (partial compile-pattern db var-order) pattern))
       :and (GenericPrefixExtenderAnd. (mapv (partial compile-pattern db var-order) pattern))
-      :not (GenericResultTupleRemover. (mapv (partial compile-pattern db var-order) pattern)))))
+      :not (GenericPrefixExtenderNot. (mapv (partial compile-pattern db var-order) pattern) (dec (count var-order))))))
 
 (defn- transpose [mtx]
   (apply mapv vector mtx))
@@ -203,10 +198,10 @@
   (fn [row]
     (mapv (fn [var] (nth row (var-to-index var))) find)))
 
-(defn join [iterators levels {:keys [algo] :as _opts}]
+(defn join [compiled-patterns levels {:keys [algo] :as _opts}]
   (let [^Join join-algo (case algo
-                          :generic (GenericJoin. iterators levels)
-                          :leapfrog (LeapfrogJoin. iterators levels))]
+                          :generic (GenericJoin. compiled-patterns levels)
+                          :leapfrog (LeapfrogJoin. compiled-patterns levels))]
     (.join join-algo)))
 
 (defn query [{:keys [opts] :as db} query args]
@@ -214,10 +209,10 @@
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query query)
         var-order (variable-order where)
         var-to-index (zipmap var-order (range))
-        iterators (concat (in->iterators in var-to-index args opts)
-                          (map (partial compile-pattern db var-order) where))
+        compiled-patterns (concat (in->iterators in var-to-index args opts)
+                                  (map (partial compile-pattern db var-order) where))
         order-fn (order-result-fn find var-to-index)]
-    (cond->> (join iterators (count var-order) opts)
+    (cond->> (join compiled-patterns (count var-order) opts)
       true (map order-fn)
       (seq keys) (map (zipmap-fn find keys var-to-index keyword))
       (seq strs) (map (zipmap-fn find strs var-to-index str))

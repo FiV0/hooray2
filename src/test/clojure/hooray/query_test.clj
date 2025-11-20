@@ -532,6 +532,116 @@
                                    [e :name "Ivan"]))]}
                 (h/db fix/*node*)))))
 
+(t/deftest test-not-query
+  (t/is (= '[[:triple {:e [:variable e] :a [:constant :name] :v [:variable name]}]
+             [:triple {:e [:variable e] :a [:constant :name] :v [:constant "Ivan"]}]
+             [:not [[:triple {:e [:variable e] :a [:constant :last-name] :v [:constant "Ivannotov"]}]]]]
+
+           (s/conform :hooray.query/where '[[e :name name]
+                                            [e :name "Ivan"]
+                                            (not [e :last-name "Ivannotov"])])))
+
+  (h/transact fix/*node* [{:db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
+                          {:db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
+                          {:db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}])
+
+  (t/testing "literal v"
+    (t/is (= 1 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     [e :name "Ivan"]
+                                     (not [e :last-name "Ivanov"])]}
+                           (h/db fix/*node*)))))
+    (t/is (= 1 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     (not [e :last-name "Ivanov"])]}
+                           (h/db fix/*node*)))))
+
+    (t/is (= 1 (count (h/q '{:find [e]
+                             :where [[e :name "Ivan"]
+                                     (not [e :last-name "Ivanov"])]}
+                           (h/db fix/*node*)))))
+
+    (t/is (= 2 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     [e :name "Ivan"]
+                                     (not [e :last-name "Ivannotov"])]}
+                           (h/db fix/*node*)))))
+
+    (t/testing "multiple clauses in not"
+      (t/is (= 2 (count (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :name "Ivan"]
+                                       (not [e :last-name "Ivannotov"]
+                                            [e :name "Ivan"])]}
+                             (h/db fix/*node*)))))
+      #_#_
+      (t/is (= 2 (count (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :name "Ivan"]
+                                       (not [e :last-name "Ivannotov"]
+                                            [(string? name)])]}
+                             (h/db fix/*node*)))))
+
+      (t/is (= 3 (count (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :name "Ivan"]
+                                       (not [e :last-name "Ivannotov"]
+                                            [(number? name)])]}
+                             (h/db fix/*node*)))))
+
+      (t/is (= 3 (count (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :name "Ivan"]
+                                       (not [e :last-name "Ivannotov"]
+                                            [e :name "Bob"])]}
+                             (h/db fix/*node*)))))
+
+      (t/testing "unbound variable in not clause (triple)"
+        #_
+        (t/is (= 1 (count (h/with-node [n {}]
+                            (h/transact n [{:db/id :foo :ref :a}])
+                            (h/q '{:find [?e]
+                                   :where [[?e :db/id]
+                                           (not [?x :ref ?e])]}
+                                 (h/db n))))))
+        #_
+        (t/is (= 3 (count (h/q '{:find [e]
+                                 :where [[e :name name]
+                                         [e :name "Ivan"]
+                                         (not [e :last-name "Ivannotov"]
+                                              [e :name unbound])]}
+                               (h/db fix/*node*))))))))
+
+  (t/testing "variable v"
+    (t/is (= 0 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     [e :name "Ivan"]
+                                     (not [e :name name])]}
+                           (h/db fix/*node*)))))
+
+    (t/is (= 0 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     (not [e :name name])]}
+                           (h/db fix/*node*)))))
+
+    (t/is (= 2 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     [:ivan-ivanovtov-1 :last-name i-name]
+                                     (not [e :last-name i-name])]}
+                           (h/db fix/*node*))))))
+
+  (t/testing "literal entities"
+    (t/is (= 0 (count (h/q '{:find [e]
+                             :where [[e :name name]
+                                     (not [:ivan-ivanov-1 :name name])]}
+                           (h/db fix/*node*)))))
+
+    (t/is (= 1 (count (h/q '{:find [e]
+                             :where [[e :last-name last-name]
+                                     (not [:ivan-ivanov-1 :last-name last-name])]}
+                           (h/db fix/*node*)))))))
+
+
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
                                    #inst "1986-10-22")]
@@ -633,105 +743,6 @@
                    [[1 0]
                     [2 1]
                     [3 1]]))))
-
-#_(t/deftest test-not-query
-    (t/is (= '[[:triple {:e e :a :name :v name}]
-               [:triple {:e e :a :name :v "Ivan"}]
-               [:not [[:triple {:e e :a :last-name :v "Ivannotov"}]]]]
-
-             (s/conform :xtdb.query/where '[[e :name name]
-                                            [e :name "Ivan"]
-                                            (not [e :last-name "Ivannotov"])])))
-
-    (fix/transact! *api* (fix/people [{:xt/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
-                                      {:xt/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
-                                      {:xt/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}]))
-
-    (t/testing "literal v"
-      (t/is (= 1 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      [e :name "Ivan"]
-                                                      (not [e :last-name "Ivanov"])]}))))
-
-      (t/is (= 1 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      (not [e :last-name "Ivanov"])]}))))
-
-      (t/is (= 1 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name "Ivan"]
-                                                      (not [e :last-name "Ivanov"])]}))))
-
-      (t/is (= 2 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      [e :name "Ivan"]
-                                                      (not [e :last-name "Ivannotov"])]}))))
-
-      (t/testing "multiple clauses in not"
-        (t/is (= 2 (count (xt/q (xt/db *api*) '{:find [e]
-                                                :where [[e :name name]
-                                                        [e :name "Ivan"]
-                                                        (not [e :last-name "Ivannotov"]
-                                                             [e :name "Ivan"])]}))))
-
-        (t/is (= 2 (count (xt/q (xt/db *api*) '{:find [e]
-                                                :where [[e :name name]
-                                                        [e :name "Ivan"]
-                                                        (not [e :last-name "Ivannotov"]
-                                                             [(string? name)])]}))))
-
-        (t/is (= 3 (count (xt/q (xt/db *api*) '{:find [e]
-                                                :where [[e :name name]
-                                                        [e :name "Ivan"]
-                                                        (not [e :last-name "Ivannotov"]
-                                                             [(number? name)])]}))))
-
-        (t/is (= 3 (count (xt/q (xt/db *api*) '{:find [e]
-                                                :where [[e :name name]
-                                                        [e :name "Ivan"]
-                                                        (not [e :last-name "Ivannotov"]
-                                                             [e :name "Bob"])]}))))
-
-        (t/testing "unbound variable in not clause (triple)"
-
-          (t/is (= 1 (count (with-open [n (xt/start-node {})]
-                              (xt/submit-tx n [[::xt/put {:xt/id :foo :ref :a}]])
-                              (xt/sync n)
-                              (xt/q (xt/db n)
-                                    '{:find [?e]
-                                      :where [[?e :xt/id]
-                                              (not [?x :ref ?e])]})))))
-
-          (t/is (= 3 (count (xt/q (xt/db *api*) '{:find [e]
-                                                  :where [[e :name name]
-                                                          [e :name "Ivan"]
-                                                          (not [e :last-name "Ivannotov"]
-                                                               [e :name unbound])]})))))))
-
-    (t/testing "variable v"
-      (t/is (= 0 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      [e :name "Ivan"]
-                                                      (not [e :name name])]}))))
-
-      (t/is (= 0 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      (not [e :name name])]}))))
-
-      (t/is (= 2 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      [:ivan-ivanovtov-1 :last-name i-name]
-                                                      (not [e :last-name i-name])]})))))
-
-    (t/testing "literal entities"
-      (t/is (= 0 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :name name]
-                                                      (not [:ivan-ivanov-1 :name name])]}))))
-
-      (t/is (= 1 (count (xt/q (xt/db *api*) '{:find [e]
-                                              :where [[e :last-name last-name]
-                                                      (not [:ivan-ivanov-1 :last-name last-name])]}))))))
-
-
 
 #_(t/deftest test-ors-must-use-same-vars
     (fix/submit+await-tx [[::xt/put {:xt/id 1, :type :a}]
