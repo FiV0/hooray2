@@ -34,7 +34,42 @@
          [?r :release/year  ?year]]
        db ["John Lennon"]))
 
-;; Complete graph setup
+(comment
+  (d/create-database client {:db-name "not-unbound"})
+
+  (def not-unbound-conn (d/connect client {:db-name "not-unbound"}))
+
+  (def person-schema
+    [{:db/ident :name
+      :db/valueType :db.type/string
+      :db/cardinality :db.cardinality/one
+      :db/doc "First name of a person"}
+     {:db/ident :last-name
+      :db/valueType :db.type/string
+      :db/cardinality :db.cardinality/one
+      :db/doc "Last name of a person"}])
+
+  (d/transact not-unbound-conn {:tx-data person-schema})
+
+  (def tx-data
+    [{:db/id "ivan-ivanov-1" :name "Ivan" :last-name "Ivanov"}
+     {:db/id "ivan-ivanov-2" :name "Ivan" :last-name "Ivanov"}
+     {:db/id "ivan-ivanovtov-1" :name "Ivan" :last-name "Ivannotov"}])
+
+  (d/transact not-unbound-conn {:tx-data tx-data})
+
+  (d/q '{:find [?e]
+         :where [[?e :name ?name]
+                 [?e :name "Ivan"]
+                 (not [?e :last-name "Ivannotov"]
+                      [?e :name ?unbound])]}
+       (d/db not-unbound-conn))
+
+  (d/delete-database client {:db-name "not-unbound"})
+  )
+
+
+;; graph setup
 (def graph-schema
   [{:db/ident :g/to
     :db/valueType :db.type/ref
