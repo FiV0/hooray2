@@ -124,25 +124,31 @@
   (->> (map free-variables patterns)
        (reduce clojure.set/union)))
 
-(defn validate-patterns [patterns]
-  (loop [[[type pattern-value :as pattern] & patterns] patterns positive-vars #{}]
-    (when type
-      (case type
-        (:triple :and)
-        (recur patterns (into positive-vars (free-variables pattern)))
-        :or (let [or-branches (mapv free-variables pattern-value)]
-              (when-not (every? #(= (first or-branches) %) (rest or-branches))
-                (err/incorrect-ex "Branches of `or` must have same free variables!" :db.error/invalid-query))
-              (recur patterns (into positive-vars (free-variables pattern))))
-        :not (let [not-free-vars (free-variables* pattern-value)
-                   unbound-vars (clojure.set/difference not-free-vars positive-vars)]
-               (when (seq unbound-vars)
-                 (prn pattern)
-                 (let [msg (format "%s not bound in `not` clause: %s"
-                                   (pr-str (vec unbound-vars))
-                                   (pr-str (s/unform ::not-pattern pattern-value)))]
-                   (err/incorrect-ex msg :db.error/insufficient-binding)))
-               (recur patterns positive-vars))))))
+;; TODO this doesn't properly work for nested patterns, let's first pass to not-join and or-join
+(defn validate-patterns
+  ([patterns] (validate-patterns patterns #{}))
+  ([patterns context-pos-vars]
+   (let [{triples :triple ors :or ands :and nots :not} (group-by first patterns)
+         positive-vars (into context-pos-vars (mapcat free-variables (concat triples ors ands)))]
+
+     (doseq [[_ or-branches] ors]
+       (let [or-branches-free-vars (mapv free-variables or-branches)]
+         (when-not (every? #(= (first or-branches-free-vars) %) (rest or-branches-free-vars))
+           (err/incorrect-ex "Branches of `or` must have same free variables!" :db.error/invalid-query))
+         (validate-patterns or-branches positive-vars)))
+
+     (doseq [[_ and-branches] ands]
+       (validate-patterns and-branches positive-vars))
+
+     (doseq [[_ not-branches] nots]
+       (let [not-free-vars (free-variables* not-branches)
+             unbound-vars (clojure.set/difference not-free-vars positive-vars)]
+         (when (seq unbound-vars)
+           (let [msg (format "%s not bound in `not` clause: %s"
+                             (pr-str (vec unbound-vars))
+                             (pr-str (s/unform ::not-pattern not-branches)))]
+             (err/incorrect-ex msg :db.error/insufficient-binding)))
+         (validate-patterns not-branches positive-vars))))))
 
 (defn validate-query [{:keys [where] :as conformed-query}]
   (when (> (count (select-keys conformed-query [:keys :strs :syms])) 1)
