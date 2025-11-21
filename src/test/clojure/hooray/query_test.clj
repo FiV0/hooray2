@@ -412,17 +412,17 @@
                                            [p2 :name]]}
                                  (h/db fix/*node*))))))
 
-  (t/testing "A single first result, with no subsequent results in next term"
-    (t/is (= 0 (count (h/q '{:find [p1]
-                             :where [[p1 :name "Ivan"]
-                                     [p2 :name "does-not-match"]]}
-                           (h/db fix/*node*))))))
+      (t/testing "A single first result, with no subsequent results in next term"
+        (t/is (= 0 (count (h/q '{:find [p1]
+                                 :where [[p1 :name "Ivan"]
+                                         [p2 :name "does-not-match"]]}
+                               (h/db fix/*node*))))))
 
-  (t/testing "Every person joins once, plus 2 more matches"
-    (t/is (= 7 (count (h/q '{:find [p1 p2]
-                             :where [[p1 :name name]
-                                     [p2 :name name]]}
-                           (h/db fix/*node*)))))))
+    (t/testing "Every person joins once, plus 2 more matches"
+      (t/is (= 7 (count (h/q '{:find [p1 p2]
+                               :where [[p1 :name name]
+                                       [p2 :name name]]}
+                             (h/db fix/*node*)))))))
 
 (t/deftest test-or-query
   (h/transact fix/*node* [{:db/id :ivan1 :name "Ivan" :last-name "Ivanov"}
@@ -486,17 +486,16 @@
                                      [e :name "Ivan"]
                                      (or [e :last-name "Ivanov"])]}
                            (h/db fix/*node*))))))
-  #_
-  (t/is (= #{["Ivan" "Ivanov"]
-             ["Ivan" :optional]}
-           (h/q '{:find [name l]
-                  :where [[e :name name]
-                          [e :name "Ivan"]
-                          (or (and [e :last-name "Ivanov"]
-                                   [e :last-name l])
-                              (and [(identity e)]
-                                   [(identity :optional) l]))]}
-                (h/db fix/*node*)))))
+  #_(t/is (= #{["Ivan" "Ivanov"]
+               ["Ivan" :optional]}
+             (h/q '{:find [name l]
+                    :where [[e :name name]
+                            [e :name "Ivan"]
+                            (or (and [e :last-name "Ivanov"]
+                                     [e :last-name l])
+                                (and [(identity e)]
+                                     [(identity :optional) l]))]}
+                  (h/db fix/*node*)))))
 
 (t/deftest test-or-query-can-use-and
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :sex :male}
@@ -576,20 +575,19 @@
                                        (not [e :last-name "Ivannotov"]
                                             [e :name "Ivan"])]}
                              (h/db fix/*node*)))))
-      #_#_
-      (t/is (= 2 (count (h/q '{:find [e]
-                               :where [[e :name name]
-                                       [e :name "Ivan"]
-                                       (not [e :last-name "Ivannotov"]
-                                            [(string? name)])]}
-                             (h/db fix/*node*)))))
+      #_#_(t/is (= 2 (count (h/q '{:find [e]
+                                   :where [[e :name name]
+                                           [e :name "Ivan"]
+                                           (not [e :last-name "Ivannotov"]
+                                                [(string? name)])]}
+                                 (h/db fix/*node*)))))
 
-      (t/is (= 3 (count (h/q '{:find [e]
-                               :where [[e :name name]
-                                       [e :name "Ivan"]
-                                       (not [e :last-name "Ivannotov"]
-                                            [(number? name)])]}
-                             (h/db fix/*node*)))))
+        (t/is (= 3 (count (h/q '{:find [e]
+                                 :where [[e :name name]
+                                         [e :name "Ivan"]
+                                         (not [e :last-name "Ivannotov"]
+                                              [(number? name)])]}
+                               (h/db fix/*node*)))))
 
       (t/is (= 3 (count (h/q '{:find [e]
                                :where [[e :name name]
@@ -599,21 +597,22 @@
                              (h/db fix/*node*)))))
 
       (t/testing "unbound variable in not clause (triple)"
-        #_
-        (t/is (= 1 (count (h/with-node [n {}]
-                            (h/transact n [{:db/id :foo :ref :a}])
-                            (h/q '{:find [?e]
-                                   :where [[?e :db/id]
-                                           (not [?x :ref ?e])]}
-                                 (h/db n))))))
+        #_(t/is (= 1 (count (h/with-node [n {}]
+                              (h/transact n [{:db/id :foo :ref :a}])
+                              (h/q '{:find [?e]
+                                     :where [[?e :db/id]
+                                             (not [?x :ref ?e])]}
+                                   (h/db n))))))
         ;; This throws in Datomic
-        #_
-        (t/is (= 3 (count (h/q '{:find [e]
-                                 :where [[e :name name]
-                                         [e :name "Ivan"]
-                                         (not [e :last-name "Ivannotov"]
-                                              [e :name unbound])]}
-                               (h/db fix/*node*))))))))
+        (t/is (thrown-with-msg?
+               ExceptionInfo
+               #"\[unbound\] not bound in `not` clause: \(not \(e :last-name \"Ivannotov\"\) \(e :name unbound\)\)"
+               (h/q '{:find [e]
+                      :where [[e :name name]
+                              [e :name "Ivan"]
+                              (not [e :last-name "Ivannotov"]
+                                   [e :name unbound])]}
+                    (h/db fix/*node*)))))))
 
   (t/testing "variable v"
     (t/is (= 0 (count (h/q '{:find [e]
@@ -659,34 +658,33 @@
                             [e2 :last-name "Ivanov"])]}
               (h/db fix/*node*))))
 
-  #_#_#_
-  (t/is (thrown-with-msg?
-         ExceptionInfo
-         #"Branches of `or` must have same free variables!"
-         (h/q '{:find [x]
-                :where [(or-join [x]
-                                 [e1 :last-name "Ivanov"])]}
-              (h/db fix/*node*))))
+  #_#_#_(t/is (thrown-with-msg?
+               ExceptionInfo
+               #"Branches of `or` must have same free variables!"
+               (h/q '{:find [x]
+                      :where [(or-join [x]
+                                       [e1 :last-name "Ivanov"])]}
+                    (h/db fix/*node*))))
 
-  (t/is (= #{[1] [3]}
-           (h/q '{:find [?e]
-                  :where [[?e :type ?type]
-                          (or-join [?e ?type]
-                                   [(= ?type :a)]
-                                   [(= ?e 3)])]}
-                (h/db fix/*node*)))
-        "don't need to mention all bound or vars though")
+      (t/is (= #{[1] [3]}
+               (h/q '{:find [?e]
+                      :where [[?e :type ?type]
+                              (or-join [?e ?type]
+                                       [(= ?type :a)]
+                                       [(= ?e 3)])]}
+                    (h/db fix/*node*)))
+            "don't need to mention all bound or vars though")
 
-  (t/is (= #{[1] [3]}
-           (h/q '{:find [?e]
-                  :where [[?e :type ?type]
-                          (or-join [?e ?type]
-                                   (and [(= ?type :a)]
-                                        [(any? ?e)])
-                                   (and [(= ?e 3)]
-                                        [(any? ?type)]))]}
-                (h/db fix/*node*)))
-        "we used to have to use a lot of `any?` - check for backwards compatibility"))
+    (t/is (= #{[1] [3]}
+             (h/q '{:find [?e]
+                    :where [[?e :type ?type]
+                            (or-join [?e ?type]
+                                     (and [(= ?type :a)]
+                                          [(any? ?e)])
+                                     (and [(= ?e 3)]
+                                          [(any? ?type)]))]}
+                  (h/db fix/*node*)))
+          "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
@@ -789,8 +787,6 @@
                    [[1 0]
                     [2 1]
                     [3 1]]))))
-
-
 
 #_(t/deftest test-ors-can-introduce-new-bindings
     (let [[_petr ivan _ivanova] (fix/transact! *api* (fix/people [{:name "Petr" :last-name "Smith" :sex :male}

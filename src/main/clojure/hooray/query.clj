@@ -3,7 +3,8 @@
    [clojure.core.match :refer [match]]
    [clojure.set]
    [clojure.spec.alpha :as s]
-   [hooray.db :as db])
+   [hooray.db :as db]
+   [hooray.error :as err])
   (:import
    (org.hooray.algo
     GenericJoin
@@ -96,12 +97,6 @@
 ;; [1 x y] -> eav entity needs to come before attribute
 ;; For simplicity let's just forget about attribute variables for now.
 
-(defn unsupported-ex
-  ([] (unsupported-ex "Unsupported operation!"))
-  ([msg] (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/unsupported,
-                              :cognitect.anomalies/message msg,
-                              :db/error :db.error/unsupported}))))
-
 (declare variable-order*)
 
 (defn variable-order [[type value]]
@@ -112,7 +107,7 @@
                     [[:constant _] [:constant _] [:variable value-var]] [value-var]
                     [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
                     [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
-                    [_ [:variable _] _] (unsupported-ex "Currently varialbles in attribute position are not supported")))
+                    [_ [:variable _] _] (err/unsupported-ex "Currently varialbles in attribute position are not supported")))
 
         (:or :and :not) (variable-order* value))
       distinct))
@@ -133,22 +128,25 @@
   (loop [[[type pattern-value :as pattern] & patterns] patterns positive-vars #{}]
     (when type
       (case type
-        (:triple :and :not)
+        (:triple :and)
         (recur patterns (into positive-vars (free-variables pattern)))
         :or (let [or-branches (mapv free-variables pattern-value)]
               (when-not (every? #(= (first or-branches) %) (rest or-branches))
-                (let [msg "Branches of `or` must have same free variables!"]
-                  (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/incorrect,
-                                       :cognitect.anomalies/message msg,
-                                       :db/error :db.error/invalid-query}))))
-              (recur patterns (into positive-vars (free-variables pattern))))))))
+                (err/incorrect-ex "Branches of `or` must have same free variables!" :db.error/invalid-query))
+              (recur patterns (into positive-vars (free-variables pattern))))
+        :not (let [not-free-vars (free-variables* pattern-value)
+                   unbound-vars (clojure.set/difference not-free-vars positive-vars)]
+               (when (seq unbound-vars)
+                 (prn pattern)
+                 (let [msg (format "%s not bound in `not` clause: %s"
+                                   (pr-str (vec unbound-vars))
+                                   (pr-str (s/unform ::not-pattern pattern-value)))]
+                   (err/incorrect-ex msg :db.error/insufficient-binding)))
+               (recur patterns positive-vars))))))
 
 (defn validate-query [{:keys [where] :as conformed-query}]
   (when (> (count (select-keys conformed-query [:keys :strs :syms])) 1)
-    (let [msg "Only one of :keys, :strs and :syms must be present!"]
-      (throw (ex-info msg {:cognitect.anomalies/category :cognitect.anomalies/incorrect,
-                           :cognitect.anomalies/message msg,
-                           :db/error :db.error/invalid-query}))))
+    (err/incorrect-ex "Only one of :keys, :strs and :syms must be present!" :db.error/invalid-query))
   (validate-patterns where)
   true)
 
@@ -169,7 +167,7 @@
                                         (nth var-order level))))
 
     [:btree :leapfrog]
-    (unsupported-ex "BTrees not yet supported!")
+    (err/unsupported-ex "BTrees not yet supported!")
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
@@ -181,7 +179,7 @@
       :triple (let [{:keys [e a v]} pattern]
                 (match [e a v]
                   [[:constant _] [:constant _] [:constant _]]
-                  (unsupported-ex)
+                  (err/unsupported-ex)
 
                   [[:constant e-const] [:constant a-const] [:variable v-var]]
                   (create-iterator opts (get-in eav [e-const a-const] empty-set) var-order [(get var-to-index v-var)])
