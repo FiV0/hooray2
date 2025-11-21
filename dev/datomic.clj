@@ -1,5 +1,6 @@
 (ns datomic
-  (:require [datomic.client.api :as d]))
+  (:require [datomic.client.api :as d]
+            [hooray.graph-gen :as g]))
 
 (def client (d/client {:server-type :datomic-local
                        :system "datomic-samples"}))
@@ -76,26 +77,23 @@
     :db/cardinality :db.cardinality/many
     :db/doc "Edge from one node to another in a graph"}])
 
-(defn complete-graph [n]
-  (for [i (range n) j (range (inc i) n)]
-    [i j]))
-
 (defn graph->datomic-txs [g]
   (let [;; Get all unique node IDs
         nodes (into #{} (mapcat identity g))
-        ;; Create entity assertions for all nodes
-        node-txs (map (fn [node] {:db/id node}) nodes)
-        ;; Create edge assertions
-        edge-txs (map (fn [[from to]]
-                        [:db/add from :g/to to])
-                      g)]
+        ;; Create entity assertions for all nodes using tempid strings
+        node-txs (map (fn [node] {:db/id (str "node-" node)}) nodes)
+        ;; Create edge assertions using tempid strings
+        edge-txs (mapcat (fn [[from to]]
+                           [[:db/add (str "node-" from) :g/to (str "node-" to)]
+                            [:db/add (str "node-" to) :g/to (str "node-" from)]])
+                         g)]
     {:node-txs node-txs
      :edge-txs edge-txs}))
 
 (defn transact-graph [conn g]
   (let [{:keys [node-txs edge-txs]} (graph->datomic-txs g)]
-    (d/transact conn {:tx-data node-txs})
-    (d/transact conn {:tx-data edge-txs})))
+    (d/transact conn {:tx-data (concat node-txs edge-txs)})
+    ))
 
 (comment
   ;; Create a new database for the graph
@@ -108,19 +106,20 @@
   (d/transact graph-conn {:tx-data graph-schema})
 
   ;; Generate and transact complete graph with 100 nodes
-  (def complete-100 (complete-graph 100))
-  (transact-graph graph-conn complete-100)
+  (def complete-100 (g/complete-graph 100))
+  (def complete-bipartite-300 (g/complete-bipartite 300))
+  (transact-graph graph-conn complete-bipartite-300)
 
   ;; Triangle query
-  (def triangle-query '[:find ?a ?b #_?c
+  (def triangle-query '[:find ?a ?b ?c
                         :where
                         [?a :g/to ?b]
-                        #_[?a :g/to ?c]
-                        #_[?b :g/to ?c]])
+                        [?a :g/to ?c]
+                        [?b :g/to ?c]])
 
   ;; Run the triangle query
   (def graph-db (d/db graph-conn))
-  (d/q '[:find ?a :where [?a :g/to ?b]] graph-db)
+  (time (d/q triangle-query graph-db))
 
   ;; Clean up
   (d/delete-database client {:db-name "complete-graph-100"}))
