@@ -582,12 +582,12 @@
                                                 [(string? name)])]}
                                  (h/db fix/*node*)))))
 
-        (t/is (= 3 (count (h/q '{:find [e]
-                                 :where [[e :name name]
-                                         [e :name "Ivan"]
-                                         (not [e :last-name "Ivannotov"]
-                                              [(number? name)])]}
-                               (h/db fix/*node*)))))
+      (t/is (= 3 (count (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :name "Ivan"]
+                                       (not [e :last-name "Ivannotov"]
+                                            [(number? name)])]}
+                             (h/db fix/*node*)))))
 
       (t/is (= 3 (count (h/q '{:find [e]
                                :where [[e :name name]
@@ -597,13 +597,16 @@
                              (h/db fix/*node*)))))
 
       (t/testing "unbound variable in not clause (triple)"
-        #_(t/is (= 1 (count (h/with-node [n {}]
-                              (h/transact n [{:db/id :foo :ref :a}])
-                              (h/q '{:find [?e]
-                                     :where [[?e :db/id]
-                                             (not [?x :ref ?e])]}
-                                   (h/db n))))))
-        ;; This throws in Datomic
+        (t/is (thrown-with-msg?
+               ExceptionInfo
+               #"\[x\] not bound in `not` clause: \(not \(x :ref e\)\)"
+               (with-open [n (h/connect fix/*opts*)]
+                 (h/transact n [{:db/id :foo :ref :a}])
+                 (h/q '{:find [e]
+                        :where [[e :db/id _]
+                                (not [x :ref e])]}
+                      (h/db n)))))
+
         (t/is (thrown-with-msg?
                ExceptionInfo
                #"\[unbound\] not bound in `not` clause: \(not \(e :last-name \"Ivannotov\"\) \(e :name unbound\)\)"

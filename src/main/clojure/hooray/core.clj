@@ -3,7 +3,8 @@
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
             [hooray.query :as query])
-  (:import (hooray.db Db)))
+  (:import (hooray.db Db)
+           (java.io Closeable)))
 
 (s/def ::type #{:mem})
 (s/def ::storage #{:hash :avl :btree})
@@ -11,7 +12,9 @@
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
 
-(defrecord Node [!dbs opts])
+(defrecord Node [!dbs opts]
+  Closeable
+  (close [_] nil))
 
 (defn connect [opts]
   {:pre [(s/valid? ::conn-opts opts)]}
