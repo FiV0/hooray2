@@ -28,6 +28,7 @@ dependencies {
     implementation("org.clojure", "core.match","1.1.0")
     implementation("org.clojure", "math.combinatorics", "0.3.0")
     implementation("com.cognitect", "anomalies", "0.1.12")
+    implementation("dev.weavejester", "medley", "1.9.0")
 
     // logging
     implementation("org.clojure", "tools.logging", "1.3.0")
