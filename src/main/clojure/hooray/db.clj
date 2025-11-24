@@ -26,9 +26,9 @@
 
 (defn ->update-in-fn [type]
   (case type
-    :hash (util/create-update-in hash-map)
-    :avl (util/create-update-in #(avl/sorted-map-by universal-comp))
-    :btree (util/create-update-in #(btree-map/sorted-map universal-comp))))
+    :hash (util/create-update-in (hash-map))
+    :avl (util/create-update-in (avl/sorted-map-by universal-comp))
+    :btree (util/create-update-in (btree-map/sorted-map universal-comp))))
 
 (defn ->db [{:keys [storage] :as opts}]
   (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts))
