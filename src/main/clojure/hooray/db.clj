@@ -2,6 +2,7 @@
   (:require [clojure.data.avl :as avl]
             [hooray.util.persistent-map :as btree-map]
             [hooray.util :as util]
+            [hooray.transact :as t]
             [me.tonsky.persistent-sorted-set :as btree-set])
   (:import (org.hooray UniversalComparator)
            (clojure.data.avl AVLMap)
@@ -53,13 +54,27 @@
         (update-in [:ave a v] (fnil conj (set* type)) e)
         (update-in [:vae v a] (fnil conj (set* type)) e))))
 
+
 (defn transaction->triples [transaction]
   (cond
     (map? transaction) (map->triples transaction)
     (= :db/add (first transaction)) [(vec (rest transaction) )]
     (= :db/retract (first transaction)) [(vec (rest transaction))]))
 
+(defn reserved-keyword? [k]
+  (and (keyword? k) (= (namespace k) "db")))
+
+(defn check-triple [triple]
+  (when (some reserved-keyword? triple)
+    (throw (ex-info "Transaction contains reserved keywords" {:triple triple}))))
+
+;; TODO: propeerly support attribute schema as first class entities and initialize the db with
+;; the attribute schema attributes
 (defn transact [db tx-data]
   {:pre [(instance? Db db)]}
   (let [triples (mapcat #(transaction->triples %) tx-data)]
+    (prn (t/schema-tx? tx-data))
+    (if (t/schema-tx? tx-data)
+      (t/index-schema! tx-data)
+      (run! check-triple triples))
     (reduce index-triple-add db triples)))

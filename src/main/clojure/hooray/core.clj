@@ -2,9 +2,12 @@
   (:require [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
-            [hooray.query :as query])
+            [hooray.query :as query]
+            [hooray.transact :as t])
   (:import (hooray.db Db)
            (java.io Closeable)))
+
+(set! *print-namespace-maps* false)
 
 (s/def ::type #{:mem})
 (s/def ::storage #{:hash :avl :btree})
@@ -20,22 +23,8 @@
   {:pre [(s/valid? ::conn-opts opts)]}
   (->Node (atom [(db/->db opts)]) opts))
 
-(s/def ::entity (s/keys :req [:db/id]))
-(s/def ::add-transaction #(and (= :db/add (first %)) (vector? %) (= 4 (count %))))
-(s/def ::retract-transaction #(and (= :db/retract (first %)) (vector? %) (= 4 (count %))))
-(s/def ::transaction (s/or :map ::entity
-                           :add ::add-transaction
-                           :retract ::retract-transaction))
-(s/def ::tx-data (s/* ::transaction))
-
-(comment
-  (s/valid? ::tx-data [{:db/id "foo"
-                        :foo/bar "x"}
-                       [:db/add "foo" :is/cool true]]))
-
-
 (defn transact [{:keys [!dbs] :as node} tx-data]
-  {:pre [(instance? Node node) (s/valid? ::tx-data tx-data)]}
+  {:pre [(instance? Node node) (s/valid? ::t/tx-data tx-data)]}
   (swap! !dbs (fn [dbs]
                 (conj dbs (db/transact (last dbs) tx-data)))))
 
@@ -54,7 +43,4 @@
   (instance? Db test-db)
   (q '{:find [a]
        :where [[a :foo "bar"]]}
-     test-db)
-
-
-  )
+     test-db))
