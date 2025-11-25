@@ -68,3 +68,26 @@
 
   (is (= #{} (h/q '{:find [e]
                     :where [[e :name "Ivan"]]} (h/db fix/*node*)))))
+
+(deftest test-retract
+  (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
+  (is (= #{[1]} (h/q '{:find [e]
+                       :where [[e :name "Ivan"]]} (h/db fix/*node*))))
+
+  (h/transact fix/*node* [[:db/retract 1 :name "Ivan"]])
+  (is (= #{} (h/q '{:find [e]
+                    :where [[e :name "Ivan"]]} (h/db fix/*node*))))
+
+  (h/transact fix/*node* [{:db/id :db/edge-attribute
+                           :db/ident :g/to
+                           :db/cardinality :db.cardinality/many}])
+  (h/transact fix/*node* [[:db/add 2 :g/to 3]
+                          [:db/add 2 :g/to 4]
+                          [:db/add 2 :g/to 5]])
+
+  (is (= #{[2 3] [2 4] [2 5]} (h/q '{:find [e to]
+                                     :where [[e :g/to to]]} (h/db fix/*node*))))
+
+  (h/transact fix/*node* [[:db/retract 2 :g/to 4]])
+  (is (= #{[2 3] [2 5]} (h/q '{:find [e to]
+                               :where [[e :g/to to]]} (h/db fix/*node*)))))

@@ -52,6 +52,7 @@
 (defn index-triple-add [{:keys [eav ave vae] :as db} [e a v :as _triple]]
   (let [type (db->type db)
         update-in (->update-in-fn type)
+        empty-set (set* type)
         cardinality (t/attribute-cardinality a)
         previous-v (first (get-in eav [e a]))]
     (case cardinality
@@ -61,22 +62,34 @@
                                             :vae (update-in vae [previous-v a] disj e))
                                      db)]
                             (-> db
-                                (update-in [:eav e a] (fn [_] (conj (set* type) v)))
-                                (update-in [:aev a e] (fn [_] (conj (set* type) v)))
-                                (update-in [:ave a v] (fnil conj (set* type)) e)
-                                (update-in [:vae v a] (fnil conj (set* type)) e)))
+                                (update-in [:eav e a] (fn [_] (conj empty-set v)))
+                                (update-in [:aev a e] (fn [_] (conj empty-set v)))
+                                (update-in [:ave a v] (fnil conj empty-set) e)
+                                (update-in [:vae v a] (fnil conj empty-set) e)))
       :db.cardinality/many (-> db
-                               (update-in [:eav e a] (fnil conj (set* type)) v)
-                               (update-in [:aev a e] (fnil conj (set* type)) v)
-                               (update-in [:ave a v] (fnil conj (set* type)) e)
-                               (update-in [:vae v a] (fnil conj (set* type)) e)))))
+                               (update-in [:eav e a] (fnil conj empty-set) v)
+                               (update-in [:aev a e] (fnil conj empty-set) v)
+                               (update-in [:ave a v] (fnil conj empty-set) e)
+                               (update-in [:vae v a] (fnil conj empty-set) e)))))
 
+(defn index-triple-retract [{:keys [eav aev ave vae] :as db} [e a v :as _triple]]
+  (let [update-in (->update-in-fn (db->type db))]
+    (assoc db
+           :eav (update-in eav [e a] disj v)
+           :aev (update-in aev [a e] disj v)
+           :ave (update-in ave [a v] disj e)
+           :vae (update-in vae [v a] disj e))))
 
-(defn transaction->triples [transaction]
+(defn tx-datum->triples [tx-datum]
   (cond
-    (map? transaction) (map->triples transaction)
-    (= :db/add (first transaction)) [(vec (rest transaction))]
-    (= :db/retract (first transaction)) [(vec (rest transaction))]))
+    (map? tx-datum) {:op :add :triples (map->triples tx-datum)}
+    (= :db/add (first tx-datum)) {:op :add :triples [(vec (rest tx-datum))]}
+    (= :db/retract (first tx-datum)) {:op :retract :triples [(vec (rest tx-datum))]}))
+
+(defn tx-data->triples [tx-data]
+  (-> (->> (map tx-datum->triples tx-data)
+           (group-by :op))
+      (update-vals (fn [ops] (mapcat :triples ops)))))
 
 (defn reserved-keyword? [k]
   (and (keyword? k) (= (namespace k) "db")))
@@ -89,8 +102,10 @@
 ;; the attribute schema attributes
 (defn transact [db tx-data]
   {:pre [(db? db)]}
-  (let [triples (mapcat #(transaction->triples %) tx-data)]
+  (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples tx-data)]
     (if (t/schema-tx? tx-data)
       (t/index-schema! tx-data)
-      (run! check-triple triples))
-    (reduce index-triple-add db triples)))
+      (run! check-triple (concat add retract)))
+    (as-> db db
+      (reduce index-triple-add db add)
+      (reduce index-triple-retract db retract))))
