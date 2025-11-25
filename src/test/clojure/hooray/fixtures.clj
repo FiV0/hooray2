@@ -1,6 +1,7 @@
 (ns hooray.fixtures
   (:require [hooray.core :as h]
             [hooray.test-util :as tu]
+            [hooray.graph-gen :as g]
             [clojure.tools.logging :as log]))
 
 (def ^:dynamic *opts* {:type :mem :storage :hash :algo :generic})
@@ -13,9 +14,7 @@
      (f))))
 
 (defn with-edge-attribute [f]
-  (h/transact *node* [{:db/id :db/edge-attribute
-                       :db/ident :g/to
-                       :db/cardinality :db.cardinality/many}])
+  (h/transact *node* [g/edge-attribute])
   (f))
 
 (defn with-timing [f]

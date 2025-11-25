@@ -1,6 +1,11 @@
 (ns hooray.graph-gen
   (:require [clojure.math.combinatorics :as combo]))
 
+(def edge-attribute
+  {:db/id :db/edge-attribute
+   :db/ident :g/to
+   :db/cardinality :db.cardinality/many})
+
 (defn complete-graph [n]
   (for [i (range n) j (range (inc i) n)]
     [i j]))

@@ -8,6 +8,7 @@
 (comment
 
   (def node (h/connect {:type :mem :storage :hash :algo :generic}))
+  (h/transact node [g/edge-attribute])
   (h/transact node (g/graph->ops (g/complete-bipartite 300)))
 
   (time (h/q
