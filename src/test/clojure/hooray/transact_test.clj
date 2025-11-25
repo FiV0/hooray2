@@ -7,12 +7,12 @@
 
 (use-fixtures :each fix/with-node)
 
-(deftest test-sanity-check
+(deftest sanity-check
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
   (is (= #{[1]} (h/q '{:find [e]
                        :where [[e :name "Ivan"]]} (h/db fix/*node*)))))
 
-(deftest test-illegal-attribute-name
+(deftest illegal-attribute-name
   (is (thrown-with-msg?
        ExceptionInfo
        #"Transaction contains reserved keywords"
@@ -31,7 +31,7 @@
        (h/transact fix/*node* [{:db/id 1 :name :db/ivan}])
        "reserved keyword in attribute position")))
 
-(deftest test-schema-tx
+(deftest schema-tx
   (h/transact fix/*node* [{:db/id :db/edge-attribute
                            :db/ident :g/to
                            :db/cardinality :db.cardinality/many}])
@@ -42,7 +42,21 @@
              :db/ident :g/to}}
            @tr/schema)))
 
-#_
+(deftest cardinality-one-and-many
+  (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
+  (h/transact fix/*node* [{:db/id 1 :name "Petr"}])
+  (is (= #{[1 "Petr"]} (h/q '{:find [e name]
+                              :where [[e :name name]]} (h/db fix/*node*))))
+
+  (h/transact fix/*node* [{:db/id :db/edge-attribute
+                           :db/ident :g/to
+                           :db/cardinality :db.cardinality/many}])
+  (h/transact fix/*node* [[:db/add 1 :g/to 2]
+                          [:db/add 1 :g/to 3]])
+
+  (is (= #{[1 2] [1 3]} (h/q '{:find [e to]
+                               :where [[e :g/to to]]} (h/db fix/*node*)))))
+
 (deftest test-update-name
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
   (is (= #{[1]} (h/q '{:find [e]

@@ -12,6 +12,12 @@
    (binding [*node* (h/connect opts)]
      (f))))
 
+(defn with-edge-attribute [f]
+  (h/transact *node* [{:db/id :db/edge-attribute
+                       :db/ident :g/to
+                       :db/cardinality :db.cardinality/many}])
+  (f))
+
 (defn with-timing [f]
   (let [start-time-ms (System/currentTimeMillis)
         ret (try

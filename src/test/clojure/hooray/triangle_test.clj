@@ -5,7 +5,7 @@
             [hooray.fixtures :as fix :refer [*node*]]
             [hooray.graph-gen :as g]))
 
-(t/use-fixtures :each fix/with-node)
+(t/use-fixtures :each fix/with-node fix/with-edge-attribute)
 
 (def triangle-query '{:find [?a ?b ?c]
                       :where [[?a :g/to ?b]

@@ -44,3 +44,6 @@
 (defn index-schema! [tx-data]
   (swap! schema merge (-> (group-by :db/ident tx-data)
                           (update-vals first))))
+
+(defn attribute-cardinality [attr]
+  (get-in @schema [attr :db/cardinality] :db.cardinality/one))
