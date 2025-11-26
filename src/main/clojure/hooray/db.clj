@@ -3,7 +3,6 @@
             [hooray.util.persistent-map :as btree-map]
             [hooray.util :as util]
             [hooray.transact :as t]
-            [medley.core :refer [dissoc-in]]
             [me.tonsky.persistent-sorted-set :as btree-set])
   (:import (org.hooray UniversalComparator)
            (clojure.data.avl AVLMap)
