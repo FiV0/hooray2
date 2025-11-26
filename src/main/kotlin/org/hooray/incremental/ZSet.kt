@@ -1,5 +1,7 @@
 package org.hooray.incremental
 
+import org.hooray.algo.Extension
+
 /**
  * A Z-set is a collection where each value has an associated integer weight.
  * Values with zero weight are not stored (invariant).
@@ -82,6 +84,14 @@ class ZSet<K, W : Weight<W>> private constructor(
      */
     override fun subtract(other: ZSet<K, W>): ZSet<K, W> {
         return add(other.negate())
+    }
+
+    override fun filterKeys(predicate: (ZSet<K, W>) -> Boolean): ZSet<Extension, IntegerWeight> {
+        TODO("Not yet implemented")
+    }
+
+    override fun containsKey(ext: Any): Boolean {
+        TODO("Not yet implemented")
     }
 
     /**

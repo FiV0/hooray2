@@ -1,5 +1,7 @@
 package org.hooray.incremental
 
+import org.hooray.algo.Extension
+
 /**
  * Interface for Z-set-like structures that form a commutative group under addition.
  *
@@ -35,4 +37,7 @@ interface IZSet<T : IZSet<T>> {
      * Typically implemented as add(other.negate()).
      */
     fun subtract(other: T): T
+
+    fun filterKeys(predicate: (T) -> Boolean): ZSet<Extension, IntegerWeight>
+    fun containsKey(ext: Any): Boolean
 }

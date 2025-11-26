@@ -1,5 +1,7 @@
 package org.hooray.incremental
 
+import org.hooray.algo.Extension
+
 /**
  * An indexed Z-set is a nested relation - a map where each key is associated with a Z-set.
  * It represents grouped data with weights, forming a commutative group under addition.
@@ -112,6 +114,14 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
      */
     override fun subtract(other: IndexedZSet<K, V, W>): IndexedZSet<K, V, W> {
         return add(other.negate())
+    }
+
+    override fun filterKeys(predicate: (IndexedZSet<K, V, W>) -> Boolean): ZSet<Extension, IntegerWeight> {
+        TODO("Not yet implemented")
+    }
+
+    override fun containsKey(ext: Any): Boolean {
+        TODO("Not yet implemented")
     }
 
     /**
