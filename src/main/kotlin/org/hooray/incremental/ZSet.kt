@@ -11,7 +11,7 @@ package org.hooray.incremental
 class ZSet<K, W : Weight<W>> private constructor(
     private val data: Map<K, W>,
     private val zero: W
-) {
+) : IZSet<ZSet<K, W>> {
     /**
      * Get the weight of a value. Returns zero if the value is not present.
      */
@@ -36,14 +36,14 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Check if this Z-set is empty.
      */
-    fun isEmpty(): Boolean {
+    override fun isEmpty(): Boolean {
         return data.isEmpty()
     }
 
     /**
      * Get the size (number of non-zero weighted values) of this Z-set.
      */
-    fun size(): Int {
+    override fun size(): Int {
         return data.size
     }
 
@@ -51,7 +51,7 @@ class ZSet<K, W : Weight<W>> private constructor(
      * Add this Z-set to another Z-set.
      * Weights of matching values are combined.
      */
-    fun add(other: ZSet<K, W>): ZSet<K, W> {
+    override fun add(other: ZSet<K, W>): ZSet<K, W> {
         val result = mutableMapOf<K, W>()
 
         // Add entries from this Z-set
@@ -73,7 +73,7 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Negate this Z-set (invert all weights).
      */
-    fun negate(): ZSet<K, W> {
+    override fun negate(): ZSet<K, W> {
         val result = data.mapValues { (_, weight) -> weight.negate() }
         return ZSet(result, zero)
     }
@@ -81,7 +81,7 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Subtract another Z-set from this Z-set.
      */
-    fun subtract(other: ZSet<K, W>): ZSet<K, W> {
+    override fun subtract(other: ZSet<K, W>): ZSet<K, W> {
         return add(other.negate())
     }
 

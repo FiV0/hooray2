@@ -13,7 +13,7 @@ package org.hooray.incremental
 class IndexedZSet<K, V, W : Weight<W>> private constructor(
     private val data: Map<K, ZSet<V, W>>,
     private val zero: W
-) {
+) : IZSet<IndexedZSet<K, V, W>> {
     /**
      * Get the Z-set associated with a key.
      * Returns null if the key is not present.
@@ -39,14 +39,14 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     /**
      * Check if this indexed Z-set is empty.
      */
-    fun isEmpty(): Boolean {
+    override fun isEmpty(): Boolean {
         return data.isEmpty()
     }
 
     /**
      * Get the number of groups (keys) in this indexed Z-set.
      */
-    fun size(): Int {
+    override fun size(): Int {
         return data.size
     }
 
@@ -88,7 +88,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
      * Add this indexed Z-set to another indexed Z-set.
      * Groups with matching keys have their Z-sets combined.
      */
-    fun add(other: IndexedZSet<K, V, W>): IndexedZSet<K, V, W> {
+    override fun add(other: IndexedZSet<K, V, W>): IndexedZSet<K, V, W> {
         val result = mutableMapOf<K, ZSet<V, W>>()
 
         // Add entries from this indexed Z-set
@@ -110,7 +110,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     /**
      * Negate this indexed Z-set (invert all weights in all groups).
      */
-    fun negate(): IndexedZSet<K, V, W> {
+    override fun negate(): IndexedZSet<K, V, W> {
         val result = data.mapValues { (_, zset) -> zset.negate() }
         return IndexedZSet(result, zero)
     }
@@ -118,7 +118,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     /**
      * Subtract another indexed Z-set from this one.
      */
-    fun subtract(other: IndexedZSet<K, V, W>): IndexedZSet<K, V, W> {
+    override fun subtract(other: IndexedZSet<K, V, W>): IndexedZSet<K, V, W> {
         return add(other.negate())
     }
 
