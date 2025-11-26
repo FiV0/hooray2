@@ -345,4 +345,91 @@ class ZSetTest {
         assertEquals(customZero, zset.weight("b"))
         assertEquals(IntegerWeight(2), zset.weight("c"))
     }
+
+    @Test
+    fun `test multiply ZSets basic Cartesian product`() {
+        val zset1 = ZSet.fromMap(mapOf("a" to IntegerWeight(1), "b" to IntegerWeight(1)))
+        val zset2 = ZSet.fromMap(mapOf(1 to IntegerWeight(1), 2 to IntegerWeight(1)))
+
+        val result = zset1.multiply(zset2) { str, num -> "$str$num" }
+
+        assertEquals(4, result.size())
+        assertEquals(IntegerWeight(1), result.weight("a1"))
+        assertEquals(IntegerWeight(1), result.weight("a2"))
+        assertEquals(IntegerWeight(1), result.weight("b1"))
+        assertEquals(IntegerWeight(1), result.weight("b2"))
+    }
+
+    @Test
+    fun `test multiply ZSets multiplies weights correctly`() {
+        val zset1 = ZSet.fromMap(mapOf("x" to IntegerWeight(2), "y" to IntegerWeight(3)))
+        val zset2 = ZSet.fromMap(mapOf(4 to IntegerWeight(5), 6 to IntegerWeight(7)))
+
+        val result = zset1.multiply(zset2) { str, num -> "$str$num" }
+
+        assertEquals(4, result.size())
+        assertEquals(IntegerWeight(10), result.weight("x4"))  // 2 * 5 = 10
+        assertEquals(IntegerWeight(14), result.weight("x6"))  // 2 * 7 = 14
+        assertEquals(IntegerWeight(15), result.weight("y4"))  // 3 * 5 = 15
+        assertEquals(IntegerWeight(21), result.weight("y6"))  // 3 * 7 = 21
+    }
+
+    @Test
+    fun `test multiply with empty ZSet returns empty`() {
+        val zset1 = ZSet.fromMap(mapOf("a" to IntegerWeight(1)))
+        val zset2 = ZSet.empty<Int>()
+
+        val result = zset1.multiply(zset2) { str, num -> "$str$num" }
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `test multiply with duplicate combined values adds weights`() {
+        val zset1 = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "b" to IntegerWeight(3)))
+        val zset2 = ZSet.fromMap(mapOf(1 to IntegerWeight(4), 2 to IntegerWeight(5)))
+
+        // Combine function that ignores the number, so all results are "same"
+        val result = zset1.multiply(zset2) { _, _ -> "same" }
+
+        assertEquals(1, result.size())
+        // (a,1): 2*4=8, (a,2): 2*5=10, (b,1): 3*4=12, (b,2): 3*5=15
+        // Total: 8 + 10 + 12 + 15 = 45
+        assertEquals(IntegerWeight(45), result.weight("same"))
+    }
+
+    @Test
+    fun `test multiply with negative weights`() {
+        val zset1 = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "b" to IntegerWeight(-3)))
+        val zset2 = ZSet.fromMap(mapOf(1 to IntegerWeight(4)))
+
+        val result = zset1.multiply(zset2) { str, num -> "$str$num" }
+
+        assertEquals(2, result.size())
+        assertEquals(IntegerWeight(8), result.weight("a1"))   // 2 * 4 = 8
+        assertEquals(IntegerWeight(-12), result.weight("b1")) // -3 * 4 = -12
+    }
+
+    @Test
+    fun `test multiply with weights that cancel to zero`() {
+        val zset1 = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "b" to IntegerWeight(-2)))
+        val zset2 = ZSet.fromMap(mapOf(1 to IntegerWeight(3)))
+
+        // Both combine to "same", so weights are 2*3=6 and -2*3=-6 which cancel
+        val result = zset1.multiply(zset2) { _, _ -> "same" }
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `test multiply preserves ZSet properties`() {
+        val zset1 = ZSet.fromMap(mapOf("x" to IntegerWeight(2)))
+        val zset2 = ZSet.fromMap(mapOf(1 to IntegerWeight(3)))
+
+        val result1 = zset1.multiply(zset2) { str, num -> "$str-$num" }
+        val result2 = zset1.multiply(zset2) { str, num -> "$str-$num" }
+
+        // Same multiplication should produce equal results
+        assertEquals(result1, result2)
+    }
 }

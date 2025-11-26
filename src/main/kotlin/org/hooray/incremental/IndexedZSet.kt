@@ -138,7 +138,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
             val rightZSet = other.data[key]
 
             if (leftZSet != null && rightZSet != null) {
-                val joined = cartesianProduct(leftZSet, rightZSet, combineFunc)
+                val joined = leftZSet.multiply(rightZSet, combineFunc)
                 if (!joined.isEmpty()) {
                     result[key] = joined
                 }
@@ -146,31 +146,6 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
         }
 
         return IndexedZSet(result, zero)
-    }
-
-    /**
-     * Perform Cartesian product of two Z-sets, multiplying weights.
-     */
-    private fun <V1, V2, R> cartesianProduct(
-        left: ZSet<V1, W>,
-        right: ZSet<V2, W>,
-        combineFunc: (V1, V2) -> R
-    ): ZSet<R, W> {
-        val result = mutableMapOf<R, W>()
-
-        for ((leftValue, leftWeight) in left.entries()) {
-            for ((rightValue, rightWeight) in right.entries()) {
-                val combined = combineFunc(leftValue, rightValue)
-                val multipliedWeight = leftWeight.multiply(rightWeight)
-
-                result.merge(combined, multipliedWeight) { w1, w2 ->
-                    val sum = w1.add(w2)
-                    if (sum.isZero()) null else sum
-                }
-            }
-        }
-
-        return ZSet.fromMap(result, zero)
     }
 
     override fun equals(other: Any?): Boolean {

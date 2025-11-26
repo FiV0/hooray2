@@ -115,6 +115,29 @@ class ZSet<K, W : Weight<W>> private constructor(
         return ZSet(result, zero)
     }
 
+    /**
+     * Multiply this Z-set with another Z-set using Cartesian product.
+     * For each pair of entries from both Z-sets, combines the values using the provided function
+     * and multiplies their weights.
+     */
+    fun <K2, R> multiply(other: ZSet<K2, W>, combineFunc: (K, K2) -> R): ZSet<R, W> {
+        val result = mutableMapOf<R, W>()
+
+        for ((leftValue, leftWeight) in data) {
+            for ((rightValue, rightWeight) in other.data) {
+                val combined = combineFunc(leftValue, rightValue)
+                val multipliedWeight = leftWeight.multiply(rightWeight)
+
+                result.merge(combined, multipliedWeight) { w1, w2 ->
+                    val sum = w1.add(w2)
+                    if (sum.isZero()) null else sum
+                }
+            }
+        }
+
+        return ZSet(result, zero)
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ZSet<*, *>) return false
