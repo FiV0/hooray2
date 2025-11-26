@@ -4,7 +4,7 @@
 
 (deftest transact-single-entity-test
   (testing "Transacting a single entity populates all indexes correctly"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
               _ (core/transact node [{:db/id 1
@@ -43,7 +43,7 @@
 
 (deftest transact-multiple-entities-test
   (testing "Transacting multiple entities"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
               _ (core/transact node [{:db/id 1
@@ -66,7 +66,7 @@
 
 (deftest transact-db-add-test
   (testing "Transacting with :db/add transaction form"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
               _ (core/transact node [[:db/add 1 :person/name "Charlie"]
@@ -83,9 +83,13 @@
 
 (deftest transact-multiple-values-same-attribute-test
   (testing "Multiple values for same attribute"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
+              _ (core/transact node [{:db/id :hobby-attribute
+                                      :db/ident :person/hobby
+                                      :db/valueType :db.type/string
+                                      :db/cardinality :db.cardinality/many}])
               _ (core/transact node [[:db/add 1 :person/hobby "reading"]
                                      [:db/add 1 :person/hobby "swimming"]
                                      [:db/add 1 :person/hobby "coding"]])
@@ -104,7 +108,7 @@
 
 (deftest transact-sequential-transactions-test
   (testing "Sequential transactions maintain history"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
               _ (core/transact node [{:db/id 1 :person/name "Alice" :person/age 30}])
@@ -125,7 +129,7 @@
 
 (deftest transact-mixed-transaction-forms-test
   (testing "Mixing entity maps and :db/add forms"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
               _ (core/transact node [{:db/id 1 :person/name "Alice"}
@@ -140,7 +144,7 @@
 
 (deftest empty-db-test
   (testing "Empty database has empty indexes"
-    (doseq [storage [:hash-map :avl #_:btree]]
+    (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
         (let [node (core/connect {:type :mem :storage storage :algo :hash})
               db (core/db node)]
