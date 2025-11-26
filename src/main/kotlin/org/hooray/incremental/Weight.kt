@@ -24,6 +24,11 @@ interface Weight<T : Weight<T>> {
      * Multiply this weight by a scalar.
      */
     fun multiply(scalar: Int): T
+
+    /**
+     * Multiply this weight by another weight.
+     */
+    fun multiply(other: T): T
 }
 
 /**
@@ -44,6 +49,10 @@ data class IntegerWeight(val value: Int) : Weight<IntegerWeight> {
 
     override fun multiply(scalar: Int): IntegerWeight {
         return IntegerWeight(Math.multiplyExact(value, scalar))
+    }
+
+    override fun multiply(other: IntegerWeight): IntegerWeight {
+        return IntegerWeight(Math.multiplyExact(value, other.value))
     }
 
     companion object {

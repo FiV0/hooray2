@@ -274,4 +274,75 @@ class ZSetTest {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(5), "b" to IntegerWeight(-3)))
         assertEquals(zset, zset.negate().negate())
     }
+
+    @Test
+    fun `test IntegerWeight multiply(other) basic operation`() {
+        val w1 = IntegerWeight(5)
+        val w2 = IntegerWeight(3)
+
+        assertEquals(IntegerWeight(15), w1.multiply(w2))
+        assertEquals(IntegerWeight(15), w2.multiply(w1))
+    }
+
+    @Test
+    fun `test IntegerWeight multiply(other) with zero`() {
+        val w1 = IntegerWeight(5)
+        val zero = IntegerWeight.ZERO
+
+        assertEquals(IntegerWeight.ZERO, w1.multiply(zero))
+        assertEquals(IntegerWeight.ZERO, zero.multiply(w1))
+    }
+
+    @Test
+    fun `test IntegerWeight multiply(other) with negative values`() {
+        val w1 = IntegerWeight(5)
+        val w2 = IntegerWeight(-3)
+
+        assertEquals(IntegerWeight(-15), w1.multiply(w2))
+        assertEquals(IntegerWeight(-15), w2.multiply(w1))
+    }
+
+    @Test
+    fun `test IntegerWeight multiply(other) with overflow detection`() {
+        val w1 = IntegerWeight(Integer.MAX_VALUE)
+        val w2 = IntegerWeight(2)
+
+        assertThrows<ArithmeticException> {
+            w1.multiply(w2)
+        }
+    }
+
+    @Test
+    fun `test IntegerWeight multiply(other) is commutative`() {
+        val w1 = IntegerWeight(7)
+        val w2 = IntegerWeight(11)
+
+        assertEquals(w1.multiply(w2), w2.multiply(w1))
+    }
+
+    @Test
+    fun `test generic ZSet empty with custom zero`() {
+        val customZero = IntegerWeight(0)
+        val empty = ZSet.empty<String, IntegerWeight>(customZero)
+
+        assertTrue(empty.isEmpty())
+        assertEquals(0, empty.size())
+        assertEquals(customZero, empty.weight("any"))
+    }
+
+    @Test
+    fun `test generic ZSet fromMap with custom zero`() {
+        val customZero = IntegerWeight(0)
+        val map = mapOf(
+            "a" to IntegerWeight(1),
+            "b" to IntegerWeight(0),
+            "c" to IntegerWeight(2)
+        )
+        val zset = ZSet.fromMap(map, customZero)
+
+        assertEquals(2, zset.size())
+        assertEquals(IntegerWeight(1), zset.weight("a"))
+        assertEquals(customZero, zset.weight("b"))
+        assertEquals(IntegerWeight(2), zset.weight("c"))
+    }
 }

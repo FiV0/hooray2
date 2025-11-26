@@ -138,6 +138,13 @@ class ZSet<K, W : Weight<W>> private constructor(
         }
 
         /**
+         * Create an empty Z-set with a specified zero weight.
+         */
+        fun <K, W : Weight<W>> empty(zero: W): ZSet<K, W> {
+            return ZSet(emptyMap(), zero)
+        }
+
+        /**
          * Create a Z-set from a collection, assigning weight 1 to each value.
          */
         fun <K> fromCollection(collection: Collection<K>): ZSet<K, IntegerWeight> {
@@ -158,6 +165,15 @@ class ZSet<K, W : Weight<W>> private constructor(
         fun <K> fromMap(map: Map<K, IntegerWeight>): ZSet<K, IntegerWeight> {
             val data = map.filterValues { !it.isZero() }
             return ZSet(data, IntegerWeight.ZERO)
+        }
+
+        /**
+         * Create a Z-set from a map of values to weights with a specified zero weight.
+         * Zero-weighted entries are automatically filtered out.
+         */
+        fun <K, W : Weight<W>> fromMap(map: Map<K, W>, zero: W): ZSet<K, W> {
+            val data = map.filterValues { !it.isZero() }
+            return ZSet(data, zero)
         }
 
         /**
