@@ -46,16 +46,8 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     /**
      * Get the number of groups (keys) in this indexed Z-set.
      */
-    override fun size(): Int {
-        return data.size
-    }
-
-    /**
-     * Get the number of groups (alias for size()).
-     */
-    fun groupCount(): Int {
-        return size()
-    }
+    override val size: Int
+        get() = data.size
 
     /**
      * Flatten this indexed Z-set into a regular Z-set by combining keys and values.

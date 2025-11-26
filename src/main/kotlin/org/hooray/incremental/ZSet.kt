@@ -43,9 +43,8 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Get the size (number of non-zero weighted values) of this Z-set.
      */
-    override fun size(): Int {
-        return data.size
-    }
+    override val size: Int
+        get() = data.size
 
     /**
      * Add this Z-set to another Z-set.

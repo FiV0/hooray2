@@ -11,8 +11,7 @@ class IndexedZSetTest {
     fun `test empty IndexedZSet`() {
         val empty = IndexedZSet.empty<String, Int>()
         assertTrue(empty.isEmpty())
-        assertEquals(0, empty.size())
-        assertEquals(0, empty.groupCount())
+        assertEquals(0, empty.size)
         assertNull(empty.get("any"))
     }
 
@@ -21,7 +20,7 @@ class IndexedZSetTest {
         val zset = ZSet.fromMap(mapOf(1 to IntegerWeight(2), 2 to IntegerWeight(3)))
         val indexed = IndexedZSet.singleton("key", zset)
 
-        assertEquals(1, indexed.size())
+        assertEquals(1, indexed.size)
         assertFalse(indexed.isEmpty())
         assertEquals(zset, indexed.get("key"))
     }
@@ -43,7 +42,7 @@ class IndexedZSetTest {
         val map = mapOf("a" to zset1, "b" to zset2, "c" to zset3)
         val indexed = IndexedZSet.fromMap(map, IntegerWeight.ZERO)
 
-        assertEquals(2, indexed.size())
+        assertEquals(2, indexed.size)
         assertNotNull(indexed.get("a"))
         assertNull(indexed.get("b"))  // Empty ZSet filtered out
         assertNotNull(indexed.get("c"))
@@ -54,18 +53,18 @@ class IndexedZSetTest {
         val zset = ZSet.fromCollection(listOf("apple", "apricot", "banana", "avocado"))
         val indexed = zset.index { it.first() }
 
-        assertEquals(2, indexed.size())
+        assertEquals(2, indexed.size)
 
         val aGroup = indexed.get('a')
         assertNotNull(aGroup)
-        assertEquals(3, aGroup!!.size())
+        assertEquals(3, aGroup!!.size)
         assertEquals(IntegerWeight(1), aGroup.weight("apple"))
         assertEquals(IntegerWeight(1), aGroup.weight("apricot"))
         assertEquals(IntegerWeight(1), aGroup.weight("avocado"))
 
         val bGroup = indexed.get('b')
         assertNotNull(bGroup)
-        assertEquals(1, bGroup!!.size())
+        assertEquals(1, bGroup!!.size)
         assertEquals(IntegerWeight(1), bGroup.weight("banana"))
     }
 
@@ -91,9 +90,9 @@ class IndexedZSetTest {
         val zset = ZSet.fromCollection(listOf("a", "b", "c"))
         val indexed = zset.index { "same" }
 
-        assertEquals(1, indexed.size())
+        assertEquals(1, indexed.size)
         val group = indexed.get("same")!!
-        assertEquals(3, group.size())
+        assertEquals(3, group.size)
     }
 
     @Test
@@ -101,7 +100,7 @@ class IndexedZSetTest {
         val zset = ZSet.fromCollection(listOf("a", "b", "c"))
         val indexed = zset.index { it }
 
-        assertEquals(3, indexed.size())
+        assertEquals(3, indexed.size)
         assertNotNull(indexed.get("a"))
         assertNotNull(indexed.get("b"))
         assertNotNull(indexed.get("c"))
@@ -115,7 +114,7 @@ class IndexedZSetTest {
         val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
         val flattened = indexed.flatten { key, value -> "$key-$value" }
 
-        assertEquals(4, flattened.size())
+        assertEquals(4, flattened.size)
         assertEquals(IntegerWeight(2), flattened.weight("a-1"))
         assertEquals(IntegerWeight(3), flattened.weight("a-2"))
         assertEquals(IntegerWeight(1), flattened.weight("b-3"))
@@ -130,7 +129,7 @@ class IndexedZSetTest {
         val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
         val deindexed = indexed.deindex()
 
-        assertEquals(3, deindexed.size())
+        assertEquals(3, deindexed.size)
         assertEquals(IntegerWeight(2), deindexed.weight(1))
         assertEquals(IntegerWeight(3), deindexed.weight(2))
         assertEquals(IntegerWeight(1), deindexed.weight(3))
@@ -144,7 +143,7 @@ class IndexedZSetTest {
         val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
         val deindexed = indexed.deindex()
 
-        assertEquals(1, deindexed.size())
+        assertEquals(1, deindexed.size)
         assertEquals(IntegerWeight(5), deindexed.weight(1))
     }
 
@@ -155,9 +154,9 @@ class IndexedZSetTest {
 
         val joined = left.join(right) { l, r -> "$l-$r" }
 
-        assertEquals(1, joined.size())
+        assertEquals(1, joined.size)
         val aGroup = joined.get('a')!!
-        assertEquals(4, aGroup.size())  // Cartesian product: 2 * 2 = 4
+        assertEquals(4, aGroup.size)  // Cartesian product: 2 * 2 = 4
         assertEquals(IntegerWeight(1), aGroup.weight("a1-a3"))
         assertEquals(IntegerWeight(1), aGroup.weight("a1-a4"))
         assertEquals(IntegerWeight(1), aGroup.weight("a2-a3"))
@@ -198,7 +197,7 @@ class IndexedZSetTest {
 
         val joined = left.join(right) { l, r -> "$l-$r" }
 
-        assertEquals(1, joined.size())
+        assertEquals(1, joined.size)
         assertNotNull(joined.get('a'))
         assertNull(joined.get('b'))
         assertNull(joined.get('c'))
@@ -216,7 +215,7 @@ class IndexedZSetTest {
 
         val result = indexed1.add(indexed2)
 
-        assertEquals(2, result.size())
+        assertEquals(2, result.size)
         assertNotNull(result.get("a"))
         assertNotNull(result.get("b"))
     }
@@ -231,9 +230,9 @@ class IndexedZSetTest {
 
         val result = indexed1.add(indexed2)
 
-        assertEquals(1, result.size())
+        assertEquals(1, result.size)
         val aGroup = result.get("a")!!
-        assertEquals(2, aGroup.size())
+        assertEquals(2, aGroup.size)
         assertEquals(IntegerWeight(2), aGroup.weight(1))
         assertEquals(IntegerWeight(3), aGroup.weight(2))
     }
@@ -432,13 +431,13 @@ class IndexedZSetTest {
             order + "-" + customer
         }
 
-        assertEquals(2, joined.size())
+        assertEquals(2, joined.size)
 
         val customer1Group = joined.get("customer1")!!
-        assertEquals(2, customer1Group.size())  // 2 orders * 1 customer = 2
+        assertEquals(2, customer1Group.size)  // 2 orders * 1 customer = 2
 
         val customer2Group = joined.get("customer2")!!
-        assertEquals(1, customer2Group.size())  // 1 order * 1 customer = 1
+        assertEquals(1, customer2Group.size)  // 1 order * 1 customer = 1
     }
 
     @Test

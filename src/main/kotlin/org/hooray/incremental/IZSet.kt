@@ -17,7 +17,7 @@ interface IZSet<T : IZSet<T>> {
     /**
      * Get the size (number of elements/groups with non-zero weight).
      */
-    fun size(): Int
+    val size: Int
 
     /**
      * Add this Z-set to another Z-set.

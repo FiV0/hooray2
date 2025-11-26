@@ -10,7 +10,7 @@ class ZSetTest {
     fun `test empty ZSet`() {
         val empty = ZSet.empty<String>()
         assertTrue(empty.isEmpty())
-        assertEquals(0, empty.size())
+        assertEquals(0, empty.size)
         assertEquals(IntegerWeight.ZERO, empty.weight("any"))
     }
 
@@ -18,7 +18,7 @@ class ZSetTest {
     fun `test singleton ZSet`() {
         val single = ZSet.singleton("hello", IntegerWeight(5))
         assertFalse(single.isEmpty())
-        assertEquals(1, single.size())
+        assertEquals(1, single.size)
         assertEquals(IntegerWeight(5), single.weight("hello"))
         assertEquals(IntegerWeight.ZERO, single.weight("world"))
     }
@@ -32,7 +32,7 @@ class ZSetTest {
     @Test
     fun `test fromCollection with unique elements`() {
         val zset = ZSet.fromCollection(listOf("a", "b", "c"))
-        assertEquals(3, zset.size())
+        assertEquals(3, zset.size)
         assertEquals(IntegerWeight.ONE, zset.weight("a"))
         assertEquals(IntegerWeight.ONE, zset.weight("b"))
         assertEquals(IntegerWeight.ONE, zset.weight("c"))
@@ -41,7 +41,7 @@ class ZSetTest {
     @Test
     fun `test fromCollection with duplicates`() {
         val zset = ZSet.fromCollection(listOf("a", "b", "a", "c", "a"))
-        assertEquals(3, zset.size())
+        assertEquals(3, zset.size)
         assertEquals(IntegerWeight(3), zset.weight("a"))
         assertEquals(IntegerWeight(1), zset.weight("b"))
         assertEquals(IntegerWeight(1), zset.weight("c"))
@@ -55,7 +55,7 @@ class ZSetTest {
             "c" to IntegerWeight(2)
         )
         val zset = ZSet.fromMap(map)
-        assertEquals(2, zset.size())
+        assertEquals(2, zset.size)
         assertEquals(IntegerWeight(1), zset.weight("a"))
         assertEquals(IntegerWeight.ZERO, zset.weight("b"))
         assertEquals(IntegerWeight(2), zset.weight("c"))
@@ -67,7 +67,7 @@ class ZSetTest {
         val zset2 = ZSet.fromCollection(listOf("c", "d"))
         val result = zset1.add(zset2)
 
-        assertEquals(4, result.size())
+        assertEquals(4, result.size)
         assertEquals(IntegerWeight(1), result.weight("a"))
         assertEquals(IntegerWeight(1), result.weight("b"))
         assertEquals(IntegerWeight(1), result.weight("c"))
@@ -80,7 +80,7 @@ class ZSetTest {
         val zset2 = ZSet.fromMap(mapOf("b" to IntegerWeight(1), "c" to IntegerWeight(4)))
         val result = zset1.add(zset2)
 
-        assertEquals(3, result.size())
+        assertEquals(3, result.size)
         assertEquals(IntegerWeight(2), result.weight("a"))
         assertEquals(IntegerWeight(4), result.weight("b"))
         assertEquals(IntegerWeight(4), result.weight("c"))
@@ -101,7 +101,7 @@ class ZSetTest {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(3), "b" to IntegerWeight(-2)))
         val negated = zset.negate()
 
-        assertEquals(2, negated.size())
+        assertEquals(2, negated.size)
         assertEquals(IntegerWeight(-3), negated.weight("a"))
         assertEquals(IntegerWeight(2), negated.weight("b"))
     }
@@ -112,7 +112,7 @@ class ZSetTest {
         val zset2 = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "c" to IntegerWeight(1)))
         val result = zset1.subtract(zset2)
 
-        assertEquals(3, result.size())
+        assertEquals(3, result.size)
         assertEquals(IntegerWeight(3), result.weight("a"))
         assertEquals(IntegerWeight(3), result.weight("b"))
         assertEquals(IntegerWeight(-1), result.weight("c"))
@@ -127,7 +127,7 @@ class ZSetTest {
         ))
         val positive = zset.positive()
 
-        assertEquals(2, positive.size())
+        assertEquals(2, positive.size)
         assertEquals(IntegerWeight(5), positive.weight("a"))
         assertEquals(IntegerWeight.ZERO, positive.weight("b"))
         assertEquals(IntegerWeight(1), positive.weight("c"))
@@ -138,7 +138,7 @@ class ZSetTest {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(5), "b" to IntegerWeight(3)))
         val distinct = zset.distinct()
 
-        assertEquals(2, distinct.size())
+        assertEquals(2, distinct.size)
         assertEquals(IntegerWeight.ONE, distinct.weight("a"))
         assertEquals(IntegerWeight.ONE, distinct.weight("b"))
     }
@@ -148,7 +148,7 @@ class ZSetTest {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "b" to IntegerWeight(3)))
         val multiplied = zset.multiply(3)
 
-        assertEquals(2, multiplied.size())
+        assertEquals(2, multiplied.size)
         assertEquals(IntegerWeight(6), multiplied.weight("a"))
         assertEquals(IntegerWeight(9), multiplied.weight("b"))
     }
@@ -326,7 +326,7 @@ class ZSetTest {
         val empty = ZSet.empty<String, IntegerWeight>(customZero)
 
         assertTrue(empty.isEmpty())
-        assertEquals(0, empty.size())
+        assertEquals(0, empty.size)
         assertEquals(customZero, empty.weight("any"))
     }
 
@@ -340,7 +340,7 @@ class ZSetTest {
         )
         val zset = ZSet.fromMap(map, customZero)
 
-        assertEquals(2, zset.size())
+        assertEquals(2, zset.size)
         assertEquals(IntegerWeight(1), zset.weight("a"))
         assertEquals(customZero, zset.weight("b"))
         assertEquals(IntegerWeight(2), zset.weight("c"))
@@ -353,7 +353,7 @@ class ZSetTest {
 
         val result = zset1.multiply(zset2) { str, num -> "$str$num" }
 
-        assertEquals(4, result.size())
+        assertEquals(4, result.size)
         assertEquals(IntegerWeight(1), result.weight("a1"))
         assertEquals(IntegerWeight(1), result.weight("a2"))
         assertEquals(IntegerWeight(1), result.weight("b1"))
@@ -367,7 +367,7 @@ class ZSetTest {
 
         val result = zset1.multiply(zset2) { str, num -> "$str$num" }
 
-        assertEquals(4, result.size())
+        assertEquals(4, result.size)
         assertEquals(IntegerWeight(10), result.weight("x4"))  // 2 * 5 = 10
         assertEquals(IntegerWeight(14), result.weight("x6"))  // 2 * 7 = 14
         assertEquals(IntegerWeight(15), result.weight("y4"))  // 3 * 5 = 15
@@ -392,7 +392,7 @@ class ZSetTest {
         // Combine function that ignores the number, so all results are "same"
         val result = zset1.multiply(zset2) { _, _ -> "same" }
 
-        assertEquals(1, result.size())
+        assertEquals(1, result.size)
         // (a,1): 2*4=8, (a,2): 2*5=10, (b,1): 3*4=12, (b,2): 3*5=15
         // Total: 8 + 10 + 12 + 15 = 45
         assertEquals(IntegerWeight(45), result.weight("same"))
@@ -405,7 +405,7 @@ class ZSetTest {
 
         val result = zset1.multiply(zset2) { str, num -> "$str$num" }
 
-        assertEquals(2, result.size())
+        assertEquals(2, result.size)
         assertEquals(IntegerWeight(8), result.weight("a1"))   // 2 * 4 = 8
         assertEquals(IntegerWeight(-12), result.weight("b1")) // -3 * 4 = -12
     }
