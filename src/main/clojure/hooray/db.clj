@@ -8,7 +8,7 @@
            (clojure.data.avl AVLMap)
            (hooray.util.persistent_map PersistentSortedMap)))
 
-(defrecord Db [eav aev ave vae opts])
+(defrecord Db [eav aev ave vae opts schema])
 
 (def ^:private universal-comp (cast java.util.Comparator UniversalComparator/INSTANCE))
 
@@ -31,7 +31,7 @@
     :btree (util/create-update-in (btree-map/sorted-map universal-comp))))
 
 (defn ->db [{:keys [storage] :as opts}]
-  (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts))
+  (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts {}))
 
 (defn db? [x]
   (instance? Db x))
@@ -48,11 +48,11 @@
     :else :hash))
 
 ;; TODO: Do this with transcients
-(defn index-triple-add [{:keys [eav ave vae] :as db} [e a v :as _triple]]
+(defn index-triple-add [{:keys [eav ave vae schema] :as db} [e a v :as _triple]]
   (let [type (db->type db)
         update-in (->update-in-fn type)
         empty-set (set* type)
-        cardinality (t/attribute-cardinality a)
+        cardinality (t/attribute-cardinality schema a)
         previous-v (first (get-in eav [e a]))]
     (case cardinality
       :db.cardinality/one (let [db (if previous-v
@@ -99,12 +99,14 @@
 
 ;; TODO: propeerly support attribute schema as first class entities and initialize the db with
 ;; the attribute schema attributes
-(defn transact [db tx-data]
+(defn transact [{:keys [schema] :as db} tx-data]
   {:pre [(db? db)]}
-  (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples tx-data)]
-    (if (t/schema-tx? tx-data)
-      (t/index-schema! tx-data)
+  (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples tx-data)
+        new-schema (cond-> schema
+                     (t/schema-tx? tx-data) (t/index-schema tx-data))]
+    (when-not (t/schema-tx? tx-data)
       (run! check-triple (concat add retract)))
     (as-> db db
       (reduce index-triple-add db add)
-      (reduce index-triple-retract db retract))))
+      (reduce index-triple-retract db retract)
+      (assoc db :schema new-schema))))

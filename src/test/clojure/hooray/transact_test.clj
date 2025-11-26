@@ -1,8 +1,8 @@
 (ns hooray.transact-test
   (:require [clojure.test :as t :refer [deftest is use-fixtures]]
-            [hooray.transact :as tr]
             [hooray.fixtures :as fix]
-            [hooray.core :as h])
+            [hooray.core :as h]
+            [hooray.graph-gen :as g])
   (:import (clojure.lang ExceptionInfo)))
 
 (use-fixtures :each fix/with-node)
@@ -32,15 +32,13 @@
        "reserved keyword in attribute position")))
 
 (deftest schema-tx
-  (h/transact fix/*node* [{:db/id :db/edge-attribute
-                           :db/ident :g/to
-                           :db/cardinality :db.cardinality/many}])
+  (h/transact fix/*node* [g/edge-attribute])
 
   (t/is (= {:g/to
             {:db/cardinality :db.cardinality/many,
              :db/id :db/edge-attribute,
              :db/ident :g/to}}
-           @tr/schema)))
+           (:schema (h/db fix/*node*)))))
 
 (deftest cardinality-one-and-many
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])

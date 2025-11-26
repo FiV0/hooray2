@@ -39,11 +39,9 @@
     (throw (ex-info "Currently schema transaction cannot be mixed with non-schema transactions" {:tx-data tx-data}))
     (s/valid? ::schema-tx tx-data)))
 
-(def schema (atom {}))
+(defn index-schema [schema tx-data]
+  (merge schema (-> (group-by :db/ident tx-data)
+                    (update-vals first))))
 
-(defn index-schema! [tx-data]
-  (swap! schema merge (-> (group-by :db/ident tx-data)
-                          (update-vals first))))
-
-(defn attribute-cardinality [attr]
-  (get-in @schema [attr :db/cardinality] :db.cardinality/one))
+(defn attribute-cardinality [schema attr]
+  (get-in schema [attr :db/cardinality] :db.cardinality/one))
