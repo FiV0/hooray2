@@ -41,7 +41,7 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
     private fun mapKey(s: IAVLSeq) = (s.first() as clojure.lang.MapEntry).`val`()
     private fun setKey(s: IAVLSeq) = s.first()
 
-    override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+    override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         var (seq, keyFn) = when (val index = indexFromPrefix(prefix)) {
             is AVLIndex.AVLMapIndex -> Pair(index.map.seq() as IAVLSeq, ::mapKey)
             is AVLIndex.AVLSetIndex -> Pair(index.set.seq() as IAVLSeq, ::setKey)

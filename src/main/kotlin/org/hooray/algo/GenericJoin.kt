@@ -13,7 +13,7 @@ typealias Extension = Any
 interface PrefixExtender : LevelParticipation {
     fun count(prefix: Prefix): Int
     fun propose(prefix: Prefix) : List<Extension>
-    fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension>
+    fun intersect(prefix: Prefix, extensions: List<Extension>) : List<Extension>
 
     companion object {
         @JvmStatic
@@ -24,7 +24,7 @@ interface PrefixExtender : LevelParticipation {
 
                 override fun propose(prefix: Prefix): List<Extension> = sortedValues
 
-                override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension>
+                override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension>
                 // TODO this doesn't make use of the fact that sortedValues is sorted
                         = extensions.filter { ext -> sortedValues.contains(ext) }
 
@@ -42,7 +42,7 @@ interface PrefixExtender : LevelParticipation {
                 override fun propose(prefix: Prefix): List<Extension> =
                     if (isPrefixMatching(prefix)) listOf(tuple[prefix.size]) else emptyList()
 
-                override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> =
+                override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> =
                     if (isPrefixMatching(prefix) && extensions.contains(tuple[prefix.size])) listOf(tuple[prefix.size]) else emptyList()
 
                 override fun participatesInLevel(level: Int) = level < tuple.size
@@ -75,7 +75,7 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
             var extensions = extenders[minIndex].propose(prefix)
             for (i in extenders.indices) {
                 if (i != minIndex) {
-                    extensions = extenders[i].extend(prefix, extensions)
+                    extensions = extenders[i].intersect(prefix, extensions)
                 }
             }
             results.addAll(applyExtensions(prefix, extensions))

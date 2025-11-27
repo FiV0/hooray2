@@ -24,7 +24,7 @@ class GenericPrefixExtenderNotTest {
         val proposedExtensions = (1..10).toList()
         for (i in 1..10) {
             val prefix = listOf(i)
-            val filteredExtensions = notExtender.extend(prefix, proposedExtensions)
+            val filteredExtensions = notExtender.intersect(prefix, proposedExtensions)
             for (extension in filteredExtensions) {
                 resultTuples.add(listOf(i, extension))
             }
@@ -74,7 +74,7 @@ class GenericPrefixExtenderNotTest {
         val proposedExtensions = (1..10).toList()
         for (i in 1..10) {
             val prefix = listOf(i)
-            val filteredExtensions = notExtender.extend(prefix, proposedExtensions)
+            val filteredExtensions = notExtender.intersect(prefix, proposedExtensions)
             for (extension in filteredExtensions) {
                 resultTuples.add(listOf(i, extension))
             }

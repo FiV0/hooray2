@@ -54,7 +54,7 @@ class GenericJoinTest {
                 return (1..12).filter { it % divisor == 0 }
             }
 
-            override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+            override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
                 val divisor = prefix[0] as Int
                 return extensions.filter { ext ->
                     ext is Int && ext % divisor == 0

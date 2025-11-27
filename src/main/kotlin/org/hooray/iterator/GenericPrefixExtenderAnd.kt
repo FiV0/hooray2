@@ -19,18 +19,18 @@ open class GenericPrefixExtenderAnd(val children: List<PrefixExtender>) : Prefix
         var extensions = minChild.propose(prefix)
         for (child in participants) {
             if (child != minChild) {
-                extensions = child.extend(prefix, extensions)
+                extensions = child.intersect(prefix, extensions)
             }
         }
         return extensions
     }
 
-    override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+    override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         var currentExtensions = extensions
         val nextLevel = prefix.size
         val participants = children.filter { it.participatesInLevel(nextLevel) }.sortedBy { it.count(prefix) }
         for (child in participants) {
-            currentExtensions = child.extend(prefix, currentExtensions)
+            currentExtensions = child.intersect(prefix, currentExtensions)
         }
         return currentExtensions
     }

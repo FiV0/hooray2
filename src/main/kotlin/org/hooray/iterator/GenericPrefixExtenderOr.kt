@@ -14,10 +14,10 @@ open class GenericPrefixExtenderOr(val children: List<PrefixExtender>) : PrefixE
 
     override fun propose(prefix: Prefix) = children.flatMap { it.propose(prefix) }
 
-    override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+    override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         val result = mutableListOf<Extension>()
         for (child in children) {
-            val childExtensions = child.extend(prefix, extensions)
+            val childExtensions = child.intersect(prefix, extensions)
             result.addAll(childExtensions)
         }
         return result

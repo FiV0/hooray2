@@ -15,7 +15,7 @@ class GenericPrefixExtenderNot(val children: List<PrefixExtender>, val level: In
         TODO()
     }
 
-    override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+    override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         val filteredExtensions = mutableListOf<Extension>()
         for (extension in extensions) {
             val resultTuple = prefix + extension

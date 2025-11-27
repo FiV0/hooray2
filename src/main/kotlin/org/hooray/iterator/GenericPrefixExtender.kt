@@ -58,7 +58,7 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
 
     // This is WCO as we start with the smallest extension list so
     // extensions.size <= map.size or set.size
-    override open fun extend(prefix: Prefix, extensions: List<Extension>) =
+    override open fun intersect(prefix: Prefix, extensions: List<Extension>) =
         when (val index = indexFromPrefix(prefix)) {
             null -> emptyList()
             is SealedIndex.MapIndex -> extensions.filter { ext -> index.map.containsKey(ext) }

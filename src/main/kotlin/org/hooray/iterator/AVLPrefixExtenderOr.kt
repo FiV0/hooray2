@@ -35,10 +35,10 @@ class AVLPrefixExtenderOr(children: List<AVLPrefixExtender>): GenericPrefixExten
         return mergeSortedLists(results)
     }
 
-    override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+    override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         val results = mutableListOf<List<Extension>>()
         for (child in children) {
-            results.add(child.extend(prefix, extensions))
+            results.add(child.intersect(prefix, extensions))
         }
         return mergeSortedLists(results)
     }

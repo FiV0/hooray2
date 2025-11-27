@@ -35,17 +35,17 @@
         (t/is (= #{20 24 16} (set (.propose extender [6]))))
         (t/is (= [] (.propose extender [4])))
 
-        (t/is (= [4 8 12] (.extend extender [3] [4 8 12])))
-        (t/is (= [8] (.extend extender [3] [8])))
-        (t/is (= [] (.extend extender [3] [5 7 9])))
-        (t/is (= [8] (.extend extender [3] [5 8 9])))
+        (t/is (= [4 8 12] (.intersect extender [3] [4 8 12])))
+        (t/is (= [8] (.intersect extender [3] [8])))
+        (t/is (= [] (.intersect extender [3] [5 7 9])))
+        (t/is (= [8] (.intersect extender [3] [5 8 9])))
 
-        (t/is (= [16 20 24] (.extend extender [6] [16 20 24])))
-        (t/is (= [20] (.extend extender [6] [20])))
-        (t/is (= [] (.extend extender [6] [])))
-        (t/is (= [20] (.extend extender [6] [19 20 21])))
+        (t/is (= [16 20 24] (.intersect extender [6] [16 20 24])))
+        (t/is (= [20] (.intersect extender [6] [20])))
+        (t/is (= [] (.intersect extender [6] [])))
+        (t/is (= [20] (.intersect extender [6] [19 20 21])))
 
-        (t/is (= [] (.extend extender [4] [19 20 21])))))))
+        (t/is (= [] (.intersect extender [4] [19 20 21])))))))
 
 (deftest avl-prefix-extender-test
   (t/testing "AVLPrefixExtender"
@@ -66,17 +66,17 @@
       (t/is (= [16 20 24] (.propose extender [6])))
       (t/is (= [] (.propose extender [4])))
 
-      (t/is (= [4 8 12] (.extend extender [3] [4 8 12])))
-      (t/is (= [8] (.extend extender [3] [8])))
-      (t/is (= [] (.extend extender [3] [5 7 9])))
-      (t/is (= [8] (.extend extender [3] [5 8 9])))
+      (t/is (= [4 8 12] (.intersect extender [3] [4 8 12])))
+      (t/is (= [8] (.intersect extender [3] [8])))
+      (t/is (= [] (.intersect extender [3] [5 7 9])))
+      (t/is (= [8] (.intersect extender [3] [5 8 9])))
 
-      (t/is (= [16 20 24] (.extend extender [6] [16 20 24])))
-      (t/is (= [20] (.extend extender [6] [20])))
-      (t/is (= [] (.extend extender [6] [])))
-      (t/is (= [20] (.extend extender [6] [19 20 21])))
+      (t/is (= [16 20 24] (.intersect extender [6] [16 20 24])))
+      (t/is (= [20] (.intersect extender [6] [20])))
+      (t/is (= [] (.intersect extender [6] [])))
+      (t/is (= [20] (.intersect extender [6] [19 20 21])))
 
-      (t/is (= [] (.extend extender [4] [19 20 21]))))))
+      (t/is (= [] (.intersect extender [4] [19 20 21]))))))
 
 (deftest generic-prefix-extender-or-test
   (doseq [[map-fn set-fn implementation]
@@ -98,11 +98,11 @@
         (t/is (= #{4 6 8 12 18} (set (.propose or-extender []))))
 
         ;; extend should return union of extensions from both children
-        (t/is (= #{4 8 12} (set (.extend or-extender [] [4 8 12]))))
-        (t/is (= #{6 12 18} (set (.extend or-extender [] [6 12 18]))))
-        (t/is (= #{4 6 8 12 18} (set (.extend or-extender [] [4 6 8 12 18]))))
-        (t/is (= #{12} (set (.extend or-extender [] [12]))))
-        (t/is (= [] (.extend or-extender [] [1 2 3]))))
+        (t/is (= #{4 8 12} (set (.intersect or-extender [] [4 8 12]))))
+        (t/is (= #{6 12 18} (set (.intersect or-extender [] [6 12 18]))))
+        (t/is (= #{4 6 8 12 18} (set (.intersect or-extender [] [4 6 8 12 18]))))
+        (t/is (= #{12} (set (.intersect or-extender [] [12]))))
+        (t/is (= [] (.intersect or-extender [] [1 2 3]))))
 
       ;; Test OR of two map indices (two levels)
       (let [index1 (map-fn 3 (set-fn 4 8 12) 6 (set-fn 16 20))
@@ -130,15 +130,15 @@
         (t/is (= #{24 28} (set (.propose or-extender [9]))))
 
         ;; extend at level 1 for prefix [3]
-        (t/is (= #{4 8 12} (set (.extend or-extender [3] [4 8 12]))))
-        (t/is (= #{6 10} (set (.extend or-extender [3] [6 10]))))
-        (t/is (= #{4 6 8 10 12} (set (.extend or-extender [3] [4 6 8 10 12]))))
+        (t/is (= #{4 8 12} (set (.intersect or-extender [3] [4 8 12]))))
+        (t/is (= #{6 10} (set (.intersect or-extender [3] [6 10]))))
+        (t/is (= #{4 6 8 10 12} (set (.intersect or-extender [3] [4 6 8 10 12]))))
 
-        ;; extend at level 1 for prefix [6]
-        (t/is (= #{16 20} (set (.extend or-extender [6] [16 20]))))
+        ;; intersect at level 1 for prefix [6]
+        (t/is (= #{16 20} (set (.intersect or-extender [6] [16 20]))))
 
-        ;; extend at level 1 for prefix [9]
-        (t/is (= #{24 28} (set (.extend or-extender [9] [24 28])))))
+        ;; intersect at level 1 for prefix [9]
+        (t/is (= #{24 28} (set (.intersect or-extender [9] [24 28])))))
 
       ;; Test OR of three extenders
       (let [index1 (set-fn 1 2)
@@ -151,7 +151,7 @@
 
         (t/is (= 6 (.count or-extender [])))
         (t/is (= #{1 2 3 4 5 6} (set (.propose or-extender []))))
-        (t/is (= #{2 4 6} (set (.extend or-extender [] [2 4 6]))))))))
+        (t/is (= #{2 4 6} (set (.intersect or-extender [] [2 4 6]))))))))
 
 (deftest avl-prefix-extender-or-test
   (t/testing "AVLPrefixExtenderOr"
@@ -169,11 +169,11 @@
       (t/is (= [4 6 8 12 12 18] (.propose or-extender [])))
 
       ;; extend should return merged sorted extensions from both children
-      (t/is (= [4 8 12 12] (.extend or-extender [] [4 8 12])))
-      (t/is (= [6 12 12 18] (.extend or-extender [] [6 12 18])))
-      (t/is (= [4 6 8 12 12 18] (.extend or-extender [] [4 6 8 12 18])))
-      (t/is (= [12 12] (.extend or-extender [] [12])))
-      (t/is (= [] (.extend or-extender [] [1 2 3]))))
+      (t/is (= [4 8 12 12] (.intersect or-extender [] [4 8 12])))
+      (t/is (= [6 12 12 18] (.intersect or-extender [] [6 12 18])))
+      (t/is (= [4 6 8 12 12 18] (.intersect or-extender [] [4 6 8 12 18])))
+      (t/is (= [12 12] (.intersect or-extender [] [12])))
+      (t/is (= [] (.intersect or-extender [] [1 2 3]))))
 
     ;; Test OR of two AVL map indices (two levels)
     (let [index1 (avl/sorted-map 3 (avl/sorted-set 4 8 12) 6 (avl/sorted-set 16 20))
@@ -201,15 +201,15 @@
       (t/is (= [24 28] (.propose or-extender [9])))
 
       ;; extend at level 1 for prefix [3]
-      (t/is (= [4 8 12] (.extend or-extender [3] [4 8 12])))
-      (t/is (= [6 10] (.extend or-extender [3] [6 10])))
-      (t/is (= [4 6 8 10 12] (.extend or-extender [3] [4 6 8 10 12])))
+      (t/is (= [4 8 12] (.intersect or-extender [3] [4 8 12])))
+      (t/is (= [6 10] (.intersect or-extender [3] [6 10])))
+      (t/is (= [4 6 8 10 12] (.intersect or-extender [3] [4 6 8 10 12])))
 
-      ;; extend at level 1 for prefix [6]
-      (t/is (= [16 20] (.extend or-extender [6] [16 20])))
+      ;; intersect at level 1 for prefix [6]
+      (t/is (= [16 20] (.intersect or-extender [6] [16 20])))
 
-      ;; extend at level 1 for prefix [9]
-      (t/is (= [24 28] (.extend or-extender [9] [24 28]))))
+      ;; intersect at level 1 for prefix [9]
+      (t/is (= [24 28] (.intersect or-extender [9] [24 28]))))
 
     ;; Test OR of three AVL extenders
     (let [index1 (avl/sorted-set 1 2)
@@ -222,7 +222,7 @@
 
       (t/is (= 6 (.count or-extender [])))
       (t/is (= [1 2 3 4 5 6] (.propose or-extender [])))
-      (t/is (= [2 4 6] (.extend or-extender [] [2 4 6]))))
+      (t/is (= [2 4 6] (.intersect or-extender [] [2 4 6]))))
 
     ;; Test with overlapping values to verify merge behavior
     (let [index1 (avl/sorted-set 1 3 5 7)
@@ -233,4 +233,4 @@
 
       ;; Should include duplicates in sorted order: [1, 2, 3, 3, 5, 6, 7, 7]
       (t/is (= [1 2 3 3 5 6 7 7] (.propose or-extender [])))
-      (t/is (= [3 3 7 7] (.extend or-extender [] [3 7]))))))
+      (t/is (= [3 3 7 7] (.intersect or-extender [] [3 7]))))))

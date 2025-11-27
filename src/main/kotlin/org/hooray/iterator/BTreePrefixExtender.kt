@@ -39,7 +39,7 @@ class BTreePrefixExtender(val bTreeIndex: BTreeIndex, participatesInLevel: List<
     private fun mapKey(s: Seq) = (s.first() as clojure.lang.MapEntry).`val`()
     private fun setKey(s: Seq) = s.first()
 
-    override fun extend(prefix: Prefix, extensions: List<Extension>) : List<Extension> {
+    override fun intersect(prefix: Prefix, extensions: List<Extension>) : List<Extension> {
         var (seq, keyFn) = when (val index = indexFromPrefix(prefix)) {
             is BTreeIndex.BTreeMap -> Pair(index.map.seq() as Seq, ::mapKey)
             is BTreeIndex.BTreeSet -> Pair(index.set.seq() as Seq, ::setKey)
