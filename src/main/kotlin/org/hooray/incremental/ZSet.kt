@@ -72,6 +72,12 @@ class ZSet<K, W : Weight<W>> private constructor(
     }
 
     /**
+     * Operator overloading for addition.
+     * Allows using `zset1 + zset2` instead of `zset1.add(zset2)`.
+     */
+    operator fun plus(other: ZSet<K, W>): ZSet<K, W> = add(other)
+
+    /**
      * Negate this Z-set (invert all weights).
      */
     override fun negate(): ZSet<K, W> {

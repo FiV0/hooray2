@@ -102,6 +102,12 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     }
 
     /**
+     * Operator overloading for addition.
+     * Allows using `izset1 + izset2` instead of `izset1.add(izset2)`.
+     */
+    operator fun plus(other: IndexedZSet<K, V, W>): IndexedZSet<K, V, W> = add(other)
+
+    /**
      * Negate this indexed Z-set (invert all weights in all groups).
      */
     override fun negate(): IndexedZSet<K, V, W> {
