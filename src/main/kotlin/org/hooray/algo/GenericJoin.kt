@@ -51,6 +51,7 @@ interface PrefixExtender : LevelParticipation {
     }
 }
 
+// TODO maybe use kotlinx.collections.immutable for structural sharing here
 fun applyExtensions(prefix: Prefix, extensions: List<Extension>) : List<ResultTuple> {
     val result = mutableListOf<ResultTuple>()
     for(ext in extensions) {
