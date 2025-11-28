@@ -174,6 +174,21 @@ class ZSet<K, W : Weight<W>> private constructor(
         return "ZSet(${data.entries.joinToString(", ") { "${it.key}: ${it.value}" }})"
     }
 
+    fun naturalJoin(other: ZSet<K, W>): ZSet<K, W> {
+        val (smaller, larger) = if (this.size <= other.size) this to other else other to this
+        val result = mutableMapOf<K, W>()
+        for ((key, weight) in smaller.data) {
+            val otherWeight = larger.data[key]
+            if (otherWeight != null) {
+                val combinedWeight = weight.multiply(otherWeight)
+                if (!combinedWeight.isZero()) {
+                    result[key] = combinedWeight
+                }
+            }
+        }
+        return ZSet(result, zero)
+    }
+
     companion object {
         /**
          * Create an empty Z-set with integer weights.
