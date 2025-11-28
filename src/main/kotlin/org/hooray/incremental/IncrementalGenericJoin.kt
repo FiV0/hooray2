@@ -9,8 +9,8 @@ import kotlin.collections.contains
 
 interface IncrementalPrefixExtender : LevelParticipation {
     fun count(prefix: Prefix): Int
-    fun receiveDelta(delta: IndexedZSet<Extension, *, IntegerWeight>)
-    fun intersectDelta(otherDelta: IndexedZSet<Extension, *, IntegerWeight>): ZSet<Extension, IntegerWeight>
+    fun receiveDelta(delta: IndexedZSet<Extension, IntegerWeight>)
+    fun intersectDelta(otherDelta: IndexedZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>
 
 
     fun intersect(prefix: Prefix, proposals: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>  // all others filter
@@ -24,11 +24,11 @@ interface IncrementalPrefixExtender : LevelParticipation {
         @JvmStatic
         fun createSingleLevel(deltas: ZSet<Extension, IntegerWeight>, participatesInLevel: Int): IncrementalPrefixExtender {
             return object : IncrementalPrefixExtender {
-                override fun receiveDelta(delta: IndexedZSet<Extension, *, IntegerWeight>) {
+                override fun receiveDelta(delta: IndexedZSet<Extension, IntegerWeight>) {
                     TODO("Not yet implemented")
                 }
 
-                override fun intersectDelta(otherDelta: IndexedZSet<Extension, *, IntegerWeight>): ZSet<Extension, IntegerWeight> {
+                override fun intersectDelta(otherDelta: IndexedZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> {
                     TODO("Not yet implemented")
                 }
 
@@ -65,7 +65,7 @@ interface IncrementalPrefixExtender : LevelParticipation {
 
 class IncrementalGenericJoin(val extenders: List<IncrementalPrefixExtender>, levels: Int): IncrementalJoin<Any> {
 
-    override fun join(deltas: List<IndexedZSet<Extension, *, IntegerWeight>>): ZSet<Any, IntegerWeight> {
+    override fun join(deltas: List<IndexedZSet<Extension, IntegerWeight>>): ZSet<Any, IntegerWeight> {
         for (i in extenders.indices) {
             extenders[i].receiveDelta(deltas[i])
         }
