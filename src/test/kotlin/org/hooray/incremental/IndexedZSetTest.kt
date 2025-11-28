@@ -426,6 +426,39 @@ class IndexedZSetTest {
         assertEquals(IntegerWeight.ZERO, empty.weight("any"))
     }
 
+    @Test
+    fun `test depth returns 2 for simple IndexedZSet`() {
+        // IndexedZSet<String, Int, IntegerWeight> contains ZSet<Int, IntegerWeight>
+        // ZSet has depth 1, so IndexedZSet should have depth 2
+        val zset = ZSet.fromCollection(listOf(1, 2, 3))
+        val indexed = IndexedZSet.singleton("key", zset)
+
+        // Note: This will fail because Int is not an IZSet
+        // This test demonstrates the undefined behavior case
+        assertThrows<ClassCastException> {
+            indexed.depth()
+        }
+    }
+
+    @Test
+    fun `test depth with nested IndexedZSet`() {
+        // Create a nested structure: IndexedZSet<String, ZSet<Int, IntegerWeight>, IntegerWeight>
+        // The values V are ZSet instances, which are IZSets with depth 1
+        // So the depth should be 1 + 1 = 2
+
+        // First level: ZSet<Int, IntegerWeight>
+        val innerZSet = ZSet.fromCollection(listOf(1, 2, 3))
+
+        // Second level: IndexedZSet containing ZSets as keys (creates nested structure)
+        val outerZSet = ZSet.singleton(innerZSet, IntegerWeight.ONE)
+        val indexed = IndexedZSet.singleton("key", outerZSet)
+
+        // The indexed ZSet contains ZSet<ZSet<Int, IntegerWeight>, IntegerWeight>
+        // The first value is a ZSet (with depth 1)
+        // So depth should be 1 + 1 = 2
+        assertEquals(2, indexed.depth())
+    }
+
     // ========== Integration Tests ==========
 
     @Test

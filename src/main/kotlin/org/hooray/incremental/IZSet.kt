@@ -36,6 +36,14 @@ interface IZSet<K, W : Weight<W>, T : IZSet<K, W, T>> {
     fun weight(key: K): W
 
     /**
+     * Get the depth of this Z-set structure.
+     * For ZSet, returns 1.
+     * For IndexedZSet, returns 1 + depth of the first value (assuming it's an IZSet).
+     * Behavior is undefined if IndexedZSet is empty or values are not IZSets.
+     */
+    fun depth(): Int
+
+    /**
      * Add this Z-set to another Z-set.
      * This operation is commutative and associative, forming a commutative group.
      */

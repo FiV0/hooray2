@@ -41,6 +41,17 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     }
 
     /**
+     * Get the depth of this indexed Z-set.
+     * Returns 1 + depth of the first value, assuming the value is an IZSet.
+     * Behavior is undefined if this IndexedZSet is empty or values are not IZSets.
+     */
+    override fun depth(): Int {
+        val firstZSet = data.values.firstOrNull() ?: throw IllegalStateException("Cannot compute depth of empty IndexedZSet")
+        val firstValue = firstZSet.keys().firstOrNull() ?: throw IllegalStateException("Cannot compute depth when first ZSet is empty")
+        return 1 + (firstValue as IZSet<*, *, *>).depth()
+    }
+
+    /**
      * Get all entries (key-ZSet pairs) in this indexed Z-set.
      */
     fun entries(): Set<Map.Entry<K, ZSet<V, W>>> {

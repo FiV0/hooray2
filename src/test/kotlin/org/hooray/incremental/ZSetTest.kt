@@ -432,4 +432,16 @@ class ZSetTest {
         // Same multiplication should produce equal results
         assertEquals(result1, result2)
     }
+
+    @Test
+    fun `test depth returns 1 for ZSet`() {
+        val zset = ZSet.fromCollection(listOf(1, 2, 3))
+        assertEquals(1, zset.depth())
+    }
+
+    @Test
+    fun `test depth returns 1 for empty ZSet`() {
+        val empty = ZSet.empty<String>()
+        assertEquals(1, empty.depth())
+    }
 }

@@ -22,6 +22,13 @@ class ZSet<K, W : Weight<W>> private constructor(
     }
 
     /**
+     * Get the depth of this Z-set. Always returns 1 for ZSet.
+     */
+    override fun depth(): Int {
+        return 1
+    }
+
+    /**
      * Get all entries (value-weight pairs) in this Z-set.
      */
     fun entries(): Set<Map.Entry<K, W>> {
