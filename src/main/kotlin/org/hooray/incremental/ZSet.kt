@@ -129,11 +129,11 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Multiply all weights by a scalar.
      */
-    fun multiply(weight: W): ZSet<K, W> {
-        if (weight.isZero()) {
+    fun multiply(w: W): ZSet<K, W> {
+        if (w.isZero()) {
             return ZSet(emptyMap(), zero)
         }
-        val result = data.mapValues { (_, weight) -> weight.multiply(weight) }
+        val result = data.mapValues { (_, weight ) -> weight.multiply(w) }
         return ZSet(result, zero)
     }
 

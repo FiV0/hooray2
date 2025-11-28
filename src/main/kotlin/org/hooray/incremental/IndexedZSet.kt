@@ -1,6 +1,7 @@
 package org.hooray.incremental
 
 import org.hooray.algo.Extension
+import org.hooray.algo.Prefix
 
 /**
  * An indexed Z-set is a nested relation - a map where each key is associated with an IZSet.
@@ -25,6 +26,30 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     @Suppress("UNCHECKED_CAST")
     fun <V, I : IZSet<V, W, I>> get(key: K): I? {
         return data[key] as? I
+    }
+
+    /**
+     * Get a nested value by following a path (prefix).
+     * Uses the first element of the prefix as a key in this IndexedZSet.
+     * If the prefix has only one element, returns the corresponding ZSet.
+     * If the prefix has more elements and the value is an IndexedZSet,
+     * recursively calls getByPrefix with the remaining path.
+     * Returns null if the path cannot be followed.
+     *
+     * @param prefix The path to follow, where each element is a key at that level
+     * @return The value at the end of the path, or null if not found
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun getByPrefix(prefix: Prefix): Any? {
+        TODO("Not yet implemented")
+     }
+
+    fun extendLeaves(mapFn: (Prefix, W) -> IZSet<*, W, *>): IndexedZSet<K, W> {
+        TODO("Not yet implemented")
+    }
+
+    fun forEachLeaf(mapFn: (Prefix, W) -> Unit): IndexedZSet<K, W> {
+        TODO("Not yet implemented")
     }
 
     /**

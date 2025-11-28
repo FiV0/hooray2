@@ -8,67 +8,68 @@ import org.hooray.iterator.LevelParticipation
 import kotlin.collections.contains
 
 interface IncrementalPrefixExtender : LevelParticipation {
+    fun receiveDeltaIndex(delta: IndexedZSet<*, IntegerWeight>)
+    fun updateZ1(): Unit
     fun count(prefix: Prefix): Int
-    fun receiveDelta(delta: IndexedZSet<Extension, IntegerWeight>)
-    fun intersectDelta(otherDelta: IndexedZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>
-
-
-    fun intersect(prefix: Prefix, proposals: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>  // all others filter
-
-
-//    fun count(prefix: Prefix): Int
-//    fun propose(prefix: Prefix) : ZSet<Extension, IntegerWeight>
-//    fun extend(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>) : ZSet<Extension, IntegerWeight>
-
-    companion object {
-        @JvmStatic
-        fun createSingleLevel(deltas: ZSet<Extension, IntegerWeight>, participatesInLevel: Int): IncrementalPrefixExtender {
-            return object : IncrementalPrefixExtender {
-                override fun receiveDelta(delta: IndexedZSet<Extension, IntegerWeight>) {
-                    TODO("Not yet implemented")
-                }
-
-                override fun intersectDelta(otherDelta: IndexedZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> {
-                    TODO("Not yet implemented")
-                }
-
-                override fun count(prefix: Prefix): Int = deltas.size
-
-
-                override fun intersect(prefix: Prefix, proposals: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> {
-                    TODO("Not yet implemented")
-                }
-
-                override fun participatesInLevel(level: Int) = level == participatesInLevel
-            }
-        }
-
-//        fun createTupleExtender(tuple: ResultTuple): IncrementalPrefixExtender {
-//            return object : IncrementalPrefixExtender {
-//                private fun isPrefixMatching(prefix: Prefix): Boolean =
-//                    prefix.size <= tuple.size && tuple.take(prefix.size) == prefix
-//
-//                override fun count(prefix: Prefix): Int = if (isPrefixMatching(prefix)) 1 else 0
-//
-//                override fun propose(prefix: Prefix): List<Extension> =
-//                    if (isPrefixMatching(prefix)) listOf(tuple[prefix.size]) else emptyList()
-//
-//                override fun extend(prefix: Prefix, extensions: List<Extension>): List<Extension> =
-//                    if (isPrefixMatching(prefix) && extensions.contains(tuple[prefix.size])) listOf(tuple[prefix.size]) else emptyList()
-//
-//                override fun participatesInLevel(level: Int) = level < tuple.size
-//            }
-//        }
-    }
+    fun getDelta(prefix: Prefix): ZSet<Extension, IntegerWeight>
+    fun intersectDelta(prefix: Prefix, otherDelta: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>
+    fun intersectZ1(prefix: Prefix, runningDelta: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>
 }
 
+class IncrementalGenericJoin(val extenders: List<IncrementalPrefixExtender>, val levels: Int): IncrementalJoin<ResultTuple> {
 
-class IncrementalGenericJoin(val extenders: List<IncrementalPrefixExtender>, levels: Int): IncrementalJoin<Any> {
-
-    override fun join(deltas: List<IndexedZSet<Extension, IntegerWeight>>): ZSet<Any, IntegerWeight> {
+    override fun join(deltas: List<IndexedZSet<Any, IntegerWeight>>): ZSet<ResultTuple, IntegerWeight> {
+        var result: IndexedZSet<Any, IntegerWeight> = IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE)
         for (i in extenders.indices) {
-            extenders[i].receiveDelta(deltas[i])
+            extenders[i].receiveDeltaIndex(deltas[i])
         }
-        TODO()
+
+        for (i in 0 until levels) {
+            val participatingExtenders = extenders.filter { it.participatesInLevel(i) }
+            result = result.extendLeaves { prefix, weight ->
+                val minIndex = extenders.indices.minBy { extenders[it].count(prefix) }
+                var runningDelta = extenders[minIndex].getDelta(prefix)
+
+                // The algorithm of this inner loop is approximately:
+                // for i = 1 to n:
+                // compute Δ_{1..i} from Δ_{1..i-1} and relation i
+
+                //      result = Δ_{1..i-1} ⋈ Δᵢ
+                //               + Δ_{1..i-1} ⋈ z⁻¹(i)
+                //               + Δᵢ ⋈ z⁻¹(1) ⋈ z⁻¹(2) ⋈ ... ⋈ z⁻¹(i-1)  // WCOJ anchored by Δᵢ
+
+                for (j in participatingExtenders.indices.filterNot { it == minIndex }) {
+                    val extender = participatingExtenders[j]
+                    val currentDelta = extender.getDelta(prefix)
+
+                    // WCOJ anchored step in Δᵢ
+                    var tempDelta = currentDelta
+                    for (k in 0 until j) {
+                        tempDelta = participatingExtenders[k].intersectZ1(prefix, tempDelta)
+                    }
+
+
+                    runningDelta =
+                    // Δ_{1..i-1} ⋈ Δᵢ
+                    runningDelta.naturalJoin(currentDelta) +
+                    // + Δ_{1..i-1} ⋈ z⁻¹(i)
+                    extender.intersectZ1(prefix, runningDelta) +
+                    // + Δᵢ ⋈ z⁻¹(1) ⋈ z⁻¹(2) ⋈ ... ⋈ z⁻¹(i-1)
+                    tempDelta
+                }
+
+                // We multiply by the weight of the variables above.
+                runningDelta.multiply(weight)
+            }
+
+        }
+
+        for (i in extenders.indices) {
+            extenders[i].updateZ1()
+        }
+
+        val resultMap = mutableMapOf<ResultTuple, IntegerWeight>()
+        result.forEachLeaf { resultTuple, weight -> resultMap[resultTuple] = weight }
+        return ZSet.fromMap(resultMap)
     }
 }
