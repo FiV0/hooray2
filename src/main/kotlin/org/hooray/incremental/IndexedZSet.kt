@@ -14,8 +14,9 @@ import org.hooray.algo.Extension
  */
 class IndexedZSet<K, V, W : Weight<W>> private constructor(
     private val data: Map<K, ZSet<V, W>>,
-    private val zero: W
-) : IZSet<IndexedZSet<K, V, W>> {
+    private val zero: W,
+    private val one: W
+) : IZSet<K, W, IndexedZSet<K, V, W>> {
     /**
      * Get the Z-set associated with a key.
      * Returns null if the key is not present.
@@ -27,8 +28,16 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
     /**
      * Get all keys in this indexed Z-set.
      */
-    fun keys(): Set<K> {
+    override fun keys(): Set<K> {
         return data.keys
+    }
+
+    /**
+     * Get the weight of a key.
+     * Returns ONE if the key is present, ZERO if not.
+     */
+    override fun weight(key: K): W {
+        return if (data.containsKey(key)) one else zero
     }
 
     /**
@@ -98,7 +107,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
             }
         }
 
-        return IndexedZSet(result, zero)
+        return IndexedZSet(result, zero, one)
     }
 
     /**
@@ -112,7 +121,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
      */
     override fun negate(): IndexedZSet<K, V, W> {
         val result = data.mapValues { (_, zset) -> zset.negate() }
-        return IndexedZSet(result, zero)
+        return IndexedZSet(result, zero, one)
     }
 
     /**
@@ -153,7 +162,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
             }
         }
 
-        return IndexedZSet(result, zero)
+        return IndexedZSet(result, zero, one)
     }
 
     override fun equals(other: Any?): Boolean {
@@ -174,17 +183,17 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
         /**
          * Create an empty indexed Z-set with integer weights.
          */
-        fun <K, V> empty(zero: IntegerWeight = IntegerWeight.ZERO): IndexedZSet<K, V, IntegerWeight> {
-            return IndexedZSet(emptyMap(), zero)
+        fun <K, V> empty(zero: IntegerWeight = IntegerWeight.ZERO, one: IntegerWeight = IntegerWeight.ONE): IndexedZSet<K, V, IntegerWeight> {
+            return IndexedZSet(emptyMap(), zero, one)
         }
 
         /**
          * Create an indexed Z-set from a map of keys to Z-sets.
          * Empty ZSets are automatically filtered out.
          */
-        fun <K, V, W : Weight<W>> fromMap(map: Map<K, ZSet<V, W>>, zero: W): IndexedZSet<K, V, W> {
+        fun <K, V, W : Weight<W>> fromMap(map: Map<K, ZSet<V, W>>, zero: W, one: W): IndexedZSet<K, V, W> {
             val data = map.filterValues { !it.isEmpty() }
-            return IndexedZSet(data, zero)
+            return IndexedZSet(data, zero, one)
         }
 
         /**
@@ -194,7 +203,7 @@ class IndexedZSet<K, V, W : Weight<W>> private constructor(
             if (zset.isEmpty()) {
                 return empty()
             }
-            return IndexedZSet(mapOf(key to zset), IntegerWeight.ZERO)
+            return IndexedZSet(mapOf(key to zset), IntegerWeight.ZERO, IntegerWeight.ONE)
         }
     }
 }
@@ -223,7 +232,7 @@ fun <K, V> ZSet<V, IntegerWeight>.index(keyFunc: (V) -> K): IndexedZSet<K, V, In
         ZSet.fromMap(valueWeightMap)
     }.filterValues { !it.isEmpty() }
 
-    return IndexedZSet.fromMap(data, IntegerWeight.ZERO)
+    return IndexedZSet.fromMap(data, IntegerWeight.ZERO, IntegerWeight.ONE)
 }
 
 /**
@@ -232,8 +241,9 @@ fun <K, V> ZSet<V, IntegerWeight>.index(keyFunc: (V) -> K): IndexedZSet<K, V, In
  *
  * @param keyFunc Function to extract the grouping key from each value
  * @param zero The zero element of the weight type
+ * @param one The one element of the weight type
  */
-fun <K, V, W : Weight<W>> ZSet<V, W>.index(keyFunc: (V) -> K, zero: W): IndexedZSet<K, V, W> {
+fun <K, V, W : Weight<W>> ZSet<V, W>.index(keyFunc: (V) -> K, zero: W, one: W): IndexedZSet<K, V, W> {
     val groups = mutableMapOf<K, MutableMap<V, W>>()
 
     for ((value, weight) in this.entries()) {
@@ -251,5 +261,5 @@ fun <K, V, W : Weight<W>> ZSet<V, W>.index(keyFunc: (V) -> K, zero: W): IndexedZ
         ZSet.fromMap(valueWeightMap, zero)
     }.filterValues { !it.isEmpty() }
 
-    return IndexedZSet.fromMap(data, zero)
+    return IndexedZSet.fromMap(data, zero, one)
 }

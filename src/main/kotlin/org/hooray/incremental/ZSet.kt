@@ -13,11 +13,11 @@ import org.hooray.algo.Extension
 class ZSet<K, W : Weight<W>> private constructor(
     private val data: Map<K, W>,
     private val zero: W
-) : IZSet<ZSet<K, W>> {
+) : IZSet<K, W, ZSet<K, W>> {
     /**
      * Get the weight of a value. Returns zero if the value is not present.
      */
-    fun weight(key: K): W {
+    override fun weight(key: K): W {
         return data[key] ?: zero
     }
 
@@ -31,7 +31,7 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Get all values in this Z-set.
      */
-    fun keys(): Set<K> {
+    override fun keys(): Set<K> {
         return data.keys
     }
 

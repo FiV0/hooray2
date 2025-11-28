@@ -40,7 +40,7 @@ class IndexedZSetTest {
         val zset3 = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
 
         val map = mapOf("a" to zset1, "b" to zset2, "c" to zset3)
-        val indexed = IndexedZSet.fromMap(map, IntegerWeight.ZERO)
+        val indexed = IndexedZSet.fromMap(map, IntegerWeight.ZERO, IntegerWeight.ONE)
 
         assertEquals(2, indexed.size)
         assertNotNull(indexed.get("a"))
@@ -111,7 +111,7 @@ class IndexedZSetTest {
         val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(2), 2 to IntegerWeight(3)))
         val zset2 = ZSet.fromMap(mapOf(3 to IntegerWeight(1), 4 to IntegerWeight(4)))
 
-        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
         val flattened = indexed.flatten { key, value -> "$key-$value" }
 
         assertEquals(4, flattened.size)
@@ -126,7 +126,7 @@ class IndexedZSetTest {
         val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(2), 2 to IntegerWeight(3)))
         val zset2 = ZSet.fromMap(mapOf(3 to IntegerWeight(1)))
 
-        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
         val deindexed = indexed.deindex()
 
         assertEquals(3, deindexed.size)
@@ -140,7 +140,7 @@ class IndexedZSetTest {
         val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(2)))
         val zset2 = ZSet.fromMap(mapOf(1 to IntegerWeight(3)))
 
-        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
         val deindexed = indexed.deindex()
 
         assertEquals(1, deindexed.size)
@@ -378,7 +378,7 @@ class IndexedZSetTest {
         val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(1)))
         val zset2 = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
 
-        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
         val entries = indexed.entries()
 
         assertEquals(2, entries.size)
@@ -391,12 +391,39 @@ class IndexedZSetTest {
         val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(1)))
         val zset2 = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
 
-        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO)
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
         val keys = indexed.keys()
 
         assertEquals(2, keys.size)
         assertTrue(keys.contains("a"))
         assertTrue(keys.contains("b"))
+    }
+
+    @Test
+    fun `test weight returns ONE for present keys`() {
+        val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(2)))
+        val zset2 = ZSet.fromMap(mapOf(2 to IntegerWeight(3)))
+
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        assertEquals(IntegerWeight.ONE, indexed.weight("a"))
+        assertEquals(IntegerWeight.ONE, indexed.weight("b"))
+    }
+
+    @Test
+    fun `test weight returns ZERO for absent keys`() {
+        val zset = ZSet.fromMap(mapOf(1 to IntegerWeight(5)))
+        val indexed = IndexedZSet.singleton("a", zset)
+
+        assertEquals(IntegerWeight.ZERO, indexed.weight("b"))
+        assertEquals(IntegerWeight.ZERO, indexed.weight("c"))
+    }
+
+    @Test
+    fun `test weight on empty IndexedZSet returns ZERO`() {
+        val empty = IndexedZSet.empty<String, Int>()
+
+        assertEquals(IntegerWeight.ZERO, empty.weight("any"))
     }
 
     // ========== Integration Tests ==========
