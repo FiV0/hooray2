@@ -146,7 +146,7 @@ class ZSetTest {
     @Test
     fun `test multiply`() {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "b" to IntegerWeight(3)))
-        val multiplied = zset.multiply(3)
+        val multiplied = zset.multiply(IntegerWeight(3))
 
         assertEquals(2, multiplied.size)
         assertEquals(IntegerWeight(6), multiplied.weight("a"))
@@ -156,7 +156,7 @@ class ZSetTest {
     @Test
     fun `test multiply by zero creates empty ZSet`() {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(2), "b" to IntegerWeight(3)))
-        val multiplied = zset.multiply(0)
+        val multiplied = zset.multiply(IntegerWeight(0))
 
         assertTrue(multiplied.isEmpty())
     }
@@ -164,7 +164,7 @@ class ZSetTest {
     @Test
     fun `test multiply by negative`() {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(2)))
-        val multiplied = zset.multiply(-1)
+        val multiplied = zset.multiply(IntegerWeight(-1))
 
         assertEquals(IntegerWeight(-2), multiplied.weight("a"))
     }
