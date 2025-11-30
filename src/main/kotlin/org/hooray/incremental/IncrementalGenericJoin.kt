@@ -41,12 +41,12 @@ class IncrementalGenericJoin(val extenders: List<IncrementalPrefixExtender>, val
                     val currentDelta = extender.getDelta(prefix)
 
                     // WCOJ anchored step in Δᵢ
-                    var tempDelta = currentDelta
+                    var tempDelta = participatingExtenders[minIndex].intersectZ1(prefix, currentDelta)
                     for (k in 0 until j) {
+                        if (k == minIndex) continue  // Already handled above
                         if (tempDelta.isEmpty()) break
                         tempDelta = participatingExtenders[k].intersectZ1(prefix, tempDelta)
                     }
-
 
                     runningDelta =
                     // Δ_{1..i-1} ⋈ Δᵢ
