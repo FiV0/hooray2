@@ -2,6 +2,7 @@ package org.hooray.incremental
 
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
+import org.hooray.algo.ResultTuple
 
 /**
  * An indexed Z-set is a nested relation - a map where each key is associated with an IZSet.
@@ -284,6 +285,10 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
 
     override fun toString(): String {
         return "IndexedZSet(${data.entries.joinToString(", ") { "${it.key}: ${it.value}" }})"
+    }
+
+    fun toFlatZSet(): ZSet<ResultTuple, IntegerWeight> {
+       TODO()
     }
 
     companion object {
