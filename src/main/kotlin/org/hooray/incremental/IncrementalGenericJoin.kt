@@ -1,11 +1,9 @@
 package org.hooray.incremental
 
-import org.hooray.UniversalComparator
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.ResultTuple
 import org.hooray.iterator.LevelParticipation
-import kotlin.collections.contains
 
 interface IncrementalPrefixExtender : LevelParticipation {
     fun receiveDeltaIndex(delta: IndexedZSet<*, IntegerWeight>)
@@ -27,12 +25,12 @@ class IncrementalGenericJoin(val extenders: List<IncrementalPrefixExtender>, val
         for (i in 0 until levels) {
             val participatingExtenders = extenders.filter { it.participatesInLevel(i) }
             result = result.extendLeaves { prefix, weight ->
-                val minIndex = extenders.indices.minBy { extenders[it].count(prefix) }
+                val minIndex = participatingExtenders.indices.minBy { participatingExtenders[it].count(prefix) }
                 var runningDelta = extenders[minIndex].getDelta(prefix)
 
                 // The algorithm of this inner loop is approximately:
                 // for i = 1 to n:
-                // compute Δ_{1..i} from Δ_{1..i-1} and relation i
+                // compute Δ_{1..i} from Δ_{1..i-1}, Δᵢ and relation i
 
                 //      result = Δ_{1..i-1} ⋈ Δᵢ
                 //               + Δ_{1..i-1} ⋈ z⁻¹(i)
@@ -45,6 +43,7 @@ class IncrementalGenericJoin(val extenders: List<IncrementalPrefixExtender>, val
                     // WCOJ anchored step in Δᵢ
                     var tempDelta = currentDelta
                     for (k in 0 until j) {
+                        if (tempDelta.isEmpty()) break
                         tempDelta = participatingExtenders[k].intersectZ1(prefix, tempDelta)
                     }
 
