@@ -83,7 +83,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         fun recurse(current: IZSet<*, W, *>, prefix: Prefix) {
             when (current) {
                 is IndexedZSet<*, W> -> {
-                    for ((key, inner) in current.entries()) {
+                    for ((key, inner) in current.data.entries) {
                         val newPrefix = prefix + key
                         recurse(inner, newPrefix as Prefix)
                     }
@@ -144,10 +144,11 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     }
 
     /**
-     * Get all entries (key-IZSet pairs) in this indexed Z-set.
+     * Get all entries with a weight of ONE in this indexed Z-set.
      */
-    fun entries(): Set<Map.Entry<K, IZSet<*, W, *>>> {
-        return data.entries
+    override fun entries(): Set<Map.Entry<K, W>> {
+        // TODO this might not be efficient
+        return data.keys.associateWith { one }.entries
     }
 
     /**

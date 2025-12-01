@@ -1,7 +1,6 @@
 package org.hooray.incremental
 
 import org.hooray.algo.Extension
-import org.hooray.algo.Prefix
 
 /**
  * A Z-set is a collection where each value has an associated integer weight.
@@ -32,7 +31,7 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Get all entries (value-weight pairs) in this Z-set.
      */
-    fun entries(): Set<Map.Entry<K, W>> {
+    override fun entries(): Set<Map.Entry<K, W>> {
         return data.entries
     }
 
