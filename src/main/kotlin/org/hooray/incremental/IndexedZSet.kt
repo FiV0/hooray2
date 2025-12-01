@@ -41,16 +41,63 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      * @return The value at the end of the path, or null if not found
      */
     @Suppress("UNCHECKED_CAST")
-    fun getByPrefix(prefix: Prefix): Any? {
-        TODO("Not yet implemented")
-     }
-
-    fun extendLeaves(mapFn: (Prefix, W) -> IZSet<*, W, *>): IndexedZSet<K, W> {
-        TODO("Not yet implemented")
+    fun getByPrefix(prefix: Prefix): ZSet<K, W>? {
+        TODO()
     }
 
-    fun forEachLeaf(mapFn: (Prefix, W) -> Unit): IndexedZSet<K, W> {
-        TODO("Not yet implemented")
+    @Suppress("UNCHECKED_CAST")
+    private fun extendLeavesStar(prefix: Prefix, mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W> {
+        // TODO optimize and get rid of casts
+        val result = mutableMapOf<K, IZSet<*, W, *>>()
+        for ((key, inner) in data) {
+            val extendedInner = when (inner) {
+                is IndexedZSet<*, W> -> {
+                    (inner as IndexedZSet<K, W>).extendLeavesStar((prefix + key) as Prefix, mapFn)
+                }
+                is ZSet<*, W> -> {
+                    val newInner = mutableMapOf<K, ZSet<K, W>>()
+                    for ((value, weight) in inner.entries()) {
+                        val extension = mapFn((prefix + value) as Prefix, weight)
+                        if (!extension.isEmpty()) {
+                            newInner[value as K] = extension
+                        }
+                    }
+                    fromMap(newInner, zero, one)
+                }
+                else -> throw IllegalStateException("Unexpected IZSet type: ${inner::class}")
+            }
+            if (!extendedInner.isEmpty()) {
+                result[key] = extendedInner
+            }
+        }
+        return IndexedZSet(result, zero, one)
+    }
+
+    fun extendLeaves(mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W> =
+        extendLeavesStar(emptyList(), mapFn)
+
+    @Suppress("UNCHECKED_CAST")
+    fun forEachLeaf(mapFn: (Prefix, W) -> Unit) {
+        // TODO optimize and get rid of casts
+        // Likely something on the stack instead of heap
+        fun recurse(current: IZSet<*, W, *>, prefix: Prefix) {
+            when (current) {
+                is IndexedZSet<*, W> -> {
+                    for ((key, inner) in current.entries()) {
+                        val newPrefix = prefix + key
+                        recurse(inner, newPrefix as Prefix)
+                    }
+                }
+                is ZSet<*, W> -> {
+                    for ((key, weight: W) in current.entries()) {
+                        mapFn((prefix + key) as Prefix, weight)
+                    }
+                }
+                else -> throw IllegalStateException("Unexpected IZSet type: ${current::class}")
+            }
+        }
+
+        recurse(this, emptyList())
     }
 
     /**

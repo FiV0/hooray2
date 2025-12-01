@@ -608,6 +608,189 @@ class IndexedZSetTest {
         assertTrue(str.contains("a"))
     }
 
+    // ========== forEachLeaf Tests ==========
+
+    @Test
+    fun `test forEachLeaf on simple IndexedZSet`() {
+        val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(1), "b" to IntegerWeight(2)))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        indexed.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.any { it.first == listOf("key", "a") && it.second == IntegerWeight(1) })
+        assertTrue(collected.any { it.first == listOf("key", "b") && it.second == IntegerWeight(2) })
+    }
+
+    @Test
+    fun `test forEachLeaf on nested IndexedZSet`() {
+        // Create 3-level structure: {1 -> {:name -> {"John" -> 1, "Jane" -> 2}}}
+        val nameValues = ZSet.fromMap(mapOf("John" to IntegerWeight(1), "Jane" to IntegerWeight(2)))
+        val attributes = IndexedZSet.singleton(":name", nameValues, IntegerWeight.ZERO, IntegerWeight.ONE)
+        val entities = IndexedZSet.singleton(1, attributes, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        entities.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.any { it.first == listOf(1, ":name", "John") && it.second == IntegerWeight(1) })
+        assertTrue(collected.any { it.first == listOf(1, ":name", "Jane") && it.second == IntegerWeight(2) })
+    }
+
+    @Test
+    fun `test forEachLeaf on empty IndexedZSet`() {
+        val empty = IndexedZSet.empty<String, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        empty.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertTrue(collected.isEmpty())
+    }
+
+    @Test
+    fun `test forEachLeaf with multiple keys at each level`() {
+        val zset1 = ZSet.fromMap(mapOf(1 to IntegerWeight(1)))
+        val zset2 = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
+        val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        indexed.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.any { it.first == listOf("a", 1) && it.second == IntegerWeight(1) })
+        assertTrue(collected.any { it.first == listOf("b", 2) && it.second == IntegerWeight(2) })
+    }
+
+    // ========== extendLeaves Tests ==========
+
+    @Test
+    fun `test extendLeaves on simple IndexedZSet`() {
+        val zset = ZSet.fromMap(mapOf("x" to IntegerWeight(1)))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = indexed.extendLeaves { prefix, weight ->
+            // Extend each leaf with a new ZSet based on the prefix
+            ZSet.singleton("extended-${prefix.last()}", weight)
+        }
+
+        // The result should have depth 3 now (key -> x -> extended-x)
+        assertEquals(3, extended.depth())
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        extended.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(1, collected.size)
+        assertEquals(listOf("key", "x", "extended-x"), collected[0].first)
+        assertEquals(IntegerWeight(1), collected[0].second)
+    }
+
+    @Test
+    fun `test extendLeaves with multiple leaves`() {
+        val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(1), "b" to IntegerWeight(2)))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = indexed.extendLeaves { prefix, weight ->
+            // Each leaf gets extended with its own value
+            ZSet.singleton("child-${prefix.last()}", weight)
+        }
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        extended.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.any { it.first == listOf("key", "a", "child-a") && it.second == IntegerWeight(1) })
+        assertTrue(collected.any { it.first == listOf("key", "b", "child-b") && it.second == IntegerWeight(2) })
+    }
+
+    @Test
+    fun `test extendLeaves on nested IndexedZSet`() {
+        // Create 3-level structure: {"entity" -> {":name" -> {"John" -> 1}}}
+        val nameValues = ZSet.singleton("John", IntegerWeight.ONE)
+        val attributes = IndexedZSet.singleton(":name", nameValues, IntegerWeight.ZERO, IntegerWeight.ONE)
+        val entities = IndexedZSet.singleton("entity", attributes, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = entities.extendLeaves { prefix, weight ->
+            ZSet.singleton("extended", weight)
+        }
+
+        // Should now be 4 levels deep
+        assertEquals(4, extended.depth())
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        extended.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(1, collected.size)
+        assertEquals(listOf("entity", ":name", "John", "extended"), collected[0].first)
+    }
+
+    @Test
+    fun `test extendLeaves with empty extension filters out`() {
+        val zset = ZSet.fromMap(mapOf("keep" to IntegerWeight(1), "remove" to IntegerWeight(2)))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = indexed.extendLeaves { prefix, weight ->
+            if (prefix.last() == "keep") {
+                ZSet.singleton("child", weight)
+            } else {
+                ZSet.empty()  // Empty extension should be filtered
+            }
+        }
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        extended.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(1, collected.size)
+        assertEquals(listOf("key", "keep", "child"), collected[0].first)
+    }
+
+    @Test
+    fun `test extendLeaves on empty IndexedZSet`() {
+        val empty = IndexedZSet.empty<String, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = empty.extendLeaves { _, weight ->
+            ZSet.singleton("child", weight)
+        }
+
+        assertTrue(extended.isEmpty())
+    }
+
+    @Test
+    fun `test extendLeaves preserves weights`() {
+        val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(5), "b" to IntegerWeight(-3)))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = indexed.extendLeaves { _, weight ->
+            // Pass through the weight
+            ZSet.singleton("child", weight)
+        }
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        extended.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.any { it.first == listOf("key", "a", "child") && it.second == IntegerWeight(5) })
+        assertTrue(collected.any { it.first == listOf("key", "b", "child") && it.second == IntegerWeight(-3) })
+    }
+
+    @Test
+    fun `test extendLeaves with multiple children per leaf`() {
+        val zset = ZSet.singleton("parent", IntegerWeight.ONE)
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val extended = indexed.extendLeaves { _, _ ->
+            // Each leaf gets multiple children
+            ZSet.fromMap(mapOf("child1" to IntegerWeight(1), "child2" to IntegerWeight(2)))
+        }
+
+        val collected = mutableListOf<Pair<List<Any?>, IntegerWeight>>()
+        extended.forEachLeaf { prefix, weight -> collected.add(prefix to weight) }
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.any { it.first == listOf("key", "parent", "child1") && it.second == IntegerWeight(1) })
+        assertTrue(collected.any { it.first == listOf("key", "parent", "child2") && it.second == IntegerWeight(2) })
+    }
+
     // ========== Arbitrary Depth Nesting Tests ==========
 
     @Test
