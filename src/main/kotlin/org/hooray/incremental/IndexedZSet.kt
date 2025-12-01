@@ -42,7 +42,35 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      */
     @Suppress("UNCHECKED_CAST")
     fun getByPrefix(prefix: Prefix): ZSet<K, W> {
-        TODO()
+        if (prefix.isEmpty()) {
+            throw IllegalArgumentException("Prefix cannot be empty")
+        }
+        val firstKey = prefix[0] as K
+        val inner = data[firstKey] ?: return ZSet.empty(zero)
+
+        return if (prefix.size == 1) {
+            when (inner) {
+                is ZSet<*, *> -> {
+                    inner as ZSet<K, W>
+                }
+                is IndexedZSet<*, W> -> {
+                    inner.toZSetView() as ZSet<K, W>
+                }
+                else -> {
+                    throw IllegalArgumentException("Expected ZSet at the end of prefix, found ${inner::class}")
+                }
+            }
+        } else {
+            // Recursive case: inner must be an IndexedZSet
+            val remainingPrefix = prefix.drop(1)
+            when (inner) {
+                is IndexedZSet<*, W> ->
+                    inner.getByPrefix(remainingPrefix) as ZSet<K, W>
+                else -> {
+                    throw IllegalArgumentException("Expected IndexedZSet for intermediate prefix, found ${inner::class}")
+                }
+            }
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -341,6 +369,13 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         this.forEachLeaf { resultTuple, weight -> resultMap[resultTuple] = weight }
         return ZSet.fromMap(resultMap, zero)
     }
+
+    // TODO this is not efficient (not a view)
+    fun toZSetView(): ZSet<K, W> =
+        ZSet.fromMap(
+            data.keys.associateWith { one },
+            zero
+        )
 
     companion object {
         /**
