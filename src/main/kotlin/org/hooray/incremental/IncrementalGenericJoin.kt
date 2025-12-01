@@ -12,6 +12,32 @@ interface ZSetPrefixExtender {
     fun count(prefix: Prefix): Int
     fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight>
     fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>
+
+    companion object {
+        fun fromZSet(zset: ZSet<Extension, IntegerWeight>): ZSetPrefixExtender {
+            return object : ZSetPrefixExtender {
+                override fun count(prefix: Prefix): Int = zset.size
+
+                // Here we assume that if we get a simple ZSet the prefix is not relevant for constraining the index.
+                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = zset
+
+                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
+                    zset.naturalJoin(extensions)
+            }
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        fun fromIndexedZSet(indexedZSet: IndexedZSet<*, IntegerWeight>): ZSetPrefixExtender {
+            return object : ZSetPrefixExtender {
+                override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefix).size
+
+                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefix) as ZSet<Extension, IntegerWeight>
+
+                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
+                    (indexedZSet.getByPrefix(prefix) as ZSet<Extension, IntegerWeight>).naturalJoin(extensions)
+            }
+        }
+    }
 }
 
 /**

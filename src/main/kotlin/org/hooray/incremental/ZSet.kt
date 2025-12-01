@@ -1,6 +1,7 @@
 package org.hooray.incremental
 
 import org.hooray.algo.Extension
+import org.hooray.algo.Prefix
 
 /**
  * A Z-set is a collection where each value has an associated integer weight.

@@ -41,7 +41,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      * @return The value at the end of the path, or null if not found
      */
     @Suppress("UNCHECKED_CAST")
-    fun getByPrefix(prefix: Prefix): ZSet<K, W>? {
+    fun getByPrefix(prefix: Prefix): ZSet<K, W> {
         TODO()
     }
 
@@ -292,6 +292,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     override fun containsKey(ext: Any): Boolean {
         TODO("Not yet implemented")
     }
+
 
     /**
      * Join this indexed Z-set with another indexed Z-set on matching keys.
