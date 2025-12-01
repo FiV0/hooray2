@@ -287,8 +287,10 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         return "IndexedZSet(${data.entries.joinToString(", ") { "${it.key}: ${it.value}" }})"
     }
 
-    fun toFlatZSet(): ZSet<ResultTuple, IntegerWeight> {
-       TODO()
+    fun toFlatZSet(): ZSet<ResultTuple, W> {
+        val resultMap = mutableMapOf<ResultTuple, W>()
+        this.forEachLeaf { resultTuple, weight -> resultMap[resultTuple] = weight }
+        return ZSet.fromMap(resultMap, zero)
     }
 
     companion object {
