@@ -62,13 +62,13 @@ fun applyExtensions(prefix: Prefix, extensions: List<Extension>) : List<ResultTu
     return result
 }
 
-class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List<Prefix>) : Join<ResultTuple> {
+class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List<Prefix>) : Join<Prefix> {
 
     init {
         require(extenders.isNotEmpty()) { "At least one extender is required" }
     }
 
-    override fun join(): List<ResultTuple> {
+    override fun join(): List<Prefix> {
         val results = mutableListOf<ResultTuple>()
         for (prefix in prefixes) {
             val minIndex = extenders.indices.minBy { extenders[it].count(prefix) }
