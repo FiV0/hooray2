@@ -2,6 +2,7 @@ package org.hooray.incremental
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.assertThrows
 
 class IndexedZSetTest {
 
@@ -455,80 +456,61 @@ class IndexedZSetTest {
         assertEquals(2, indexed.depth())
     }
 
-//    @Test
-//    fun `test getByPrefix with single level`() {
-//        val zset = ZSet.fromCollection(listOf(1, 2, 3))
-//        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
-//
-//        val result = indexed.getByPrefix(listOf("key"))
-//
-//        assertNotNull(result)
-//        assertTrue(result is ZSet<*, *>)
-//        assertEquals(zset, result)
-//    }
-//
-//    @Test
-//    fun `test getByPrefix with empty prefix returns null`() {
-//        val zset = ZSet.fromCollection(listOf(1, 2, 3))
-//        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
-//
-//        val result = indexed.getByPrefix(emptyList())
-//
-//        assertNull(result)
-//    }
-//
-//    @Test
-//    fun `test getByPrefix with non-existent key returns null`() {
-//        val zset = ZSet.fromCollection(listOf(1, 2, 3))
-//        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
-//
-//        val result = indexed.getByPrefix(listOf("nonexistent"))
-//
-//        assertNull(result)
-//    }
-//
-//    @Test
-//    fun `test getByPrefix with nested IndexedZSet`() {
-//        // Create a 2-level nested structure
-//        // Level 2: IndexedZSet<String, Int, IntegerWeight>
-//        val level2 = ZSet.fromCollection(listOf("a", "b")).index { it }
-//
-//        // Level 3: ZSet containing the level2 IndexedZSet as a key
-//        val level3ZSet = ZSet.singleton(level2, IntegerWeight.ONE)
-//
-//        // Level 4: Top-level IndexedZSet
-//        val topLevel = IndexedZSet.singleton("top", level3ZSet, IntegerWeight.ZERO, IntegerWeight.ONE)
-//
-//        // Navigate using prefix ["top", "a"]
-//        val result = topLevel.getByPrefix(listOf("top", "a"))
-//
-//        assertNotNull(result)
-//        assertTrue(result is ZSet<*, *>)
-//    }
-//
-//    @Test
-//    fun `test getByPrefix with wrong type in prefix returns null`() {
-//        val zset = ZSet.fromCollection(listOf(1, 2, 3))
-//        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
-//
-//        // Using an Int when a String is expected
-//        val result = indexed.getByPrefix(listOf(123))
-//
-//        assertNull(result)
-//    }
-//
-//    @Test
-//    fun `test getByPrefix stops at non-IndexedZSet value`() {
-//        // Create a structure where values are not IndexedZSets
-//        val zset = ZSet.fromCollection(listOf(1, 2, 3))
-//        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
-//
-//        // Try to navigate deeper than possible
-//        val result = indexed.getByPrefix(listOf("key", "deeper"))
-//
-//        // Should return null because the values in the ZSet (1, 2, 3) are not IndexedZSets
-//        assertNull(result)
-//    }
+    @Test
+    fun `test getByPrefix with single level`() {
+        val zset = ZSet.fromCollection(listOf(1, 2, 3))
+        val indexed : IndexedZSet<Any, IntegerWeight> = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val result = indexed.getByPrefix(listOf("key"))
+
+        assertNotNull(result)
+        assertEquals(zset, result)
+    }
+
+    @Test
+    fun `test getByPrefix with empty prefix returns null`() {
+        val zset = ZSet.fromCollection(listOf(1, 2, 3))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val result = indexed.getByPrefix(emptyList())
+
+        val indexedView = ZSet.fromCollection(listOf("key"))
+
+        assertEquals(indexedView, result)
+    }
+
+    @Test
+    fun `test getByPrefix with non-existent key returns null`() {
+        val zset = ZSet.fromCollection(listOf(1, 2, 3))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val result = indexed.getByPrefix(listOf("nonexistent"))
+
+        assertEquals(ZSet.empty<IntegerWeight>(), result)
+    }
+
+    @Test
+    fun `test getByPrefix with nested IndexedZSet`() {
+        val level1 = ZSet.fromCollection(listOf("a", "b"))
+        val level2 : IndexedZSet<Any, IntegerWeight> = IndexedZSet.singleton("top", level1, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        val result1 = level2.getByPrefix(listOf("top"))
+
+        assertEquals(level1, result1)
+
+        assertThrows<IllegalArgumentException> { level2.getByPrefix(listOf("top", "a")) }
+    }
+
+    @Test
+    fun `test getByPrefix with wrong type in prefix returns null`() {
+        val zset = ZSet.fromCollection(listOf(1, 2, 3))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        // Using an Int when a String is expected
+        val result = indexed.getByPrefix(listOf(123))
+
+        assertEquals(ZSet.empty<IntegerWeight>() ,result)
+    }
 
     // ========== Integration Tests ==========
 
@@ -559,7 +541,7 @@ class IndexedZSetTest {
         val customersIndexed = customers.index { it.substringBefore(':') }
 
         val joined = ordersIndexed.join<String, String, String>(customersIndexed) { order, customer ->
-            order + "-" + customer
+            "$order-$customer"
         }
 
         assertEquals(2, joined.size)

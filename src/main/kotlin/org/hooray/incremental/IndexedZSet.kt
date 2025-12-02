@@ -42,7 +42,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     @Suppress("UNCHECKED_CAST")
     fun getByPrefix(prefix: Prefix): ZSet<K, W> {
         if (prefix.isEmpty()) {
-            throw IllegalArgumentException("Prefix cannot be empty")
+            return this.toZSetView()
         }
         val firstKey = prefix[0] as K
         val inner = data[firstKey] ?: return ZSet.empty(zero)
