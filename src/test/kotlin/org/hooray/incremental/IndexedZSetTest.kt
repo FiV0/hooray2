@@ -2,7 +2,6 @@ package org.hooray.incremental
 
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.assertThrows
 
 class IndexedZSetTest {
 
@@ -380,7 +379,7 @@ class IndexedZSetTest {
         val zset2 = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
 
         val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
-        val entries = indexed.entries()
+        val entries = indexed.keyEntries()
 
         assertEquals(2, entries.size)
         assertTrue(entries.any { it.key == "a" })

@@ -1,7 +1,5 @@
 package org.hooray.incremental
 
-import org.hooray.algo.Extension
-
 /**
  * Interface for Z-set-like structures that form a commutative group under addition.
  *
@@ -40,7 +38,7 @@ interface IZSet<K, W : Weight<W>, T : IZSet<K, W, T>> {
      * For ZSet, returns the actual weight of the key is paired.
      * For IndexedZSet, always ONE is paired.
      */
-    fun entries(): Set<Map.Entry<K, W>>
+    fun keyEntries(): Set<Map.Entry<K, W>>
 
     /**
      * Get the depth of this Z-set structure.
