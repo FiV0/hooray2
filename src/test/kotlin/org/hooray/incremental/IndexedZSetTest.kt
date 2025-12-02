@@ -12,7 +12,7 @@ class IndexedZSetTest {
         val empty = IndexedZSet.empty<String, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
         assertTrue(empty.isEmpty())
         assertEquals(0, empty.size)
-        assertNull(empty.get<Int, ZSet<Int, IntegerWeight>>("any"))
+        assertNull(empty.getTyped<Int, ZSet<Int, IntegerWeight>>("any"))
     }
 
     @Test
@@ -22,7 +22,7 @@ class IndexedZSetTest {
 
         assertEquals(1, indexed.size)
         assertFalse(indexed.isEmpty())
-        assertEquals(zset, indexed.get<Int, ZSet<Int, IntegerWeight>>("key"))
+        assertEquals(zset, indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("key"))
     }
 
     @Test
@@ -43,9 +43,9 @@ class IndexedZSetTest {
         val indexed = IndexedZSet.fromMap(map, IntegerWeight.ZERO, IntegerWeight.ONE)
 
         assertEquals(2, indexed.size)
-        assertNotNull(indexed.get<Int, ZSet<Int, IntegerWeight>>("a"))
-        assertNull(indexed.get<Int, ZSet<Int, IntegerWeight>>("b"))  // Empty ZSet filtered out
-        assertNotNull(indexed.get<Int, ZSet<Int, IntegerWeight>>("c"))
+        assertNotNull(indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("a"))
+        assertNull(indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("b"))  // Empty ZSet filtered out
+        assertNotNull(indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("c"))
     }
 
     @Test
@@ -55,14 +55,14 @@ class IndexedZSetTest {
 
         assertEquals(2, indexed.size)
 
-        val aGroup = indexed.get<String, ZSet<String, IntegerWeight>>('a')
+        val aGroup = indexed.getTyped<String, ZSet<String, IntegerWeight>>('a')
         assertNotNull(aGroup)
         assertEquals(3, aGroup!!.size)
         assertEquals(IntegerWeight(1), aGroup.weight("apple"))
         assertEquals(IntegerWeight(1), aGroup.weight("apricot"))
         assertEquals(IntegerWeight(1), aGroup.weight("avocado"))
 
-        val bGroup = indexed.get<String, ZSet<String, IntegerWeight>>('b')
+        val bGroup = indexed.getTyped<String, ZSet<String, IntegerWeight>>('b')
         assertNotNull(bGroup)
         assertEquals(1, bGroup!!.size)
         assertEquals(IntegerWeight(1), bGroup.weight("banana"))
@@ -77,11 +77,11 @@ class IndexedZSetTest {
         ))
         val indexed = zset.index { it.first() }
 
-        val aGroup = indexed.get<String, ZSet<String, IntegerWeight>>('a')!!
+        val aGroup = indexed.getTyped<String, ZSet<String, IntegerWeight>>('a')!!
         assertEquals(IntegerWeight(2), aGroup.weight("a1"))
         assertEquals(IntegerWeight(3), aGroup.weight("a2"))
 
-        val bGroup = indexed.get<String, ZSet<String, IntegerWeight>>('b')!!
+        val bGroup = indexed.getTyped<String, ZSet<String, IntegerWeight>>('b')!!
         assertEquals(IntegerWeight(5), bGroup.weight("b1"))
     }
 
@@ -91,7 +91,7 @@ class IndexedZSetTest {
         val indexed = zset.index { "same" }
 
         assertEquals(1, indexed.size)
-        val group = indexed.get<String, ZSet<String, IntegerWeight>>("same")!!
+        val group = indexed.getTyped<String, ZSet<String, IntegerWeight>>("same")!!
         assertEquals(3, group.size)
     }
 
@@ -101,9 +101,9 @@ class IndexedZSetTest {
         val indexed = zset.index { it }
 
         assertEquals(3, indexed.size)
-        assertNotNull(indexed.get<String, ZSet<String, IntegerWeight>>("a"))
-        assertNotNull(indexed.get<String, ZSet<String, IntegerWeight>>("b"))
-        assertNotNull(indexed.get<String, ZSet<String, IntegerWeight>>("c"))
+        assertNotNull(indexed.getTyped<String, ZSet<String, IntegerWeight>>("a"))
+        assertNotNull(indexed.getTyped<String, ZSet<String, IntegerWeight>>("b"))
+        assertNotNull(indexed.getTyped<String, ZSet<String, IntegerWeight>>("c"))
     }
 
     @Test
@@ -155,7 +155,7 @@ class IndexedZSetTest {
         val joined = left.join<String, String, String>(right) { l, r -> "$l-$r" }
 
         assertEquals(1, joined.size)
-        val aGroup = joined.get<String, ZSet<String, IntegerWeight>>('a')!!
+        val aGroup = joined.getTyped<String, ZSet<String, IntegerWeight>>('a')!!
         assertEquals(4, aGroup.size)  // Cartesian product: 2 * 2 = 4
         assertEquals(IntegerWeight(1), aGroup.weight("a1-a3"))
         assertEquals(IntegerWeight(1), aGroup.weight("a1-a4"))
@@ -183,7 +183,7 @@ class IndexedZSetTest {
 
         val joined = left.join<String, String, String>(right) { l, r -> "$l-$r" }
 
-        val group = joined.get<String, ZSet<String, IntegerWeight>>("key")!!
+        val group = joined.getTyped<String, ZSet<String, IntegerWeight>>("key")!!
         assertEquals(IntegerWeight(8), group.weight("x-p"))   // 2 * 4 = 8
         assertEquals(IntegerWeight(10), group.weight("x-q"))  // 2 * 5 = 10
         assertEquals(IntegerWeight(12), group.weight("y-p"))  // 3 * 4 = 12
@@ -198,9 +198,9 @@ class IndexedZSetTest {
         val joined = left.join<String, String, String>(right) { l, r -> "$l-$r" }
 
         assertEquals(1, joined.size)
-        assertNotNull(joined.get<String, ZSet<String, IntegerWeight>>('a'))
-        assertNull(joined.get<String, ZSet<String, IntegerWeight>>('b'))
-        assertNull(joined.get<String, ZSet<String, IntegerWeight>>('c'))
+        assertNotNull(joined.getTyped<String, ZSet<String, IntegerWeight>>('a'))
+        assertNull(joined.getTyped<String, ZSet<String, IntegerWeight>>('b'))
+        assertNull(joined.getTyped<String, ZSet<String, IntegerWeight>>('c'))
     }
 
     // ========== Algebraic Properties Tests ==========
@@ -216,8 +216,8 @@ class IndexedZSetTest {
         val result = indexed1.add(indexed2)
 
         assertEquals(2, result.size)
-        assertNotNull(result.get<Int, ZSet<Int, IntegerWeight>>("a"))
-        assertNotNull(result.get<Int, ZSet<Int, IntegerWeight>>("b"))
+        assertNotNull(result.getTyped<Int, ZSet<Int, IntegerWeight>>("a"))
+        assertNotNull(result.getTyped<Int, ZSet<Int, IntegerWeight>>("b"))
     }
 
     @Test
@@ -231,7 +231,7 @@ class IndexedZSetTest {
         val result = indexed1.add(indexed2)
 
         assertEquals(1, result.size)
-        val aGroup = result.get<Int, ZSet<Int, IntegerWeight>>("a")!!
+        val aGroup = result.getTyped<Int, ZSet<Int, IntegerWeight>>("a")!!
         assertEquals(2, aGroup.size)
         assertEquals(IntegerWeight(2), aGroup.weight(1))
         assertEquals(IntegerWeight(3), aGroup.weight(2))
@@ -257,7 +257,7 @@ class IndexedZSetTest {
 
         val negated = indexed.negate()
 
-        val aGroup = negated.get<Int, ZSet<Int, IntegerWeight>>("a")!!
+        val aGroup = negated.getTyped<Int, ZSet<Int, IntegerWeight>>("a")!!
         assertEquals(IntegerWeight(-3), aGroup.weight(1))
         assertEquals(IntegerWeight(2), aGroup.weight(2))
     }
@@ -280,7 +280,7 @@ class IndexedZSetTest {
 
         val result = indexed1.subtract(indexed2)
 
-        val aGroup = result.get<Int, ZSet<Int, IntegerWeight>>("a")!!
+        val aGroup = result.getTyped<Int, ZSet<Int, IntegerWeight>>("a")!!
         assertEquals(IntegerWeight(3), aGroup.weight(1))
     }
 
@@ -368,7 +368,7 @@ class IndexedZSetTest {
         val joined = left.join<String, String, String>(right) { l, _ -> l }
 
         // x*3 = 6, y*3 = -6, they map to different combined values so don't cancel
-        val group = joined.get<String, ZSet<String, IntegerWeight>>("key")!!
+        val group = joined.getTyped<String, ZSet<String, IntegerWeight>>("key")!!
         assertEquals(IntegerWeight(6), group.weight("x"))
         assertEquals(IntegerWeight(-6), group.weight("y"))
     }
@@ -564,10 +564,10 @@ class IndexedZSetTest {
 
         assertEquals(2, joined.size)
 
-        val customer1Group = joined.get<String, ZSet<String, IntegerWeight>>("customer1")!!
+        val customer1Group = joined.getTyped<String, ZSet<String, IntegerWeight>>("customer1")!!
         assertEquals(2, customer1Group.size)  // 2 orders * 1 customer = 2
 
-        val customer2Group = joined.get<String, ZSet<String, IntegerWeight>>("customer2")!!
+        val customer2Group = joined.getTyped<String, ZSet<String, IntegerWeight>>("customer2")!!
         assertEquals(1, customer2Group.size)  // 1 order * 1 customer = 1
     }
 
@@ -709,7 +709,7 @@ class IndexedZSetTest {
         val attributes = IndexedZSet.singleton(":name", nameValues, IntegerWeight.ZERO, IntegerWeight.ONE)
         val entities = IndexedZSet.singleton("entity", attributes, IntegerWeight.ZERO, IntegerWeight.ONE)
 
-        val extended = entities.extendLeaves { prefix, weight ->
+        val extended = entities.extendLeaves { _, weight ->
             ZSet.singleton("extended", weight)
         }
 
@@ -808,11 +808,11 @@ class IndexedZSetTest {
         assertEquals(3, entities.depth())
 
         // Access nested data
-        val attrs = entities.get<String, IndexedZSet<String, IntegerWeight>>(1)
+        val attrs = entities.getTyped<String, IndexedZSet<String, IntegerWeight>>(1)
         assertNotNull(attrs)
         assertEquals(1, attrs!!.size)
 
-        val names = attrs.get<String, ZSet<String, IntegerWeight>>(":name")
+        val names = attrs.getTyped<String, ZSet<String, IntegerWeight>>(":name")
         assertNotNull(names)
         assertEquals(2, names!!.size)
         assertEquals(IntegerWeight(1), names.weight("John"))
@@ -836,13 +836,13 @@ class IndexedZSetTest {
 
         // Should have one entity with two attributes
         assertEquals(1, result.size)
-        val attrs = result.get<String, IndexedZSet<String, IntegerWeight>>(1)!!
+        val attrs = result.getTyped<String, IndexedZSet<String, IntegerWeight>>(1)!!
         assertEquals(2, attrs.size)
 
-        val names = attrs.get<String, ZSet<String, IntegerWeight>>(":name")!!
+        val names = attrs.getTyped<String, ZSet<String, IntegerWeight>>(":name")!!
         assertEquals(IntegerWeight(1), names.weight("John"))
 
-        val ages = attrs.get<Any, ZSet<Any, IntegerWeight>>(":age")!!
+        val ages = attrs.getTyped<Any, ZSet<Any, IntegerWeight>>(":age")!!
         assertEquals(IntegerWeight(1), ages.weight(30))
     }
 }

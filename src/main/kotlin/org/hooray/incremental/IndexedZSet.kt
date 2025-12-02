@@ -24,7 +24,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      * Uses a safe cast, so incorrect type assumptions return null rather than throwing.
      */
     @Suppress("UNCHECKED_CAST")
-    fun <V, I : IZSet<V, W, I>> get(key: K): I? {
+    fun <V, I : IZSet<V, W, I>> getTyped(key: K): I? {
         return data[key] as? I
     }
 
@@ -320,8 +320,8 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
 
         // Find intersection of keys and perform Cartesian product for each
         for (key in keys()) {
-            val leftZSet = get<V1, ZSet<V1, W>>(key)
-            val rightZSet = other.get<V2, ZSet<V2, W>>(key)
+            val leftZSet = getTyped<V1, ZSet<V1, W>>(key)
+            val rightZSet = other.getTyped<V2, ZSet<V2, W>>(key)
 
             if (leftZSet != null && rightZSet != null) {
                 val joined = leftZSet.multiply(rightZSet, combineFunc)
