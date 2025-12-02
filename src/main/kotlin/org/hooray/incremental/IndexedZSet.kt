@@ -236,12 +236,12 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         if (inner1 is IndexedZSet<*, *> && inner2 is IndexedZSet<*, *>) {
             val i1 = inner1 as IndexedZSet<Any?, W>
             val i2 = inner2 as IndexedZSet<Any?, W>
-            return i1.add(i2) as IZSet<*, W, *>
+            return i1.add(i2)
         }
         if (inner1 is ZSet<*, *> && inner2 is ZSet<*, *>) {
             val z1 = inner1 as ZSet<Any?, W>
             val z2 = inner2 as ZSet<Any?, W>
-            return z1.add(z2) as IZSet<*, W, *>
+            return z1.add(z2)
         }
         throw IllegalStateException("Unexpected IZSet types: ${inner1::class} and ${inner2::class}")
     }
@@ -286,11 +286,11 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     private fun negateInner(inner: IZSet<*, W, *>): IZSet<*, W, *> {
         if (inner is IndexedZSet<*, *>) {
             val i = inner as IndexedZSet<Any?, W>
-            return i.negate() as IZSet<*, W, *>
+            return i.negate()
         }
         if (inner is ZSet<*, *>) {
             val z = inner as ZSet<Any?, W>
-            return z.negate() as IZSet<*, W, *>
+            return z.negate()
         }
         throw IllegalStateException("Unexpected IZSet type: ${inner::class}")
     }

@@ -26,7 +26,7 @@ class GenericIncrementalIndex(intialAccumulated: SealedIncrementalIndex, val par
     }
 
     override fun receiveDelta(delta: IndexedZSet<*, IntegerWeight>) {
-        deltaZSet = delta as IZSet<*, IntegerWeight, *>
+        deltaZSet = delta
     }
 
     @Suppress("UNCHECKED_CAST")
