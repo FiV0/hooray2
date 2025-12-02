@@ -66,7 +66,4 @@ interface IZSet<K, W : Weight<W>, T : IZSet<K, W, T>> {
      * Typically implemented as add(other.negate()).
      */
     fun subtract(other: T): T
-
-    fun filterKeys(predicate: (T) -> Boolean): ZSet<Extension, IntegerWeight>
-    fun containsKey(ext: Any): Boolean
 }

@@ -99,14 +99,6 @@ class ZSet<K, W : Weight<W>> private constructor(
         return add(other.negate())
     }
 
-    override fun filterKeys(predicate: (ZSet<K, W>) -> Boolean): ZSet<Extension, IntegerWeight> {
-        TODO("Not yet implemented")
-    }
-
-    override fun containsKey(ext: Any): Boolean {
-        TODO("Not yet implemented")
-    }
-
     /**
      * Filter to only positive weights.
      */

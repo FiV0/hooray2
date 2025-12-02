@@ -314,15 +314,6 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         return add(other.negate())
     }
 
-    override fun filterKeys(predicate: (IndexedZSet<K, W>) -> Boolean): ZSet<Extension, IntegerWeight> {
-        TODO("Not yet implemented")
-    }
-
-    override fun containsKey(ext: Any): Boolean {
-        TODO("Not yet implemented")
-    }
-
-
     /**
      * Join this indexed Z-set with another indexed Z-set on matching keys.
      * The values from matching groups are combined using the Cartesian product.
