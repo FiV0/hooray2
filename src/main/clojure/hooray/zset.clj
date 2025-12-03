@@ -24,3 +24,7 @@
 
 (defmethod print-dup IntegerWeight [z w]
   (print-method z w))
+
+(defn indexed-zset->result-set [^IndexedZSet zset]
+  (for [entry (.entries (.toFlatZSet zset))]
+    entry))

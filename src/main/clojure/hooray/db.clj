@@ -97,7 +97,7 @@
   (when (some reserved-keyword? triple)
     (throw (ex-info "Transaction contains reserved keywords" {:triple triple}))))
 
-;; TODO: propeerly support attribute schema as first class entities and initialize the db with
+;; TODO: properly support attribute schema as first class entities and initialize the db with
 ;; the attribute schema attributes
 (defn transact [{:keys [schema] :as db} tx-data]
   {:pre [(db? db)]}
