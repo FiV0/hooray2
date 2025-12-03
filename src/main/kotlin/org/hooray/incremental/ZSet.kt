@@ -183,6 +183,7 @@ class ZSet<K, W : Weight<W>> private constructor(
         /**
          * Create an empty Z-set with integer weights.
          */
+        @JvmStatic
         fun <K> empty(): ZSet<K, IntegerWeight> {
             return ZSet(emptyMap(), IntegerWeight.ZERO)
         }
@@ -190,6 +191,7 @@ class ZSet<K, W : Weight<W>> private constructor(
         /**
          * Create an empty Z-set with a specified zero weight.
          */
+        @JvmStatic
         fun <K, W : Weight<W>> empty(zero: W): ZSet<K, W> {
             return ZSet(emptyMap(), zero)
         }
@@ -197,6 +199,7 @@ class ZSet<K, W : Weight<W>> private constructor(
         /**
          * Create a Z-set from a collection, assigning weight 1 to each value.
          */
+        @JvmStatic
         fun <K> fromCollection(collection: Collection<K>): ZSet<K, IntegerWeight> {
             // Count occurrences to handle duplicates
             val counts = mutableMapOf<K, Int>()
@@ -212,6 +215,7 @@ class ZSet<K, W : Weight<W>> private constructor(
          * Create a Z-set from a map of values to weights.
          * Zero-weighted entries are automatically filtered out.
          */
+        @JvmStatic
         fun <K> fromMap(map: Map<K, IntegerWeight>): ZSet<K, IntegerWeight> {
             val data = map.filterValues { !it.isZero() }
             return ZSet(data, IntegerWeight.ZERO)
@@ -221,6 +225,7 @@ class ZSet<K, W : Weight<W>> private constructor(
          * Create a Z-set from a map of values to weights with a specified zero weight.
          * Zero-weighted entries are automatically filtered out.
          */
+        @JvmStatic
         fun <K, W : Weight<W>> fromMap(map: Map<K, W>, zero: W): ZSet<K, W> {
             val data = map.filterValues { !it.isZero() }
             return ZSet(data, zero)
@@ -229,6 +234,7 @@ class ZSet<K, W : Weight<W>> private constructor(
         /**
          * Create a Z-set with a single value and weight.
          */
+        @JvmStatic
         fun <K> singleton(key: K, weight: IntegerWeight = IntegerWeight.ONE): ZSet<K, IntegerWeight> {
             if (weight.isZero()) {
                 return empty()

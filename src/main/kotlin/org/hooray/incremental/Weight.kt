@@ -56,7 +56,9 @@ data class IntegerWeight(val value: Int) : Weight<IntegerWeight> {
     }
 
     companion object {
+        @JvmField
         val ZERO = IntegerWeight(0)
+        @JvmField
         val ONE = IntegerWeight(1)
     }
 }

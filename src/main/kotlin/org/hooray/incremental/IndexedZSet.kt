@@ -365,6 +365,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         /**
          * Create an empty indexed Z-set.
          */
+        @JvmStatic
         fun <K, W : Weight<W>> empty(
             zero: W,
             one: W
@@ -376,6 +377,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
          * Create an indexed Z-set from a map of keys to IZSets.
          * Empty IZSets are automatically filtered out.
          */
+        @JvmStatic
         fun <K, V, W : Weight<W>, I : IZSet<V, W, I>> fromMap(
             map: Map<K, I>,
             zero: W,
@@ -388,6 +390,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         /**
          * Create an indexed Z-set with a single key-IZSet pair.
          */
+        @JvmStatic
         fun <K, V, W : Weight<W>, I : IZSet<V, W, I>> singleton(
             key: K,
             inner: I,
