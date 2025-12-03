@@ -433,7 +433,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         return true
     }
 
-    override fun seq(): ISeq? = RT.seq(data)
+    override fun seq(): ISeq? = PersistentHashMap.create(data as Map<*, *>).seq()
 
     override fun valAt(key: Any?): Any? = data[key]
 
