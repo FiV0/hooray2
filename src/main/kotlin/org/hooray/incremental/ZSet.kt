@@ -1,5 +1,7 @@
 package org.hooray.incremental
 
+import clojure.lang.*
+
 /**
  * A Z-set is a collection where each value has an associated integer weight.
  * Values with zero weight are not stored (invariant).
@@ -11,7 +13,7 @@ package org.hooray.incremental
 class ZSet<K, W : Weight<W>> private constructor(
     private val data: Map<K, W>,
     private val zero: W
-) : IZSet<K, W, ZSet<K, W>>, Map<K, W> by data {
+) : IZSet<K, W, ZSet<K, W>>, IPersistentMap {
     /**
      * Get the weight of a value. Returns zero if the value is not present.
      */
@@ -178,6 +180,85 @@ class ZSet<K, W : Weight<W>> private constructor(
         }
         return ZSet(result, zero)
     }
+
+    // Associative interface implementation
+
+    @Suppress("ACCIDENTAL_OVERRIDE")
+    override fun containsKey(key: Any?): Boolean = data.containsKey(key)
+
+    override fun entryAt(key: Any?): IMapEntry? {
+        val value = data[key] ?: return null
+        return object : IMapEntry {
+            override fun key(): Any? = key
+            override fun `val`(): Any? = value
+            override val key: Any?
+                get() = key()
+            override val value: Any?
+                get() = `val`()
+
+            override fun setValue(newValue: Any?): Any? {
+                TODO("Not yet implemented")
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun assoc(key: Any?, `val`: Any?): ZSet<K, W> =
+        ZSet(data + mapOf(key as K to `val` as W), zero)
+
+    override fun assocEx(key: Any?, `val`: Any?): IPersistentMap? {
+        TODO("Not yet implemented")
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun without(key: Any?): ZSet<K, W> {
+        val newData = data - key
+        return ((if (newData.size == data.size) {
+            this
+        } else {
+            ZSet(newData, zero)
+        }) as ZSet<K, W>)
+    }
+
+    override fun count(): Int = data.size
+
+    override fun cons(o: Any?): IPersistentCollection? =
+        when (o) {
+            is IMapEntry -> this.assoc(o.key, o.`val`())
+            is IPersistentVector -> {
+                if (o.count() != 2) {
+                    throw IllegalArgumentException("Can only cons 2-element IPersistentVector to ZSet, found size: ${o.count()}")
+                }
+                val key = o.nth(0)
+                val value = o.nth(1)
+                this.assoc(key, value)
+            }
+            else -> throw IllegalArgumentException("Can only cons IMapEntry or IPersistentVector to ZSet, found: ${o?.let { it::class }}")
+        }
+
+    override fun empty(): IPersistentCollection = empty<K, W>(zero)
+
+    @Suppress("UNCHECKED_CAST")
+    override fun equiv(obj: Any?): Boolean {
+        if (this === obj) return true
+        if (obj !is ZSet<*, *>) return false
+        val zset: ZSet<K, W> = obj as ZSet<K, W>
+
+        for ((key, value) in this) {
+            if (key !in zset || zset.valAt(key) != value) {
+                return false
+            }
+        }
+        return true
+    }
+
+    override fun seq(): ISeq? = RT.seq(data)
+
+    override fun valAt(key: Any?): Any? = data[key]
+
+    override fun valAt(key: Any?, notFound: Any?): Any? = data[key] ?: notFound
+    override fun iterator(): MutableIterator<Map.Entry<K, W>> = data.entries.iterator() as MutableIterator<Map.Entry<K, W>>
+
 
     companion object {
         /**

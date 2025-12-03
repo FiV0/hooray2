@@ -1,5 +1,6 @@
 package org.hooray.incremental
 
+import clojure.lang.*
 import org.hooray.algo.Prefix
 import org.hooray.algo.ResultTuple
 
@@ -17,7 +18,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     private val data: Map<K, IZSet<*, W, *>>,
     private val zero: W,
     private val one: W
-) : IZSet<K, W, IndexedZSet<K, W>> , Map<K, IZSet<*, W, *>> by data {
+) : IZSet<K, W, IndexedZSet<K, W>>, IPersistentMap {
     /**
      * Get the IZSet associated with a key.
      * Returns null if the key is not present or if the type doesn't match.
@@ -184,6 +185,9 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     override fun isEmpty(): Boolean {
         return data.isEmpty()
     }
+
+    override val size: Int
+        get() = data.size
 
     /**
      * Flatten this indexed Z-set into a regular Z-set by combining keys and values.
@@ -361,7 +365,92 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
             zero
         )
 
+    // TODO probably good to either make the Z-set implementations immutable or find some other solution
+    @Suppress("ACCIDENTAL_OVERRIDE")
+    override fun containsKey(key: Any?): Boolean = data.containsKey(key)
+
+    override fun entryAt(key: Any?): IMapEntry? {
+        val value = data[key] ?: return null
+        return object : IMapEntry {
+            override fun key(): Any? = key
+            override fun `val`(): Any?  = value
+            override val key: Any?
+                get() = key()
+            override val value: Any?
+                get() = `val`()
+
+            override fun setValue(newValue: Any?): Any? {
+                TODO("Not yet implemented")
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun assoc(key: Any?, `val`: Any?): IndexedZSet<K, W> = IndexedZSet(data + mapOf(key as K to `val` as IZSet<*, W, *>), zero, one)
+    override fun assocEx(key: Any?, `val`: Any?): IPersistentMap {
+        TODO("Not yet implemented")
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun without(key: Any?): IndexedZSet<K,W> {
+        val newData = data - key
+        return (if (newData.size == data.size) {
+            this
+        } else {
+            IndexedZSet(newData, zero, one)
+        }) as IndexedZSet<K, W>
+    }
+
+    override fun count(): Int = data.size
+
+    override fun cons(o: Any?): IPersistentCollection? =
+        when (o) {
+            is IMapEntry -> this.assoc(o.key, o.`val`())
+            is IPersistentVector -> {
+                if (o.count() != 2) {
+                    throw IllegalArgumentException("Can only cons 2-element IPersistentVector to IndexedZSet, found size: ${o.count()}")
+                }
+                val key = o.nth(0)
+                val value = o.nth(1)
+                this.assoc(key, value)
+            }
+            else -> throw IllegalArgumentException("Can only cons IMapEntry or IPersistentVector to IndexedZSet, found: ${o?.let { it::class }}")
+        }
+
+    override fun empty(): IPersistentCollection = empty<K, W>(zero, one)
+
+    @Suppress("UNCHECKED_CAST")
+    override fun equiv(obj: Any?): Boolean {
+        if (this === obj) return true
+        if (obj !is IndexedZSet<*, *>) return false
+        val zset: IndexedZSet<K, W> = obj as IndexedZSet<K, W>
+
+        for ((key, value) in iterator()) {
+            if (key !in zset || zset.valAt(key) != value) {
+                return false
+            }
+        }
+        return true
+    }
+
+    override fun seq(): ISeq? = RT.seq(data)
+
+    override fun valAt(key: Any?): Any? = data[key]
+
+    override fun valAt(key: Any?, notFound: Any?): Any? = data[key] ?: notFound
+
+    override fun iterator(): MutableIterator<Map.Entry<K, IZSet<*, W, *>>> =
+        data.entries.iterator() as MutableIterator<Map.Entry<K, IZSet<*, W, *>>>
+
     companion object {
+        /**
+         * Create an empty indexed Z-set with integer weights.
+         */
+        @JvmStatic
+        fun <K> empty(): IndexedZSet<K, IntegerWeight> {
+            return IndexedZSet(emptyMap(), IntegerWeight.ZERO, IntegerWeight.ONE)
+        }
+
         /**
          * Create an empty indexed Z-set.
          */
