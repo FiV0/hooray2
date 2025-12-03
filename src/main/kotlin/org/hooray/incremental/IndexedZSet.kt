@@ -84,7 +84,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
                 }
                 is ZSet<*, W> -> {
                     val newInner = mutableMapOf<K, ZSet<K, W>>()
-                    for ((value, weight) in inner.keyEntries()) {
+                    for ((value, weight) in inner.entries()) {
                         val extension = mapFn((prefix + value) as Prefix, weight)
                         if (!extension.isEmpty()) {
                             newInner[value as K] = extension
@@ -117,7 +117,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
                     }
                 }
                 is ZSet<*, W> -> {
-                    for ((key, weight: W) in current.keyEntries()) {
+                    for ((key, weight: W) in current.entries()) {
                         mapFn((prefix + key) as Prefix, weight)
                     }
                 }
@@ -174,7 +174,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     /**
      * Get all entries with a weight of ONE in this indexed Z-set.
      */
-    override fun keyEntries(): Set<Map.Entry<K, W>> {
+    override fun entries(): Set<Map.Entry<K, W>> {
         // TODO this might not be efficient
         return data.keys.associateWith { one }.entries
     }
@@ -503,7 +503,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
 fun <K, V> ZSet<V, IntegerWeight>.index(keyFunc: (V) -> K): IndexedZSet<K, IntegerWeight> {
     val groups = mutableMapOf<K, MutableMap<V, IntegerWeight>>()
 
-    for ((value, weight) in this.keyEntries()) {
+    for ((value, weight) in this.entries()) {
         val key = keyFunc(value)
         val group = groups.getOrPut(key) { mutableMapOf() }
 
@@ -532,7 +532,7 @@ fun <K, V> ZSet<V, IntegerWeight>.index(keyFunc: (V) -> K): IndexedZSet<K, Integ
 fun <K, V, W : Weight<W>> ZSet<V, W>.index(keyFunc: (V) -> K, zero: W, one: W): IndexedZSet<K, W> {
     val groups = mutableMapOf<K, MutableMap<V, W>>()
 
-    for ((value, weight) in this.keyEntries()) {
+    for ((value, weight) in this.entries()) {
         val key = keyFunc(value)
         val group = groups.getOrPut(key) { mutableMapOf() }
 

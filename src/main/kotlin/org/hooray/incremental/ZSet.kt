@@ -31,7 +31,7 @@ class ZSet<K, W : Weight<W>> private constructor(
     /**
      * Get all entries (value-weight pairs) in this Z-set.
      */
-    override fun keyEntries(): Set<Map.Entry<K, W>> {
+    override fun entries(): Set<Map.Entry<K, W>> {
         return data.entries
     }
 

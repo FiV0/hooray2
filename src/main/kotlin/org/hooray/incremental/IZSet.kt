@@ -38,7 +38,7 @@ interface IZSet<K, W : Weight<W>, T : IZSet<K, W, T>> {
      * For ZSet, returns the actual weight of the key is paired.
      * For IndexedZSet, always ONE is paired.
      */
-    fun keyEntries(): Set<Map.Entry<K, W>>
+    fun entries(): Set<Map.Entry<K, W>>
 
     /**
      * Get the depth of this Z-set structure.

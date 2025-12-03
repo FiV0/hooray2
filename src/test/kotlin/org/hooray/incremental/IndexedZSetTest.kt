@@ -380,7 +380,7 @@ class IndexedZSetTest {
         val zset2 = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
 
         val indexed = IndexedZSet.fromMap(mapOf("a" to zset1, "b" to zset2), IntegerWeight.ZERO, IntegerWeight.ONE)
-        val entries = indexed.keyEntries()
+        val entries = indexed.entries()
 
         assertEquals(2, entries.size)
         assertTrue(entries.any { it.key == "a" })

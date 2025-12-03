@@ -172,7 +172,7 @@ class ZSetTest {
     @Test
     fun `test entries returns all non-zero weighted values`() {
         val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(1), "b" to IntegerWeight(2)))
-        val entries = zset.keyEntries()
+        val entries = zset.entries()
 
         assertEquals(2, entries.size)
         assertTrue(entries.any { it.key == "a" && it.value == IntegerWeight(1) })
