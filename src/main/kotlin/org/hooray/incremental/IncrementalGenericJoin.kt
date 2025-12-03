@@ -107,9 +107,11 @@ class IncrementalGenericJoin(private val relations: List<IncrementalIndex>, priv
         relations.forEachIndexed { i, rel -> rel.receiveDelta(deltas[i]) }
 
         // 2. Compute join level by level
-        var result: IndexedZSet<Any, IntegerWeight> = IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE)
+        // TODO make extendLeaves work on empty IndexedZSet
+        val participatingLevel1 = relations.filter { it.participatesInLevel(0) }
+        var result: IndexedZSet<Any, IntegerWeight> = computeLevelDelta(emptyList(), participatingLevel1).index { it }
 
-        for (level in 0 until levels) {
+        for (level in 1 until levels) {
             val participating = relations.filter { it.participatesInLevel(level) }
             result = result.extendLeaves { prefix, weight ->
                 computeLevelDelta(prefix, participating).multiply(weight)
