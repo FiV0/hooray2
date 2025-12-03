@@ -22,34 +22,37 @@
 (defrecord ZSetIndices [eav aev ave vae])
 
 (defn ->zset-indices []
-  (->ZSetIndices (empty-indexed-zset) (empty-indexed-zset) (empty-indexed-zset) (empty-indexed-zset)))
+  (->ZSetIndices empty-indexed-zset empty-indexed-zset empty-indexed-zset empty-indexed-zset))
 
-(def ^:private zset-update-in (util/create-update-in (empty-indexed-zset)))
+(def ^:private zset-update-in (util/create-update-in empty-indexed-zset))
 
 (defn index-triple [{:keys [eav schema] :as db}
                     {eav-zset :eav aev-zset :aev
                      ave-zset :ave vae-zset :vae :as zset-indices}
-                    [type e a v :as _triple]]
+                    [op e a v :as _triple]]
+  (prn [op e a v])
   (let [cardinality (t/attribute-cardinality schema a)]
-    (case [type cardinality]
-      ([:db/retract :db.cardinality/one] [:db/retract :db.cardinality/many])
+    (case [op cardinality]
+      ([:retract :db.cardinality/one] [:retract :db.cardinality/many])
       (if (-> (get-in eav [e a]) (contains? v))
         ;; TODO this might not clean up empty nested structures in the indexed zsets
         (-> zset-indices
             (assoc :eav (zset-update-in eav-zset [e a] (fnil update empty-zset) v (fnil subtraction zero) one))
             (assoc :aev (zset-update-in aev-zset [a e] (fnil update empty-zset) v (fnil subtraction zero) one))
-            (assoc :ave (zset-update-in ave-zset [a v] (fnil update empty-zset) v (fnil subtraction zero) one))
+            (assoc :ave (zset-update-in ave-zset [a v] (fnil update empty-zset) e (fnil subtraction zero) one))
             (assoc :vae (zset-update-in vae-zset [v a] (fnil update empty-zset) e (fnil subtraction zero) one)))
         zset-indices)
-      [:db/add :db.cardinality/one]
+      [:add :db.cardinality/one]
       (let [previous-v (first (get-in eav [e a]))
-            zset-indices (index-triple db zset-indices [:db/retract e a previous-v])]
+            zset-indices (if previous-v
+                           (index-triple db zset-indices [:retract e a previous-v])
+                           zset-indices)]
         (-> zset-indices
             (zset-update-in [:eav e a] (fnil update empty-zset) v (fnil addition zero) one)
             (zset-update-in [:aev a e] (fnil update empty-zset) v (fnil addition zero) one)
             (zset-update-in [:ave a v] (fnil update empty-zset) e (fnil addition zero) one)
             (zset-update-in [:vae v a] (fnil update empty-zset) e (fnil addition zero) one)))
-      [:db/add :db.cardinality/many]
+      [:add :db.cardinality/many]
       (if (-> (get-in eav [e a]) (contains? v))
         zset-indices
         (-> zset-indices
@@ -57,6 +60,14 @@
             (zset-update-in [:aev a e] (fnil update empty-zset) v (fnil addition zero) one)
             (zset-update-in [:ave a v] (fnil update empty-zset) e (fnil addition zero) one)
             (zset-update-in [:vae v a] (fnil update empty-zset) e (fnil addition zero) one))))))
+
+(defn calc-zset-indices [db-before {:keys [add retract] :as _triples-by-op}]
+  (let [triples (concat (map (fn [t] (into [:add] t)) add)
+                        (map (fn [t] (into [:retract] t)) retract))]
+    (reduce (fn [zset-indices triple]
+              (index-triple db-before zset-indices triple))
+            (->zset-indices)
+            triples)))
 
 (comment
   (def eav empty-indexed-zset)
