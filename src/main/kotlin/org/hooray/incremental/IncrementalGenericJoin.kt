@@ -104,7 +104,7 @@ class IncrementalGenericJoin(private val relations: List<IncrementalIndex>, priv
 
     override fun join(deltas: ZSetIndices): ZSet<ResultTuple, IntegerWeight> {
         // 1. Distribute deltas
-        relations.forEachIndexed { i, rel -> rel.receiveDelta(deltas) }
+        relations.forEach { rel -> rel.receiveDelta(deltas) }
 
         // 2. Compute join level by level
         // TODO make extendLeaves work on empty IndexedZSet
