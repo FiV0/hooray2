@@ -24,6 +24,9 @@ Some others that might be interesting to add for comparison.
 DBSP is a formal framework for incremental view maintenance for query languages. See https://arxiv.org/abs/2203.16684
 The folks at [Feldera](https://www.feldera.com/) are implementing it for SQL.
 The idea here is to do it for a datalog engine with an datomic-like API.
+I also couldn't find any mention of combining WCOJ with DBSP.
+So a first goal is to make Generic-Join work with DBSP and do so in a WCO way for the incoming deltas
+(modulo bugs and inefficiencies in the ZSet implementations).
 
 ## Other projects in this space
 
