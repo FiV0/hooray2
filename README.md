@@ -28,6 +28,10 @@ I also couldn't find any mention of combining WCOJ with DBSP.
 So a first goal is to make Generic-Join work with DBSP and do so in a WCO way for the incoming deltas
 (modulo bugs and inefficiencies in the ZSet implementations).
 
+I am currently using two different paths for standard queries and incremental queries.
+In Theory™ this is not necessary as you can model standard queries also as zsets (the delta is your database state),
+but this will likely have significant overhead and is making initial exploratory programming a lot harder.
+
 ## Other projects in this space
 
 ### DBSP
