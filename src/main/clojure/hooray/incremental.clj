@@ -4,11 +4,11 @@
    [hooray.query :as query]
    [hooray.transact :as t]
    [hooray.util :as util]
-   [hooray.zset]
+   [hooray.zset :as zset]
    [hooray.db :as db])
   (:import
-   (org.hooray.incremental IndexedZSet IntegerWeight ZSet)
-   (java.util.concurrent LinkedBlockingQueue)))
+   (org.hooray.incremental IndexedZSet IntegerWeight ZSet IncrementalGenericJoin ZSetIndices)
+   (org.hooray.incremental.iterator GenericIncrementalIndex)))
 
 (defn ->int-weight [i] (IntegerWeight. i))
 
@@ -25,10 +25,13 @@
 (def ^:private zero IntegerWeight/ZERO)
 (def ^:private one IntegerWeight/ONE)
 
-(defrecord ZSetIndices [eav aev ave vae])
+(defrecord ZSetIndicesClj [eav aev ave vae])
 
 (defn ->zset-indices []
-  (->ZSetIndices empty-indexed-zset empty-indexed-zset empty-indexed-zset empty-indexed-zset))
+  (->ZSetIndicesClj empty-indexed-zset empty-indexed-zset empty-indexed-zset empty-indexed-zset))
+
+(defn zset-indices-clj->kt ^ZSetIndices [{:keys [eav aev ave vae] :as _zset-indices}]
+  (ZSetIndices. eav aev ave vae))
 
 (def ^:private zset-update-in (util/create-update-in empty-indexed-zset))
 
@@ -96,24 +99,31 @@
       (zset-update-in [1 2] (fnil update empty-zset) 2 (fnil addition IntegerWeight/ZERO) (->int-weight 5))
       (zset-update-in [:foo :bar] (fnil update empty-zset) 2 (fnil addition IntegerWeight/ZERO) (->int-weight 5))))
 
-(defrecord IncrementalQuery [compiled-inc-q !queue])
+(defrecord IncrementalQuery [id query compiled-q !queue])
 
-(defn ->incremental-query [compiled-inc-q]
-  (->IncrementalQuery compiled-inc-q (LinkedBlockingQueue.)))
+(defn ->incremental-query [query compiled-q]
+  (->IncrementalQuery (random-uuid) query compiled-q (atom clojure.lang.PersistentQueue/EMPTY)))
 
-(defn compile-incremental-q [_db _query]
-  (throw (ex-info "Not implemented yet" {})))
+(defn compile-incremental-q ^IncrementalGenericJoin [db {:keys [where] :as _query}]
+  (let [zset-indices (zset-indices-clj->kt (db->zset-indices db))]
+    ;; TODO use wheres to compile
+    (throw (ex-info "Not implemented yet" {:where where}))
+    (IncrementalGenericJoin. [] 0)))
 
-(defn compute-delta! [inc-q db-before _db-after tx-data]
-  (throw (ex-info "Not implemented yet" {:inc-q inc-q :db-before db-before :tx-data tx-data})))
+(defn compute-delta! [{:keys [^IncrementalGenericJoin compiled-q !queue] :as _inc-q} db-before _db-after tx-data]
+  (let [triples-by-op (db/tx-data->triples tx-data)
+        zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
+        delta (-> (.join compiled-q zset-indices)
+                  zset/indexed-zset->result-set)]
+    (swap! !queue conj delta)))
 
 (defn query [initial-db query & args]
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (when (seq args)
     (throw (ex-info "Positional arguments not supported for incremental queries yet" {:args args})))
-  (->incremental-query (compile-incremental-q initial-db query)))
+  (->incremental-query query (compile-incremental-q initial-db query)))
 
-(comment
-  (def lbq (LinkedBlockingQueue.))
-  (.offer lbq 1)
-  (.take lbq))
+(defn pop-result! [{:keys [!queue] :as _inc-q}]
+  (let [res (peek @!queue)]
+    (swap! !queue pop)
+    res))

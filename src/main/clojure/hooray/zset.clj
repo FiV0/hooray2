@@ -25,6 +25,14 @@
 (defmethod print-dup IntegerWeight [z w]
   (print-method z w))
 
+(defn unwrap-weight [^IntegerWeight w]
+  (.getValue w))
+
 (defn indexed-zset->result-set [^IndexedZSet zset]
   (for [entry (.entries (.toFlatZSet zset))]
-    entry))
+    [(key entry) (unwrap-weight (val entry))]))
+
+(comment
+  (-> (IndexedZSet/singleton "foo" (ZSet/singleton "bar" (IntegerWeight/ONE)) IntegerWeight/ZERO IntegerWeight/ONE)
+      indexed-zset->result-set)
+  )

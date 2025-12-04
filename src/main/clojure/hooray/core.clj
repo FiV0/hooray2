@@ -51,8 +51,20 @@
        :where [[a :foo "bar"]]}
      test-db))
 
-(defn q-inc [query {:keys [!inc-qs] :as node}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Incremental queries
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn q-inc [{:keys [!inc-qs] :as node} query]
   {:pre [(node? node)]}
-  (let [{:keys [!queue] :as inc-q} (incremental/query (db node) query)]
+  (let [inc-q (incremental/query (db node) query)]
     (swap! !inc-qs assoc query inc-q)
-    !queue))
+    inc-q))
+
+(defn unregister-inc-q [{:keys [!inc-qs] :as node} {:keys [id] :as inc-q}]
+  {:pre [(node? node)]}
+  (swap! !inc-qs dissoc id)
+  node)
+
+(defn consume-delta! [inc-q]
+  (incremental/pop-result! inc-q))
