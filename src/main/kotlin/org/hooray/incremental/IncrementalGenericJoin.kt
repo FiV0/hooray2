@@ -46,7 +46,7 @@ interface ZSetPrefixExtender {
  */
 interface IncrementalIndex : LevelParticipation {
     /** Receive the delta for this transaction */
-    fun receiveDelta(delta: IndexedZSet<*, IntegerWeight>)
+    fun receiveDelta(delta: ZSetIndices)
 
     /** Merge current delta into accumulated state (call after join completes) */
     fun commit()
@@ -102,9 +102,9 @@ class IncrementalGenericJoin(private val relations: List<IncrementalIndex>, priv
     }
 
 
-    override fun join(deltas: List<IndexedZSet<Any, IntegerWeight>>): ZSet<ResultTuple, IntegerWeight> {
+    override fun join(deltas: ZSetIndices): ZSet<ResultTuple, IntegerWeight> {
         // 1. Distribute deltas
-        relations.forEachIndexed { i, rel -> rel.receiveDelta(deltas[i]) }
+        relations.forEachIndexed { i, rel -> rel.receiveDelta(deltas) }
 
         // 2. Compute join level by level
         // TODO make extendLeaves work on empty IndexedZSet

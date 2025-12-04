@@ -1,32 +1,31 @@
 package org.hooray.incremental.iterator
 
 import org.hooray.algo.Extension
+import org.hooray.algo.Prefix
 import org.hooray.incremental.IZSet
 import org.hooray.incremental.IncrementalIndex
+import org.hooray.incremental.IndexType
 import org.hooray.incremental.IndexedZSet
 import org.hooray.incremental.IntegerWeight
 import org.hooray.incremental.ZSet
+import org.hooray.incremental.ZSetIndices
 import org.hooray.incremental.ZSetPrefixExtender
+import org.hooray.incremental.getByType
 
-sealed interface SealedIncrementalIndex {
-    data class Indexed(val indexed: IndexedZSet<Any, IntegerWeight>) : SealedIncrementalIndex
-    data class Simple(val simple: ZSet<Any, IntegerWeight>) : SealedIncrementalIndex
-}
-
-class GenericIncrementalIndex(intialAccumulated: SealedIncrementalIndex, val participatesInLevel: List<Int>): IncrementalIndex {
+class GenericIncrementalIndex(val indexType: IndexType,
+                              val fixedPrefix: Prefix,
+                              initialAccumulated: IZSet<*, IntegerWeight, *>,
+                              val participatesInLevel: List<Int>): IncrementalIndex {
     var accumulatedZSet: IZSet<*, IntegerWeight, *>
     var deltaZSet: IZSet<*, IntegerWeight, *>
 
     init {
-        accumulatedZSet = when (intialAccumulated) {
-            is SealedIncrementalIndex.Indexed -> intialAccumulated.indexed
-            is SealedIncrementalIndex.Simple -> intialAccumulated.simple
-        }
+        accumulatedZSet = initialAccumulated
         deltaZSet = IndexedZSet.empty<Any, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
     }
 
-    override fun receiveDelta(delta: IndexedZSet<*, IntegerWeight>) {
-        deltaZSet = delta
+    override fun receiveDelta(delta: ZSetIndices) {
+        deltaZSet = delta.getByType(indexType).getByPrefix(fixedPrefix)
     }
 
     @Suppress("UNCHECKED_CAST")
