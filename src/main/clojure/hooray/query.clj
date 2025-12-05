@@ -239,7 +239,7 @@
     (fn [row]
       (zipmap keys-in-var-order row))))
 
-(defn- order-result-fn [find var-to-index]
+(defn order-result-fn [find var-to-index]
   (fn [row]
     (mapv (fn [var] (nth row (var-to-index var))) find)))
 
