@@ -1,5 +1,10 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+val defaultJvmArgs = listOf(
+    "-Djdk.attach.allowAttachSelf",
+    // "-Dlogback.configurationFile=${rootDir.resolve("src/testFixtures/resources/logback-test.xml")}",
+)
+
 plugins {
     // Apply the java-library plugin for API and implementation separation.
     `java-library`
@@ -51,9 +56,25 @@ tasks.test {
     }
 }
 
+
 tasks.clojureRepl {
     classpath = files(classpath, sourceSets["main"].output)
     middleware.add("cider.nrepl/cider-middleware")
+
+    forkOptions.run {
+        val jvmArgs = defaultJvmArgs.toMutableList()
+
+        if (project.hasProperty("yourkit")) {
+            jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=xtdb"
+        }
+
+        if (project.hasProperty("debugJvm")) {
+            jvmArgs += "-Xdebug"
+            jvmArgs += "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5005"
+        }
+
+        this.jvmArgs = jvmArgs
+    }
 }
 
 tasks.checkClojure {
