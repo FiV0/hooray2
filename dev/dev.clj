@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [hooray.logging :as hooray-log]))
 
+(set! *warn-on-reflection* true)
 
 (comment
 
