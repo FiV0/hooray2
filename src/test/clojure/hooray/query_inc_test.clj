@@ -8,26 +8,20 @@
 
 (t/use-fixtures :each fix/with-node)
 
-#_
-(defn with-inc-q [q]
-  (let [inc-q (h/q-inc fix/*node* q)]
-    (try
-      (fn [f] (f inc-q))
-      (finally
-        (h/unregister-inc-q fix/*node* inc-q))))
+(def ^:dynamic *inc-q* nil)
 
-  )
+(defmacro with-inc-q [q & body]
+  `(let [inc-q# (h/q-inc fix/*node* ~q)]
+     (binding [*inc-q* inc-q#]
+       (try
+         ~@body
+         (finally
+           (h/unregister-inc-q fix/*node* inc-q#))))))
 
-#_
 (deftest test-sanity-check
-  (let [inc-q (h/q-inc fix/*node* '{:find [e]
-                                    :where [[e :name "Ivan"]]})]
+  (with-inc-q '{:find [e]
+                :where [[e :name "Ivan"]]}
 
     (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
 
-    (is (= [[:db/add 1]] (h/consume-delta! inc-q)))
-
-    (h/unregister-inc-q fix/*node* inc-q)
-
-    (t/is (= #{[1]} (h/q '{:find [e]
-                           :where [[e :name "Ivan"]]} (h/db fix/*node*))))))
+    (is (= [[[1] 1]] (h/consume-delta! *inc-q*)))))
