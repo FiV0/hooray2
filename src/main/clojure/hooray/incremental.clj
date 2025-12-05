@@ -1,13 +1,15 @@
 (ns hooray.incremental
   (:require
+   [clojure.core.match :refer [match]]
    [clojure.spec.alpha :as s]
    [hooray.query :as query]
    [hooray.transact :as t]
    [hooray.util :as util]
    [hooray.zset :as zset]
-   [hooray.db :as db])
+   [hooray.db :as db]
+   [hooray.error :as err])
   (:import
-   (org.hooray.incremental IntegerWeight IncrementalJoin IncrementalGenericJoin ZSetIndices)
+   (org.hooray.incremental IntegerWeight IncrementalJoin IncrementalGenericJoin ZSetIndices IndexType)
    (org.hooray.incremental.iterator GenericIncrementalIndex)))
 
 (def zero IntegerWeight/ZERO)
@@ -33,10 +35,10 @@
       (if (-> (get-in eav [e a]) (contains? v))
         ;; TODO this might not clean up empty nested structures in the indexed zsets
         (-> zset-indices
-            (assoc :eav (zset-update-in eav-zset [e a] (fnil update zset/empty-zset) v (fnil zset/subtraction zero) one))
-            (assoc :aev (zset-update-in aev-zset [a e] (fnil update zset/empty-zset) v (fnil zset/subtraction zero) one))
-            (assoc :ave (zset-update-in ave-zset [a v] (fnil update zset/empty-zset) e (fnil zset/subtraction zero) one))
-            (assoc :vae (zset-update-in vae-zset [v a] (fnil update zset/empty-zset) e (fnil zset/subtraction zero) one)))
+            (assoc :eav (zset-update-in eav-zset [e a] (fnil update zset/empty-zset) v (fnil zset/sub zero) one))
+            (assoc :aev (zset-update-in aev-zset [a e] (fnil update zset/empty-zset) v (fnil zset/sub zero) one))
+            (assoc :ave (zset-update-in ave-zset [a v] (fnil update zset/empty-zset) e (fnil zset/sub zero) one))
+            (assoc :vae (zset-update-in vae-zset [v a] (fnil update zset/empty-zset) e (fnil zset/sub zero) one)))
         zset-indices)
       [:add :db.cardinality/one]
       (let [previous-v (first (get-in eav [e a]))
@@ -44,18 +46,18 @@
                            (index-triple db zset-indices [:retract e a previous-v])
                            zset-indices)]
         (-> zset-indices
-            (zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/addition zero) one)
-            (zset-update-in [:aev a e] (fnil update zset/empty-zset) v (fnil zset/addition zero) one)
-            (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/addition zero) one)
-            (zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/addition zero) one)))
+            (zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
+            (zset-update-in [:aev a e] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
+            (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/add zero) one)
+            (zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one)))
       [:add :db.cardinality/many]
       (if (-> (get-in eav [e a]) (contains? v))
         zset-indices
         (-> zset-indices
-            (zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/addition zero) one)
-            (zset-update-in [:aev a e] (fnil update zset/empty-zset) v (fnil zset/addition zero) one)
-            (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/addition zero) one)
-            (zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/addition zero) one))))))
+            (zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
+            (zset-update-in [:aev a e] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
+            (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/add zero) one)
+            (zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one))))))
 
 (defn db->zset-indices [{:keys [eav opts] :as _db}]
   (let [empty-db (db/->db opts)
@@ -76,8 +78,36 @@
             (->zset-indices)
             triples)))
 
-(defn compile-inc-pattern [& args]
-  (throw (ex-info "Not implemented yet" {:args args})))
+(defn compile-inc-pattern [{:keys [eav ave aev] :as _zset-indices} var-order [type pattern :as where-clause]]
+  (let [var-to-index (zipmap var-order (range))]
+    (case type
+      :triple (let [{:keys [e a v]} pattern]
+                (match [e a v]
+                  [[:constant _] [:constant _] [:constant _]]
+                  (err/unsupported-ex)
+
+                  [[:constant e-const] [:constant a-const] [:variable v-var]]
+                  (GenericIncrementalIndex. IndexType/EAV [e-const a-const]
+                                            (get-in eav [e-const a-const] zset/empty-zset)
+                                            [(get var-to-index v-var)])
+
+                  [[:variable e-var] [:constant a-const] [:constant v-const]]
+                  (GenericIncrementalIndex. IndexType/AVE [a-const v-const]
+                                            (get-in ave [a-const v-const] zset/empty-zset)
+                                            [(get var-to-index e-var)])
+
+                  [[:variable e-var] [:constant a-const] [:variable v-var]]
+                  (let [e-index (var-to-index e-var)
+                        v-index (var-to-index v-var)
+                        [index-type index participates-in-level] (if (< e-index v-index)
+                                                                   [IndexType/AEV aev [e-index v-index]]
+                                                                   [IndexType/AVE ave [v-index e-index]])]
+                    (GenericIncrementalIndex. index-type [a-const]
+                                              (get index a-const zset/empty-zset)
+                                              participates-in-level))
+
+                  :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
+      (throw (ex-info "Unknown or not yet supported where clause type" {:where-clause where-clause})))))
 
 (defn compiled-find [order-fn compiled-inner]
   (reify IncrementalJoin
@@ -85,8 +115,9 @@
       (let [inner-results (.join compiled-inner zset-indices)]
         (update-keys inner-results order-fn)))))
 
-(defn compile-query [compiled-patterns levels]
-  (IncrementalGenericJoin. compiled-patterns levels))
+(defn compile-query [order-fn compiled-patterns levels]
+  (-> (IncrementalGenericJoin. compiled-patterns levels)
+      (compiled-find order-fn)))
 
 ;; TODO unify this somehow with query/query
 (defn compile-incremental-q ^IncrementalGenericJoin [db query]
@@ -101,7 +132,7 @@
       (throw (ex-info "IN clauses not supported for incremental queries yet" {:in in})))
     (when (or (seq keys) (seq strs) (seq syms))
       (throw (ex-info "KEYS, STRS, and SYMS not supported for incremental queries yet" {:keys keys :strs strs :syms syms})))
-    (compile-query compiled-patterns (count var-order))))
+    (compile-query order-fn compiled-patterns (count var-order))))
 
 (defn compute-delta! [{:keys [^IncrementalGenericJoin compiled-q !queue] :as _inc-q} db-before _db-after tx-data]
   (let [triples-by-op (db/tx-data->triples tx-data)

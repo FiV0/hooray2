@@ -5,11 +5,14 @@
 
 (defn ->int-weight [i] (IntegerWeight. i))
 
-(defn addition [^IntegerWeight w1 ^IntegerWeight w2]
+(defn add [^IntegerWeight w1 ^IntegerWeight w2]
   (.add w1 w2))
 
-(defn subtraction [^IntegerWeight w1 ^IntegerWeight w2]
+(defn sub [^IntegerWeight w1 ^IntegerWeight w2]
   (.add w1 (.negate w2)))
+
+(defn mul [^IntegerWeight w1 ^IntegerWeight w2]
+  (.multiply w1 w2))
 
 (def empty-zset (ZSet/empty))
 
@@ -23,9 +26,9 @@
 
   (def indexed-zset (zset-update-in eav [1 2] (fnil assoc empty-zset) 3 (->int-weight 5)))
   (-> indexed-zset
-      (zset-update-in [1 2] (fnil update empty-zset) 3 (fnil addition IntegerWeight/ZERO) (->int-weight 5))
-      (zset-update-in [1 2] (fnil update empty-zset) 2 (fnil addition IntegerWeight/ZERO) (->int-weight 5))
-      (zset-update-in [:foo :bar] (fnil update empty-zset) 2 (fnil addition IntegerWeight/ZERO) (->int-weight 5))))
+      (zset-update-in [1 2] (fnil update empty-zset) 3 (fnil add IntegerWeight/ZERO) (->int-weight 5))
+      (zset-update-in [1 2] (fnil update empty-zset) 2 (fnil add IntegerWeight/ZERO) (->int-weight 5))
+      (zset-update-in [:foo :bar] (fnil update empty-zset) 2 (fnil add IntegerWeight/ZERO) (->int-weight 5))))
 
 
 (defmethod print-method ZSet [z ^java.io.Writer w]
@@ -62,7 +65,7 @@
       indexed-zset->result-set)
 
   (-> (ZSet/singleton 1 (IntegerWeight/ONE))
-      (update-vals #(* 2 %)))
+      (update-vals #(mul % (->int-weight 5))))
 
 
   )
