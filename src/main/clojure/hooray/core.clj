@@ -31,8 +31,8 @@
   (let [db-before (last @!dbs)
         db-after (last (swap! !dbs (fn [dbs]
                                      (conj dbs (db/transact db-before tx-data)))))]
-    (when (seq @!inc-qs)
-      (doseq [inc-q (vals !inc-qs)]
+    (when-let [inc-qs (seq @!inc-qs)]
+      (doseq [inc-q (vals inc-qs)]
         (incremental/compute-delta! inc-q db-before db-after tx-data)))))
 
 (defn db [{:keys [!dbs] :as node}]

@@ -61,6 +61,10 @@
   (for [entry (.entries (.toFlatZSet zset))]
     [(key entry) (unwrap-weight (val entry))]))
 
+(defn zset->result-set [^ZSet zset]
+  (for [entry (.entries zset)]
+    [(key entry) (unwrap-weight (val entry))]))
+
 (defn update-keys
   "Like clojure.core/update-keys, but for ZSets"
   [zset f]

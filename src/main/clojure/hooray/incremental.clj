@@ -109,19 +109,19 @@
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       (throw (ex-info "Unknown or not yet supported where clause type" {:where-clause where-clause})))))
 
-(defn compiled-find [order-fn compiled-inner]
+(defn compiled-find [order-fn ^IncrementalJoin compiled-inner]
   (reify IncrementalJoin
     (join [_ zset-indices]
       (let [inner-results (.join compiled-inner zset-indices)]
-        (update-keys inner-results order-fn)))))
+        (zset/update-keys inner-results order-fn)))))
 
 (defn compile-query [order-fn compiled-patterns levels]
-  (-> (IncrementalGenericJoin. compiled-patterns levels)
-      (compiled-find order-fn)))
+  (->> (IncrementalGenericJoin. compiled-patterns levels)
+       (compiled-find order-fn)))
 
 ;; TODO unify this somehow with query/query
-(defn compile-incremental-q ^IncrementalGenericJoin [db query]
-  {:pre [(s/valid? ::query query) (query/validate-query (s/conform ::query query))]}
+(defn compile-incremental-q ^IncrementalJoin [db query]
+  {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [zset-indices (zset-indices-clj->kt (db->zset-indices db))
         {:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query/query query)
         var-order (query/variable-order* where)
@@ -134,11 +134,11 @@
       (throw (ex-info "KEYS, STRS, and SYMS not supported for incremental queries yet" {:keys keys :strs strs :syms syms})))
     (compile-query order-fn compiled-patterns (count var-order))))
 
-(defn compute-delta! [{:keys [^IncrementalGenericJoin compiled-q !queue] :as _inc-q} db-before _db-after tx-data]
+(defn compute-delta! [{:keys [^IncrementalJoin compiled-q !queue] :as _inc-q} db-before _db-after tx-data]
   (let [triples-by-op (db/tx-data->triples tx-data)
         zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
         delta (-> (.join compiled-q zset-indices)
-                  zset/indexed-zset->result-set)]
+                  zset/zset->result-set)]
     (swap! !queue conj delta)))
 
 (defrecord IncrementalQuery [id query compiled-q !queue])
