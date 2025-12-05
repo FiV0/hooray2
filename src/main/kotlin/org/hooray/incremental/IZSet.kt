@@ -1,5 +1,8 @@
 package org.hooray.incremental
 
+import org.hooray.algo.Prefix
+import org.hooray.algo.ResultTuple
+
 /**
  * Interface for Z-set-like structures that form a commutative group under addition.
  *
@@ -64,4 +67,7 @@ interface IZSet<K, W : Weight<W>, T : IZSet<K, W, T>> {
      * Typically implemented as add(other.negate()).
      */
     fun subtract(other: T): T
+
+    fun extendLeaves(mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W>
+    fun flatZSet(): ZSet<ResultTuple, W>
 }

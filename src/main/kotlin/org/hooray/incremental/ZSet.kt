@@ -1,6 +1,8 @@
 package org.hooray.incremental
 
 import clojure.lang.*
+import org.hooray.algo.Prefix
+import org.hooray.algo.ResultTuple
 
 /**
  * A Z-set is a collection where each value has an associated integer weight.
@@ -97,6 +99,25 @@ class ZSet<K, W : Weight<W>> private constructor(
      */
     override fun subtract(other: ZSet<K, W>): ZSet<K, W> {
         return add(other.negate())
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun extendLeaves(mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W> {
+        val resultMap = mutableMapOf<K, ZSet<K, W>>()
+        for ((key, weight) in data) {
+            val extendedZSet = mapFn(listOf(key) as Prefix, weight)
+            resultMap[key] = extendedZSet
+        }
+        return IndexedZSet.fromMap(resultMap, zero, IntegerWeight.ONE as W)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    override fun flatZSet(): ZSet<ResultTuple, W> {
+        val result = mutableMapOf<ResultTuple, W>()
+        for ((key, weight) in data) {
+            result[listOf(key) as ResultTuple] = weight
+        }
+        return ZSet(result, zero)
     }
 
     /**

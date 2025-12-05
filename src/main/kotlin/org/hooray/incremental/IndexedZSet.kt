@@ -101,7 +101,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         return IndexedZSet(result, zero, one)
     }
 
-    fun extendLeaves(mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W> =
+    override fun extendLeaves(mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W> =
         extendLeavesStar(emptyList(), mapFn)
 
     @Suppress("UNCHECKED_CAST")
@@ -352,7 +352,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         return "IndexedZSet(${data.entries.joinToString(", ") { "${it.key}: ${it.value}" }})"
     }
 
-    fun toFlatZSet(): ZSet<ResultTuple, W> {
+    override fun flatZSet(): ZSet<ResultTuple, W> {
         val resultMap = mutableMapOf<ResultTuple, W>()
         this.forEachLeaf { resultTuple, weight -> resultMap[resultTuple] = weight }
         return ZSet.fromMap(resultMap, zero)
