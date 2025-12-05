@@ -1,4 +1,5 @@
 (ns hooray.zset
+  (:refer-clojure :exclude [update-keys update-vals])
   (:require [clojure.core-print]
             [clojure.set])
   (:import (org.hooray.incremental ZSet IndexedZSet IntegerWeight)))
@@ -60,6 +61,24 @@
   (for [entry (.entries (.toFlatZSet zset))]
     [(key entry) (unwrap-weight (val entry))]))
 
+(defn update-keys
+  "Like clojure.core/update-keys, but for ZSets"
+  [zset f]
+  (reduce-kv (fn [acc k v] (assoc acc (f k) v))
+             (if (instance? ZSet zset)
+               empty-zset
+               empty-indexed-zset)
+             zset))
+
+(defn update-vals
+  "Like clojure.core/update-vals, but for ZSets"
+  [zset f]
+  (reduce-kv (fn [acc k v] (assoc acc k (f v)))
+             (if (instance? ZSet zset)
+               empty-zset
+               empty-indexed-zset)
+             zset))
+
 (comment
   (-> (IndexedZSet/singleton "foo" (ZSet/singleton "bar" (IntegerWeight/ONE)) IntegerWeight/ZERO IntegerWeight/ONE)
       indexed-zset->result-set)
@@ -67,5 +86,6 @@
   (-> (ZSet/singleton 1 (IntegerWeight/ONE))
       (update-vals #(mul % (->int-weight 5))))
 
-
+  (-> (IndexedZSet/singleton "foo" (ZSet/singleton "bar" (IntegerWeight/ONE)) IntegerWeight/ZERO IntegerWeight/ONE)
+      (update-keys clojure.string/upper-case))
   )
