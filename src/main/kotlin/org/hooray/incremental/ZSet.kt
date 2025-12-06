@@ -120,6 +120,8 @@ class ZSet<K, W : Weight<W>> private constructor(
         return ZSet(result, zero)
     }
 
+    override fun zSetView(): ZSet<K, W> = this
+
     /**
      * Filter to only positive weights.
      */

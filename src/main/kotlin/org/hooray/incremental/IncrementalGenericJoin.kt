@@ -31,10 +31,10 @@ interface ZSetPrefixExtender {
             return object : ZSetPrefixExtender {
                 override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefix).size
 
-                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefix) as ZSet<Extension, IntegerWeight>
+                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefix).zSetView() as ZSet<Extension, IntegerWeight>
 
                 override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    (indexedZSet.getByPrefix(prefix) as ZSet<Extension, IntegerWeight>).naturalJoin(extensions)
+                    (indexedZSet.getByPrefix(prefix).zSetView() as ZSet<Extension, IntegerWeight>).naturalJoin(extensions)
             }
         }
     }

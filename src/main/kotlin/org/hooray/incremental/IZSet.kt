@@ -70,4 +70,5 @@ interface IZSet<K, W : Weight<W>, T : IZSet<K, W, T>> {
 
     fun extendLeaves(mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W>
     fun flatZSet(): ZSet<ResultTuple, W>
+    fun zSetView(): ZSet<K, W>
 }

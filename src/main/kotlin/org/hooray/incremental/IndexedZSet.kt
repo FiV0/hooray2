@@ -41,20 +41,20 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      * @return The value at the end of the path, or null if not found
      */
     @Suppress("UNCHECKED_CAST")
-    fun getByPrefix(prefix: Prefix): ZSet<K, W> {
+    fun getByPrefix(prefix: Prefix): IZSet<K, W, *> {
         if (prefix.isEmpty()) {
-            return this.toZSetView()
+            return this
         }
         val firstKey = prefix[0] as K
         val inner = data[firstKey] ?: return ZSet.empty(zero)
 
         return if (prefix.size == 1) {
             when (inner) {
-                is ZSet<*, *> -> {
+                is ZSet<*, W> -> {
                     inner as ZSet<K, W>
                 }
                 is IndexedZSet<*, W> -> {
-                    inner.toZSetView() as ZSet<K, W>
+                    inner as IndexedZSet<K, W>
                 }
                 else -> {
                     throw IllegalArgumentException("Expected ZSet at the end of prefix, found ${inner::class}")
@@ -65,7 +65,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
             val remainingPrefix = prefix.drop(1)
             when (inner) {
                 is IndexedZSet<*, W> ->
-                    inner.getByPrefix(remainingPrefix) as ZSet<K, W>
+                    inner.getByPrefix(remainingPrefix) as IZSet<K, W, *>
                 else -> {
                     throw IllegalArgumentException("Expected IndexedZSet for intermediate prefix, found ${inner::class}")
                 }
@@ -359,7 +359,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     }
 
     // TODO this is not efficient (not a view)
-    fun toZSetView(): ZSet<K, W> =
+    override fun zSetView(): ZSet<K, W> =
         ZSet.fromMap(
             data.keys.associateWith { one },
             zero
