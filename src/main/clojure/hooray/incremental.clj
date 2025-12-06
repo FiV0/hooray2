@@ -103,7 +103,7 @@
                                                                    [IndexType/AEV aev [e-index v-index]]
                                                                    [IndexType/AVE ave [v-index e-index]])]
                     (GenericIncrementalIndex. index-type [a-const]
-                                              (get index a-const zset/empty-zset)
+                                              (get index a-const zset/empty-indexed-zset)
                                               participates-in-level))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))

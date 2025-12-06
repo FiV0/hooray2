@@ -55,7 +55,7 @@
         :where [[e :name "Ivan"]
                 [e :name name]]}
 
-    (t/is (= [[[:ivan] 1]] (h/consume-delta! *inc-q*))))
+    (t/is (= [[["Ivan"] 1]] (h/consume-delta! *inc-q*))))
 
 
 
