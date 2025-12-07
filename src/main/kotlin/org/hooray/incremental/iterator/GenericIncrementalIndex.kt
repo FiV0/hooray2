@@ -44,7 +44,13 @@ class GenericIncrementalIndex(val indexType: IndexType,
     @Suppress("UNCHECKED_CAST")
     private fun indexToPrefixExtender(zset: IZSet<*, IntegerWeight, *>) : ZSetPrefixExtender  {
         return when (zset) {
-            is IndexedZSet<*, IntegerWeight> -> ZSetPrefixExtender.fromIndexedZSet(zset)
+            is IndexedZSet<*, IntegerWeight> ->  {
+                val prefixExtracter: (Prefix) -> Prefix = { prefix ->
+                    // TODO make this fast
+                    prefix.filterIndexed { index, _ -> participatesInLevel.contains(index) }
+                }
+                ZSetPrefixExtender.fromIndexedZSet(zset, prefixExtracter)
+            }
             // here we assume that simple ZSets are not prefix dependent
             is ZSet<*, IntegerWeight> -> ZSetPrefixExtender.fromZSet(zset as ZSet<Extension, IntegerWeight>)
             else -> throw IllegalArgumentException("Unsupported IZSet type ${zset::class}")

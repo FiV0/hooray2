@@ -27,14 +27,16 @@ interface ZSetPrefixExtender {
         }
 
         @Suppress("UNCHECKED_CAST")
-        fun fromIndexedZSet(indexedZSet: IndexedZSet<*, IntegerWeight>): ZSetPrefixExtender {
+        // The prefix might contain more variables than the index participates in, so we need a way to extract the relevant part.
+        // TODO This constant prefix extraction will definitely cost us here.
+        fun fromIndexedZSet(indexedZSet: IndexedZSet<*, IntegerWeight>, prefixExtracter: (Prefix) -> Prefix): ZSetPrefixExtender {
             return object : ZSetPrefixExtender {
-                override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefix).size
+                override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefixExtracter(prefix)).size
 
-                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefix).zSetView() as ZSet<Extension, IntegerWeight>
+                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>
 
                 override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    (indexedZSet.getByPrefix(prefix).zSetView() as ZSet<Extension, IntegerWeight>).naturalJoin(extensions)
+                    (indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>).naturalJoin(extensions)
             }
         }
     }
@@ -114,6 +116,7 @@ class IncrementalGenericJoin(private val relations: List<IncrementalIndex>, priv
         for (level in 1 until levels) {
             val participating = relations.filter { it.participatesInLevel(level) }
             result = result.extendLeaves { prefix, weight ->
+                require(prefix.size == level) { "Prefix size ${prefix.size} does not match current level $level" }
                 computeLevelDelta(prefix, participating).multiply(weight)
             }
         }

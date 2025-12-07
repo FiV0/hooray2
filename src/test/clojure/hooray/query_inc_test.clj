@@ -55,40 +55,7 @@
         :where [[e :name "Ivan"]
                 [e :name name]]}
 
-    (t/is (= [[["Ivan"] 1]] (h/consume-delta! *inc-q*))))
-
-
-
-  #_#_#_#_#_#_
-
-  (t/testing "Can query using multiple terms"
-    (t/is (= #{["Ivan" "Ivanov"]} (h/q '{:find [name last-name]
-                                         :where [[e :name name]
-                                                 [e :last-name last-name]
-                                                 [e :name "Ivan"]
-                                                 [e :last-name "Ivanov"]]} (h/db fix/*node*)))))
-
-  (t/testing "Negate query based on subsequent non-matching clause"
-    (t/is (= #{} (h/q '{:find [e]
-                        :where [[e :name "Ivan"]
-                                [e :last-name "Ivanov-does-not-match"]]} (h/db fix/*node*)))))
-
-  (t/testing "Can query for multiple results"
-    (t/is (= #{["Ivan"] ["Petr"]}
-             (h/q '{:find [name] :where [[e :name name]]} (h/db fix/*node*)))))
-
-  (h/transact fix/*node* [{:db/id :smith :name "Smith" :last-name "Smith"}])
-
-  (t/testing "Can query across fields for same value"
-    (t/is (= #{[:smith]}
-             (h/q '{:find [p1] :where [[p1 :name name]
-                                       [p1 :last-name name]]} (h/db fix/*node*)))))
-
-  (t/testing "Can query across fields for same value when value is passed in"
-    (t/is (= #{[:smith]}
-             (h/q '{:find [p1] :where [[p1 :name name]
-                                       [p1 :last-name name]
-                                       [p1 :name "Smith"]]} (h/db fix/*node*))))))
+    (t/is (= [[["Ivan"] 1]] (h/consume-delta! *inc-q*)))))
 
 (deftest test-basic-query-2
   (t/testing "Can query entity by single field"
@@ -101,7 +68,6 @@
 
       (t/is (= [[[:ivan] 1]] (h/consume-delta! *inc-q*))))))
 
-#_
 (deftest test-basic-query-3
   (t/testing "Can query using multiple terms"
     (with-transaction-and-inc-q
@@ -114,5 +80,56 @@
                   [e :name "Ivan"]
                   [e :last-name "Ivanov"]]}
 
-      (t/is (= #{["Ivan" "Ivanov"]}
+      (t/is (= [[["Ivan" "Ivanov"] 1]]
+               (h/consume-delta! *inc-q*))))))
+
+(deftest test-basic-query-4
+  (t/testing "Negate query based on subsequent non-matching clause"
+    (with-transaction-and-inc-q
+        [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+         {:db/id :petr :name "Petr" :last-name "Petrov"}]
+
+        '{:find [e]
+          :where [[e :name "Ivan"]
+                  [e :last-name "Ivanov-does-not-match"]]}
+
+      (t/is (= [] (h/consume-delta! *inc-q*))))))
+
+(deftest test-basic-query-5
+  (t/testing "Can query for multiple results"
+    (with-transaction-and-inc-q
+        [{:db/id :ivan :name "Ivan"}
+         {:db/id :petr :name "Petr"}]
+
+        '{:find [name]
+          :where [[e :name name]]}
+
+      (t/is (= [[["Ivan"] 1]
+                [["Petr"] 1]]
+               (h/consume-delta! *inc-q*))))))
+
+(deftest test-basic-query-6
+  (t/testing "Can query across fields for same value"
+    (with-transaction-and-inc-q
+        [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+         {:db/id :petr :name "Petr" :last-name "Petrov"}
+         {:db/id :smith :name "Smith" :last-name "Smith"}]
+
+        '{:find [p1] :where [[p1 :name name]
+                             [p1 :last-name name]]}
+
+      (t/is (= [[[:smith] 1]]
+               (h/consume-delta! *inc-q*))))))
+
+(deftest test-basic-query-7
+  (t/testing "Can query across fields for same value when value is passed in"
+    (with-transaction-and-inc-q
+        [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+         {:db/id :petr :name "Petr" :last-name "Petrov"}
+         {:db/id :smith :name "Smith" :last-name "Smith"}]
+
+        '{:find [p1] :where [[p1 :name name]
+                             [p1 :last-name name]
+                             [p1 :name "Smith"]]}
+      (t/is (= [[[:smith] 1]]
                (h/consume-delta! *inc-q*))))))
