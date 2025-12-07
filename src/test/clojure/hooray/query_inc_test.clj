@@ -133,3 +133,27 @@
                              [p1 :name "Smith"]]}
       (t/is (= [[[:smith] 1]]
                (h/consume-delta! *inc-q*))))))
+
+(deftest test-basic-retractions-1
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                          {:db/id :petr :name "Petr" :last-name "Petrov"}])
+  (with-transaction-and-inc-q
+      [[:db/add :ivan :name "Ivanova"]]
+
+      '{:find [name]
+        :where [[e :name name]]}
+
+    (t/is (= [[["Ivan"] -1] [["Ivanova"] 1]]
+             (h/consume-delta! *inc-q*)))))
+
+(deftest test-basic-retractions-2
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                          {:db/id :petr :name "Petr" :last-name "Petrov"}])
+  (with-transaction-and-inc-q
+      [[:db/retractEntity :ivan]]
+
+      '{:find [name]
+        :where [[e :name name]]}
+
+    (t/is (= [[["Ivan"] -1]]
+             (h/consume-delta! *inc-q*)))))
