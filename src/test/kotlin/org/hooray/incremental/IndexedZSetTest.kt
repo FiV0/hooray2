@@ -468,19 +468,17 @@ class IndexedZSetTest {
     }
 
     @Test
-    fun `test getByPrefix with empty prefix returns null`() {
+    fun `test getByPrefix with empty prefix returns top level zset`() {
         val zset = ZSet.fromCollection(listOf(1, 2, 3))
         val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
 
         val result = indexed.getByPrefix(emptyList())
 
-        val indexedView = ZSet.fromCollection(listOf("key"))
-
-        assertEquals(indexedView, result)
+        assertEquals(indexed, result)
     }
 
     @Test
-    fun `test getByPrefix with non-existent key returns null`() {
+    fun `test getByPrefix with non-existent key returns emtpy zset`() {
         val zset = ZSet.fromCollection(listOf(1, 2, 3))
         val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
 
@@ -502,7 +500,7 @@ class IndexedZSetTest {
     }
 
     @Test
-    fun `test getByPrefix with wrong type in prefix returns null`() {
+    fun `test getByPrefix with wrong type in prefix returns empty zset`() {
         val zset = ZSet.fromCollection(listOf(1, 2, 3))
         val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
 
