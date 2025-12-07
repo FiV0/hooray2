@@ -47,6 +47,17 @@
     (instance? PersistentSortedMap (:eav db)) :btree
     :else :hash))
 
+(defn entity [db eid]
+  {:pre [(db? db)]}
+  (let [attrs (get (:eav db) eid)]
+    (when attrs
+      (reduce (fn [ent [attr vals]]
+                (assoc ent attr (if (= 1 (count vals))
+                                  (first vals)
+                                  vals)))
+              {:db/id eid}
+              attrs))))
+
 ;; TODO: Do this with transcients
 (defn index-triple-add [{:keys [eav ave vae schema] :as db} [e a v :as _triple]]
   (let [type (db->type db)

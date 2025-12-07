@@ -40,6 +40,10 @@
   ;; TODO support time travel
   (last @!dbs))
 
+(defn entity [db eid]
+  {:pre [(db/db? db)]}
+  (db/entity db eid))
+
 (defn q [query db & args]
   {:pre [(db/db? db)]}
   (query/query db query args))
