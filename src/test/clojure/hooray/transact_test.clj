@@ -89,3 +89,13 @@
   (h/transact fix/*node* [[:db/retract 2 :g/to 4]])
   (is (= #{[2 3] [2 5]} (h/q '{:find [e to]
                                :where [[e :g/to to]]} (h/db fix/*node*)))))
+
+(deftest test-retract-entity
+  (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
+  (is (= #{[1]} (h/q '{:find [e]
+                       :where [[e :name "Ivan"]]} (h/db fix/*node*))))
+
+  (h/transact fix/*node* [[:db/retractEntity 1]])
+
+  (is (= #{} (h/q '{:find [e]
+                    :where [[e :name "Ivan"]]} (h/db fix/*node*)))))

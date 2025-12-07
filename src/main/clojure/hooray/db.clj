@@ -90,14 +90,19 @@
            :ave (update-in ave [a v] disj e)
            :vae (update-in vae [v a] disj e))))
 
-(defn tx-datum->triples [tx-datum]
+(defn tx-datum->triples [db tx-datum]
   (cond
     (map? tx-datum) {:op :add :triples (map->triples tx-datum)}
     (= :db/add (first tx-datum)) {:op :add :triples [(vec (rest tx-datum))]}
-    (= :db/retract (first tx-datum)) {:op :retract :triples [(vec (rest tx-datum))]}))
+    (= :db/retract (first tx-datum)) {:op :retract :triples [(vec (rest tx-datum))]}
 
-(defn tx-data->triples [tx-data]
-  (-> (->> (map tx-datum->triples tx-data)
+    (= :db/retractEntity (first tx-datum))
+    (let [eid (second tx-datum)]
+      {:op :retract
+       :triples (map->triples (entity db eid))})))
+
+(defn tx-data->triples [db tx-data]
+  (-> (->> (map (partial tx-datum->triples db) tx-data)
            (group-by :op))
       (update-vals (fn [ops] (mapcat :triples ops)))))
 
@@ -112,7 +117,7 @@
 ;; the attribute schema attributes
 (defn transact [{:keys [schema] :as db} tx-data]
   {:pre [(db? db)]}
-  (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples tx-data)
+  (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples db tx-data)
         new-schema (cond-> schema
                      (t/schema-tx? tx-data) (t/index-schema tx-data))]
     (when-not (t/schema-tx? tx-data)

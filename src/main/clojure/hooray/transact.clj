@@ -4,9 +4,11 @@
 (s/def ::entity (s/keys :req [:db/id]))
 (s/def ::add-transaction #(and (= :db/add (first %)) (vector? %) (= 4 (count %))))
 (s/def ::retract-transaction #(and (= :db/retract (first %)) (vector? %) (= 4 (count %))))
+(s/def ::retract-entity #(and (= :db/retractEntity (first %)) (vector? %) (= 2 (count %))))
 (s/def ::transaction (s/or :map ::entity
                            :add ::add-transaction
-                           :retract ::retract-transaction))
+                           :retract ::retract-transaction
+                           :retract-entity ::retract-entity))
 (s/def ::tx-data (s/* ::transaction))
 
 (comment

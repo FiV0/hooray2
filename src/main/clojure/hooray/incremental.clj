@@ -135,7 +135,7 @@
     (compile-query order-fn compiled-patterns (count var-order))))
 
 (defn compute-delta! [{:keys [^IncrementalJoin compiled-q !queue] :as _inc-q} db-before _db-after tx-data]
-  (let [triples-by-op (db/tx-data->triples tx-data)
+  (let [triples-by-op (db/tx-data->triples db-before tx-data)
         zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
         delta (-> (.join compiled-q zset-indices)
                   zset/zset->result-set)]
