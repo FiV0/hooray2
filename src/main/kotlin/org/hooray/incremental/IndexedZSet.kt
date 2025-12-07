@@ -76,6 +76,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     @Suppress("UNCHECKED_CAST")
     private fun extendLeavesStar(prefix: Prefix, mapFn: (Prefix, W) -> ZSet<K, W>): IndexedZSet<K, W> {
         // TODO optimize and get rid of casts
+        // TODO unify this with ZSet.extendLeaves
         val result = mutableMapOf<K, IZSet<*, W, *>>()
         for ((key, inner) in data) {
             val extendedInner = when (inner) {
@@ -85,7 +86,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
                 is ZSet<*, W> -> {
                     val newInner = mutableMapOf<K, ZSet<K, W>>()
                     for ((value, weight) in inner.entries()) {
-                        val extension = mapFn((prefix + value) as Prefix, weight)
+                        val extension = mapFn((prefix + key + value) as Prefix, weight)
                         if (!extension.isEmpty()) {
                             newInner[value as K] = extension
                         }

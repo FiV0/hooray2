@@ -644,6 +644,29 @@ class IndexedZSetTest {
     // ========== extendLeaves Tests ==========
 
     @Test
+    fun `test extendLeaves prefix contains full path for depth-2 IndexedZSet`() {
+        // Depth-2 structure: IndexedZSet -> ZSet
+        // When extendLeaves is called, the prefix passed to the mapFn should be the full path
+        val zset = ZSet.fromMap(mapOf("a" to IntegerWeight(1), "b" to IntegerWeight(2)))
+        val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
+
+        // Verify this is depth 2
+        assertEquals(2, indexed.depth())
+
+        // Collect all prefixes passed to extendLeaves
+        val collectedPrefixes = mutableListOf<List<Any?>>()
+        indexed.extendLeaves { prefix, weight ->
+            collectedPrefixes.add(prefix.toList())
+            ZSet.singleton("child", weight)
+        }
+
+        // For a depth-2 IndexedZSet, the prefix should contain the full path: [key, leafValue]
+        assertEquals(2, collectedPrefixes.size)
+        assertTrue(collectedPrefixes.any { it == listOf("key", "a") })
+        assertTrue(collectedPrefixes.any { it == listOf("key", "b") })
+    }
+
+    @Test
     fun `test extendLeaves on simple IndexedZSet`() {
         val zset = ZSet.fromMap(mapOf("x" to IntegerWeight(1)))
         val indexed = IndexedZSet.singleton("key", zset, IntegerWeight.ZERO, IntegerWeight.ONE)
