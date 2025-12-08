@@ -4,8 +4,8 @@ Experiments with Datalog.
 
 The goal of this repository is to test some ideas around Datalog.
 
-The two main concepts explored in the repository are Worst-case optimal join (WCOJ) and DBSP
-, a formal framwork for incremental computation. We also try to combine the two.
+The two main concepts explored in the repository are Worst-case optimal join (WCOJ) and DBSP,
+a formal framwork for incremental computation. We also try to combine the two.
 
 ## Just show me the code already
 
@@ -61,7 +61,7 @@ Some others that might be interesting to add for comparison.
 
 ## DBSP
 
-DBSP is a formal framework for incremental view maintenance for query languages. See https://arxiv.org/abs/2203.16684
+DBSP is a formal framework for incremental view maintenance for query languages (see https://arxiv.org/abs/2203.16684)
 The folks at [Feldera](https://www.feldera.com/) are implementing it for SQL.
 The idea here is to do it for a datalog engine with an datomic-like API.
 I also couldn't find any mention of combining WCOJ with DBSP.
