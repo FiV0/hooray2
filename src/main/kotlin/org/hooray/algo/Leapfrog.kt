@@ -1,5 +1,6 @@
 package org.hooray.algo
 
+import kotlinx.collections.immutable.toPersistentList
 import org.hooray.UniversalComparator
 import org.hooray.iterator.LevelParticipation
 import java.util.Stack
@@ -157,7 +158,7 @@ class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<Res
             assert(level == candidateTuple.size) { "Level should always match candidate size. Level $level, candidate size ${candidateTuple.size}" }
             if (currentJoin.search(candidateTuple)) {
                 if (level == levels - 1) {
-                    results.add(candidateTuple.toList())
+                    results.add(candidateTuple.toPersistentList())
                     candidateTuple.removeLast()
                     currentJoin.next()
                 } else {

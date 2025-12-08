@@ -26,6 +26,7 @@ dependencies {
 
     // kotlin
     implementation(kotlin("stdlib-jdk8"))
+    implementation("org.jetbrains.kotlinx","kotlinx-collections-immutable","0.4.0")
 
     // Clojure
     implementation( "org.clojure", "clojure", "1.12.3")

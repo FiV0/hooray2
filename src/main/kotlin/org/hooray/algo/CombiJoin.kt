@@ -1,5 +1,6 @@
 package org.hooray.algo
 
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.UniversalComparator
 import org.hooray.iterator.LevelParticipation
 
@@ -74,7 +75,7 @@ class CombiJoin (val extenders: List<CombiJoinExtender>, levels: Int): Join<Resu
     }
 
     override fun join(): List<ResultTuple> {
-        var prefixes: List<Prefix> = listOf(emptyList())
+        var prefixes: List<Prefix> = listOf(persistentListOf())
         for (extenderSet in extenderSets) {
             val newPrefixes = mutableListOf<Prefix>()
             for (prefix in prefixes) {

@@ -1,5 +1,7 @@
 package org.hooray.algo
 
+import kotlinx.collections.immutable.plus
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.UniversalComparator
 import org.hooray.iterator.LevelParticipation
 
@@ -55,9 +57,7 @@ interface PrefixExtender : LevelParticipation {
 fun applyExtensions(prefix: Prefix, extensions: List<Extension>) : List<ResultTuple> {
     val result = mutableListOf<ResultTuple>()
     for(ext in extensions) {
-        val newTuple = prefix.toMutableList()
-        newTuple.add(ext)
-        result.add(newTuple)
+        result.add(prefix + ext)
     }
     return result
 }
@@ -101,7 +101,7 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
     }
 
     override fun join(): List<ResultTuple> {
-        var prefixes: List<Prefix> = listOf(emptyList())
+        var prefixes: List<Prefix> = listOf(persistentListOf())
 
         // For every level, perform a single join with the extenders participating in that level
         for (extenderSet in extenderSets) {
