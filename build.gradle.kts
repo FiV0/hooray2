@@ -9,7 +9,7 @@ plugins {
     // Apply the java-library plugin for API and implementation separation.
     `java-library`
     id("dev.clojurephant.clojure") version "0.8.0-beta.7"
-    kotlin("jvm") version "1.9.0"
+    kotlin("jvm") version "2.1.20"
 }
 
 repositories {
