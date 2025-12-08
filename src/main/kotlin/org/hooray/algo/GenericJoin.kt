@@ -71,8 +71,11 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
     override fun join(): List<Prefix> {
         val results = mutableListOf<ResultTuple>()
         for (prefix in prefixes) {
+            // For every prefix find the extender that proposes the least extensions
             val minIndex = extenders.indices.minBy { extenders[it].count(prefix) }
+            // Propose extensions from that extender
             var extensions = extenders[minIndex].propose(prefix)
+            // Intersect with all other extenders
             for (i in extenders.indices) {
                 if (i != minIndex) {
                     extensions = extenders[i].intersect(prefix, extensions)
@@ -86,6 +89,7 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
 
 class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<ResultTuple> {
 
+    // Precompute which extenders participate in which levels
     private val extenderSets : List<List<PrefixExtender>> = List(levels) { level ->
         val participants = mutableListOf<PrefixExtender>()
         for (extender in extenders) {
@@ -99,11 +103,13 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
     override fun join(): List<ResultTuple> {
         var prefixes: List<Prefix> = listOf(emptyList())
 
+        // For every level, perform a single join with the extenders participating in that level
         for (extenderSet in extenderSets) {
             val singleJoin = GenericSingleJoin(extenderSet, prefixes)
             val newTuples = singleJoin.join()
             prefixes = newTuples
         }
+        // After all levels are processed, the prefixes are the result tuples
         return prefixes
     }
 }
