@@ -4,8 +4,48 @@ Experiments with Datalog.
 
 The goal of this repository is to test some ideas around Datalog.
 
-The two main concepts are Worst-case optimal join (WCOJ) and DBSP a formal framwork for incremental computation.
-We also try to combine the two.
+The two main concepts explored in the repository are Worst-case optimal join (WCOJ) and DBSP
+, a formal framwork for incremental computation. We also try to combine the two.
+
+## Just show me the code already
+
+### Standard queries
+```clj
+(require '[hooray.core :as h])
+
+(def node (h/connect {:type :mem :storage :hash :algo :generic}))
+
+(h/transact node [{:db/id :ada :name "Ada" :last-name "Lovelace"}
+                  {:db/id :petr :name "Alan" :last-name "Turing"}])
+
+(h/q '{:find [name]
+       :where [[?e :name name]
+               [?e :last-name "Lovelace"]]}
+     (h/db node))
+;; => #{["Ada"]}
+```
+
+### Incremental queries
+```clj
+(with-open [node (h/connect {:type :mem :storage :hash :algo :generic})]
+
+  (h/transact node [{:db/id :adam :name "Adam"}])
+
+  (let [inc-q (h/q-inc node
+                       '{:find [name]
+                         :where [[?e :name name]]})]
+
+    (try
+      (h/transact node [{:db/id :ada :name "Ada"}
+                        {:db/id :alan :name "Alan"}
+                        [:db/retractEntity :adam]])
+
+      (h/consume-delta! inc-q)
+
+      (finally
+        (h/unregister-inc-q node inc-q)))))
+;; => ([["Ada"] 1] [["Alan"] 1] [["Adam"] -1])
+```
 
 ## Join Algorithms
 
@@ -32,11 +72,14 @@ I am currently using two different paths for standard queries and incremental qu
 In Theory™ this is not necessary as you can model standard queries also as zsets (the delta is your database state),
 but this will likely have significant overhead and is making initial exploratory programming a lot harder.
 
+
 ## Other projects in this space
 
-### DBSP
+### DBSP / incremental computation
 - [zsxf](https://github.com/saberstack/zsxf) - WIP Datomic API for DBSP, uses transducers for everything
+- [relic](https://github.com/wotbrew/relic) - Incremental relational programming based on the [Out of the tar pit](https://curtclifton.net/papers/MoseleyMarks06a.pdf) paper
 - [wizard](https://github.com/jumraiya/wizard) - IVM for Datascript - hooks into datascript
+
 
 ### Datalog engines
 - [datascript](https://github.com/tonsky/datascript) - Immutable database and Datalog query engine for Clojure, ClojureScript and JS
