@@ -69,7 +69,7 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
     }
 
     override fun join(): List<Prefix> {
-        val results = mutableListOf<ResultTuple>()
+        val results = mutableListOf<Prefix>()
         for (prefix in prefixes) {
             // For every prefix find the extender that proposes the least extensions
             val minIndex = extenders.indices.minBy { extenders[it].count(prefix) }
