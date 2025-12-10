@@ -19,7 +19,8 @@ class GenericPrefixExtenderNot(val children: List<PrefixExtender>, val level: In
         val filteredExtensions = mutableListOf<Extension>()
         for (extension in extensions) {
             val resultTuple = prefix + extension
-            val tuplePrefixExtender = PrefixExtender.createTupleExtender(prefix + extension)
+            // TODO one could potentially only create GenericJoin once and have something like PrefixExtender.createExtenderFromPrefix+Extensions
+            val tuplePrefixExtender = PrefixExtender.createTupleExtender(resultTuple)
             val join = GenericJoin(children + tuplePrefixExtender, resultTuple.size)
             join.join().takeIf { it.isEmpty() }?.let {
                 filteredExtensions.add(extension)
