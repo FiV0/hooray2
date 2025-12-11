@@ -254,10 +254,31 @@
   (fn [row]
     (mapv (fn [var] (nth row (var-to-index var))) find-syms)))
 
+(defn- emit-projection [[find-type find-form :as _find-arg]]
+  (case find-type
+    :variable {:logic-vars #{find-form} :code find-form}
+    :aggregate (let [{:keys [func arg]} find-form
+                     agg-sym (gensym func)]
+                 {:aggregates {agg-sym {:aggregate-fn (aggregate func)
+                                        :logic-vars #{arg}
+                                        :args [arg]}}
+                  :code agg-sym})))
+
+(defn compile-find-args [conformed-find]
+  (for [find-arg conformed-find]
+    (emit-projection find-arg)))
+
+(defn agg-find-fn [find-args]
+  (throw (err/unsupported-ex "Aggregate functions not yet supported in :find")))
+
 (defn compile-find [conformed-find var->idx]
-  (when (some (comp #{:aggregate} first) conformed-find)
-    (err/unsupported-ex "Aggregate functions not yet supported in :find"))
-  (order-result-fn (mapv second conformed-find) var->idx))
+  (let [find-args (compile-find-args conformed-find)]
+    (if-not (every? (comp empty? :aggregates) find-args)
+      (agg-find-fn find-args)
+
+      (let [order-fn (order-result-fn (mapv second conformed-find) var->idx)]
+        (fn [rows]
+          (mapv order-fn rows))))))
 
 (defn- zipmap-fn [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
@@ -277,7 +298,7 @@
                                   (map (partial compile-pattern db var-in-join-order) where))
         compiled-find (compile-find find var->idx)]
     (cond->> (join compiled-patterns (count var-in-join-order) opts)
-      true (map compiled-find)
+      true (compiled-find)
       (seq keys) (map (zipmap-fn find keys var->idx keyword))
       (seq strs) (map (zipmap-fn find strs var->idx str))
       (seq syms) (map (zipmap-fn find syms var->idx symbol))
