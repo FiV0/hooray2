@@ -12,6 +12,7 @@ open class GenericPrefixExtenderOr(val children: List<PrefixExtender>) : PrefixE
 
     override fun count(prefix: Prefix) = children.sumOf { it.count(prefix) }
 
+    // TODO this currently returns two rows if a children proposes the same extension. Currently only filtered in later stages
     override fun propose(prefix: Prefix) = children.flatMap { it.propose(prefix) }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
