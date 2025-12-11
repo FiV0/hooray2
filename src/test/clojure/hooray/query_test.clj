@@ -708,6 +708,137 @@
                 (h/db fix/*node*)))
         "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
+#_(ns-unmap *ns* 'test-aggregates)
+
+#_
+(t/deftest test-aggregates
+  (h/transact fix/*node* [{:db/id :ada, :first-name "Ada" :last-name "Lovelace" :gender :female}
+                          {:db/id :ada, :first-name "Alan" :last-name "Turing" :gender :male}])
+
+  (t/is (= #{[1]} (h/q '{:find [(count p)]
+                         :where [[p :last-name "Lovelace"]
+                                 (or [p :first-name "Ada"]
+                                     [p :gender :male])]}
+                       (h/db fix/*node*))))
+
+  (t/is (= #{[1]} (h/q '{:find [(count p)]
+                         :where [[p :last-name "Lovelace"]
+                                 (or [p :first-name "Ada"]
+                                     [p :gender :female])]}
+                       (h/db fix/*node*)))))
+
+
+#_
+(t/deftest datascript-test-aggregates
+  (let [db (xt/db *api*)]
+    #_(t/testing "with"
+        (t/is (= (d/q '[:find ?heads
+                        :with ?monster
+                        :in [[?monster ?heads]]]
+                      [["Medusa" 1]
+                       ["Cyclops" 1]
+                       ["Chimera" 1]])
+                 [[1] [1] [1]])))
+
+    ;; This is solved as XTDB performs the aggregation before turning
+    ;; it into a set.
+    #_(t/testing "Wrong grouping without :with"
+        (t/is (= (xt/q db '[:find (sum ?heads)
+                            :where [(identity [["Cerberus" 3]
+                                               ["Medusa" 1]
+                                               ["Cyclops" 1]
+                                               ["Chimera" 1]]) [[?monster ?heads]]]])
+                 #{[4]})))
+
+    (t/testing "Multiple aggregates, correct grouping with :with"
+      (t/is (= (xt/q db '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
+                          ;; :with ?monster
+                          :where [(identity [["Cerberus" 3]
+                                             ["Medusa" 1]
+                                             ["Cyclops" 1]
+                                             ["Chimera" 1]]) [[?monster ?heads]]]])
+               #{[6 1 3 4 2]})))
+
+    (t/testing "Min and max are using comparator instead of default compare"
+      ;; Wrong: using js '<' operator
+      ;; (apply min [:a/b :a-/b :a/c]) => :a-/b
+      ;; (apply max [:a/b :a-/b :a/c]) => :a/c
+      ;; Correct: use IComparable interface
+      ;; (sort compare [:a/b :a-/b :a/c]) => (:a/b :a/c :a-/b)
+      (t/is (= (xt/q db '[:find (min ?x) (max ?x)
+                          :where [(identity [:a-/b :a/b]) [?x ...]]])
+               #{[:a/b :a-/b]}))
+
+      (t/is (= (xt/q db '[:find (min 2 ?x) (max 2 ?x)
+                          :where [(identity [:a/b :a-/b :a/c]) [?x ...]]])
+               #{[[:a/b :a/c] [:a/c :a-/b]]})))
+
+    (t/testing "Grouping"
+      (t/is (= (set (xt/q db '[:find ?color (max ?x) (min ?x)
+                               :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                                                  [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red 5 1]
+                 [:blue 8 7]})))
+
+    (t/testing "Grouping and parameter passing"
+      (t/is (= (set (xt/q db '[:find ?color (max 3 ?x) (min 3 ?x)
+                               :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                                                  [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red [3 4 5] [1 2 3]]
+                 [:blue [7 8] [7 8]]})))
+
+    ;; NOTE: XTDB only support a single final logic var in aggregates.
+    #_(t/testing "Grouping and parameter passing"
+        (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
+                           :in [[?color ?x]] ?amount]
+                         [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                          [:blue 7] [:blue 8]]
+                         3))
+               #{[:red [3 4 5] [1 2 3]]
+                 [:blue [7 8] [7 8]]})))
+
+    (t/testing "avg aggregate"
+      (t/is (= (ffirst (xt/q db '[:find (avg ?x)
+                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               31)))
+
+    (t/testing "median aggregate"
+      (t/is (= (ffirst (xt/q db '[:find (median ?x)
+                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               20)))
+
+    (t/testing "variance aggregate"
+      (t/is (= (ffirst (xt/q db '[:find (variance ?x)
+                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               554.0))) ;; double
+
+    (t/testing "stddev aggregate"
+      (t/is (= (ffirst (xt/q db '[:find (stddev ?x)
+                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               23.53720459187964)))
+
+    (t/testing "distinct aggregate"
+      (t/is (= (ffirst (xt/q db '[:find (distinct ?x)
+                                  :where [(identity [:a :b :c :a :d]) [?x ...]]]))
+               #{:a :b :c :d})))
+
+    (t/testing "sample aggregate"
+      (t/is (= (count (ffirst (xt/q db '[:find (sample 7 ?x)
+                                         :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+               4)))
+
+    (t/testing "rand aggregate"
+      (t/is (= (count (ffirst (xt/q db '[:find (rand 7 ?x)
+                                         :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+               7)))
+
+    (t/testing "Custom aggregates"
+      (t/is (= (set (xt/q db '[:find ?color (sort-reverse ?x)
+                               :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                                                  [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+               #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
+
+
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
                                    #inst "1986-10-22")]
@@ -3032,120 +3163,6 @@
                              '{:find [?x]
                                :where [[(xtdb.query-test/sample-query-fn) ?x]]})))))
 
-#_(defmethod xtdb.query/aggregate 'sort-reverse [_]
-    (fn
-      ([] [])
-      ([acc] (vec (reverse (sort acc))))
-      ([acc x] (conj acc x))))
-
-#_(t/deftest datascript-test-aggregates
-    (let [db (xt/db *api*)]
-      #_(t/testing "with"
-          (t/is (= (d/q '[:find ?heads
-                          :with ?monster
-                          :in [[?monster ?heads]]]
-                        [["Medusa" 1]
-                         ["Cyclops" 1]
-                         ["Chimera" 1]])
-                   [[1] [1] [1]])))
-
-    ;; This is solved as XTDB performs the aggregation before turning
-    ;; it into a set.
-      #_(t/testing "Wrong grouping without :with"
-          (t/is (= (xt/q db '[:find (sum ?heads)
-                              :where [(identity [["Cerberus" 3]
-                                                 ["Medusa" 1]
-                                                 ["Cyclops" 1]
-                                                 ["Chimera" 1]]) [[?monster ?heads]]]])
-                   #{[4]})))
-
-      (t/testing "Multiple aggregates, correct grouping with :with"
-        (t/is (= (xt/q db '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
-                          ;; :with ?monster
-                            :where [(identity [["Cerberus" 3]
-                                               ["Medusa" 1]
-                                               ["Cyclops" 1]
-                                               ["Chimera" 1]]) [[?monster ?heads]]]])
-                 #{[6 1 3 4 2]})))
-
-      (t/testing "Min and max are using comparator instead of default compare"
-      ;; Wrong: using js '<' operator
-      ;; (apply min [:a/b :a-/b :a/c]) => :a-/b
-      ;; (apply max [:a/b :a-/b :a/c]) => :a/c
-      ;; Correct: use IComparable interface
-      ;; (sort compare [:a/b :a-/b :a/c]) => (:a/b :a/c :a-/b)
-        (t/is (= (xt/q db '[:find (min ?x) (max ?x)
-                            :where [(identity [:a-/b :a/b]) [?x ...]]])
-                 #{[:a/b :a-/b]}))
-
-        (t/is (= (xt/q db '[:find (min 2 ?x) (max 2 ?x)
-                            :where [(identity [:a/b :a-/b :a/c]) [?x ...]]])
-                 #{[[:a/b :a/c] [:a/c :a-/b]]})))
-
-      (t/testing "Grouping"
-        (t/is (= (set (xt/q db '[:find ?color (max ?x) (min ?x)
-                                 :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                                                    [:blue 7] [:blue 8]]) [[?color ?x]]]]))
-                 #{[:red 5 1]
-                   [:blue 8 7]})))
-
-      (t/testing "Grouping and parameter passing"
-        (t/is (= (set (xt/q db '[:find ?color (max 3 ?x) (min 3 ?x)
-                                 :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                                                    [:blue 7] [:blue 8]]) [[?color ?x]]]]))
-                 #{[:red [3 4 5] [1 2 3]]
-                   [:blue [7 8] [7 8]]})))
-
-    ;; NOTE: XTDB only support a single final logic var in aggregates.
-      #_(t/testing "Grouping and parameter passing"
-          (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
-                             :in [[?color ?x]] ?amount]
-                           [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                            [:blue 7] [:blue 8]]
-                           3))
-                 #{[:red [3 4 5] [1 2 3]]
-                   [:blue [7 8] [7 8]]})))
-
-      (t/testing "avg aggregate"
-        (t/is (= (ffirst (xt/q db '[:find (avg ?x)
-                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
-                 31)))
-
-      (t/testing "median aggregate"
-        (t/is (= (ffirst (xt/q db '[:find (median ?x)
-                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
-                 20)))
-
-      (t/testing "variance aggregate"
-        (t/is (= (ffirst (xt/q db '[:find (variance ?x)
-                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
-                 554.0))) ;; double
-
-      (t/testing "stddev aggregate"
-        (t/is (= (ffirst (xt/q db '[:find (stddev ?x)
-                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
-                 23.53720459187964)))
-
-      (t/testing "distinct aggregate"
-        (t/is (= (ffirst (xt/q db '[:find (distinct ?x)
-                                    :where [(identity [:a :b :c :a :d]) [?x ...]]]))
-                 #{:a :b :c :d})))
-
-      (t/testing "sample aggregate"
-        (t/is (= (count (ffirst (xt/q db '[:find (sample 7 ?x)
-                                           :where [(identity [:a :b :c :a :d]) [?x ...]]])))
-                 4)))
-
-      (t/testing "rand aggregate"
-        (t/is (= (count (ffirst (xt/q db '[:find (rand 7 ?x)
-                                           :where [(identity [:a :b :c :a :d]) [?x ...]]])))
-                 7)))
-
-      (t/testing "Custom aggregates"
-        (t/is (= (set (xt/q db '[:find ?color (sort-reverse ?x)
-                                 :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                                                    [:blue 7] [:blue 8]]) [[?color ?x]]]]))
-                 #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
 
 #_(defn allowed-fn [e] e)
 #_(defn banned-fn [e] e)

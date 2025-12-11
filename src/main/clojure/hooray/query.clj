@@ -26,6 +26,10 @@
 (s/def ::variable symbol?)
 (s/def ::constant (complement symbol?))
 
+(s/def ::aggregate (s/and list?
+                          (s/cat :func #{'count #_#_#_#_'sum 'avg 'min 'max}
+                                 :arg ::variable)))
+
 (s/def ::pattern-element (s/or :variable ::variable
                                :constant ::constant))
 
@@ -67,7 +71,8 @@
                        :or ::or-pattern))
 
 (s/def ::find (s/and vector?
-                     (s/+ ::variable)))
+                     (s/+ (s/or :variable ::variable
+                                :aggregate ::aggregate))))
 
 (s/def ::keys (s/and vector? (s/+ symbol?)))
 (s/def ::strs (s/and vector? (s/+ symbol?)))
@@ -156,7 +161,7 @@
   (validate-patterns where)
   true)
 
-(defn create-iterator [{:keys [storage algo] :as _opts} index var-order participates-in-level]
+(defn create-iterator [{:keys [storage algo] :as _opts} index var-in-join-order participates-in-level]
   (match [storage algo]
     [:hash  _]
     (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex.  index)) participates-in-level)
@@ -169,18 +174,18 @@
 
     [:avl :leapfrog]
     (AVLLeapfrogIndex. (if (set? index) (AVLIndex$AVLSetIndex. index) (AVLIndex$AVLMapIndex. index))
-                       var-order (set (for [level participates-in-level]
-                                        (nth var-order level))))
+                       var-in-join-order (set (for [level participates-in-level]
+                                                (nth var-in-join-order level))))
 
     [:btree :leapfrog]
     (err/unsupported-ex "BTrees not yet supported!")
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
-(defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-order [type pattern]]
+(defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-in-join-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
-        var-to-index (zipmap var-order (range))]
+        var-to-index (zipmap var-in-join-order (range))]
     (case type
       :triple (let [{:keys [e a v]} pattern]
                 (match [e a v]
@@ -188,31 +193,31 @@
                   (err/unsupported-ex)
 
                   [[:constant e-const] [:constant a-const] [:variable v-var]]
-                  (create-iterator opts (get-in eav [e-const a-const] empty-set) var-order [(get var-to-index v-var)])
+                  (create-iterator opts (get-in eav [e-const a-const] empty-set) var-in-join-order [(get var-to-index v-var)])
 
                   [[:variable e-var] [:constant a-const] [:constant v-const]]
-                  (create-iterator opts (get-in ave [a-const v-const] empty-set) var-order [(get var-to-index e-var)])
+                  (create-iterator opts (get-in ave [a-const v-const] empty-set) var-in-join-order [(get var-to-index e-var)])
 
                   [[:variable e-var] [:constant a-const] [:variable v-var]]
                   (let [e-index (var-to-index e-var)
                         v-index (var-to-index v-var)
                         [index participates-in-level] (if (< e-index v-index)  [aev [e-index v-index]] [ave [v-index e-index]])]
-                    (create-iterator opts (get index a-const empty-map) var-order participates-in-level))
+                    (create-iterator opts (get index a-const empty-map) var-in-join-order participates-in-level))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
-      :or (GenericPrefixExtenderOr. (mapv (partial compile-pattern db var-order) pattern))
-      :and (GenericPrefixExtenderAnd. (mapv (partial compile-pattern db var-order) pattern))
-      :not (GenericPrefixExtenderNot. (mapv (partial compile-pattern db var-order) pattern) (dec (count var-order))))))
+      :or (GenericPrefixExtenderOr. (mapv (partial compile-pattern db var-in-join-order) pattern))
+      :and (GenericPrefixExtenderAnd. (mapv (partial compile-pattern db var-in-join-order) pattern))
+      :not (GenericPrefixExtenderNot. (mapv (partial compile-pattern db var-in-join-order) pattern) (dec (count var-in-join-order))))))
 
 (defn- transpose [mtx]
   (apply mapv vector mtx))
 
-(defn- in->iterators [in var-to-index args {:keys [algo] :as _opts}]
+(defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))
     (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
   (let [create-iterator (case algo
-                          :leapfrog (fn [var args] (LeapfrogIndex/createSingleLevel args (var-to-index var)))
-                          :generic (fn [var args] (PrefixExtender/createSingleLevel args (var-to-index var))))]
+                          :leapfrog (fn [var args] (LeapfrogIndex/createSingleLevel args (var->idx var)))
+                          :generic (fn [var args] (PrefixExtender/createSingleLevel args (var->idx var))))]
     (letfn [(in->iterator [[[type var] arg]]
               (case type
                 :scale-binding [(create-iterator var [arg])]
@@ -230,6 +235,30 @@
       (->> (zipmap in args)
            (mapcat in->iterator)))))
 
+
+(defn join [compiled-patterns levels {:keys [algo] :as _opts}]
+  (let [^Join join-algo (case algo
+                          :generic (GenericJoin. compiled-patterns levels)
+                          :leapfrog (LeapfrogJoin. compiled-patterns levels))]
+    (.join join-algo)))
+
+(defmulti aggregate (fn [name & _args] name))
+
+(defmethod aggregate 'count [_]
+  (fn aggregate-count
+    (^long [] 0)
+    (^long [^long acc] acc)
+    (^long [^long acc _] (inc acc))))
+
+(defn order-result-fn [find-syms var-to-index]
+  (fn [row]
+    (mapv (fn [var] (nth row (var-to-index var))) find-syms)))
+
+(defn compile-find [conformed-find var->idx]
+  (when (some (comp #{:aggregate} first) conformed-find)
+    (err/unsupported-ex "Aggregate functions not yet supported in :find"))
+  (order-result-fn (mapv second conformed-find) var->idx))
+
 (defn- zipmap-fn [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
     (throw (IllegalArgumentException. "find and keys must have same size!")))
@@ -239,33 +268,23 @@
     (fn [row]
       (zipmap keys-in-var-order row))))
 
-(defn order-result-fn [find var-to-index]
-  (fn [row]
-    (mapv (fn [var] (nth row (var-to-index var))) find)))
-
-(defn join [compiled-patterns levels {:keys [algo] :as _opts}]
-  (let [^Join join-algo (case algo
-                          :generic (GenericJoin. compiled-patterns levels)
-                          :leapfrog (LeapfrogJoin. compiled-patterns levels))]
-    (.join join-algo)))
-
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query query)
-        var-order (variable-order* where)
-        var-to-index (zipmap var-order (range))
-        compiled-patterns (concat (in->iterators in var-to-index args opts)
-                                  (map (partial compile-pattern db var-order) where))
-        order-fn (order-result-fn find var-to-index)]
-    (cond->> (join compiled-patterns (count var-order) opts)
-      true (map order-fn)
-      (seq keys) (map (zipmap-fn find keys var-to-index keyword))
-      (seq strs) (map (zipmap-fn find strs var-to-index str))
-      (seq syms) (map (zipmap-fn find syms var-to-index symbol))
+        var-in-join-order (variable-order* where)
+        var->idx (zipmap var-in-join-order (range))
+        compiled-patterns (concat (in->iterators in var->idx args opts)
+                                  (map (partial compile-pattern db var-in-join-order) where))
+        compiled-find (compile-find find var->idx)]
+    (cond->> (join compiled-patterns (count var-in-join-order) opts)
+      true (map compiled-find)
+      (seq keys) (map (zipmap-fn find keys var->idx keyword))
+      (seq strs) (map (zipmap-fn find strs var->idx str))
+      (seq syms) (map (zipmap-fn find syms var->idx symbol))
       true set)))
 
 (comment
-  (def q '{:find [x y z]
+  (def q '{:find [x y (count z)]
            :in [[x y]]
            :where [[x :person/name y]
                    [x :person/age z]]})
@@ -274,5 +293,7 @@
   (s/valid? ::query q)
 
   (s/conform ::query q)
+
+  (s/unform ::query (s/conform ::query q))
 
   (variable-order (s/conform ::query q)))
