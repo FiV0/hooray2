@@ -709,8 +709,9 @@
         "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
 (t/deftest test-aggregates-and-or
-  (h/transact fix/*node* [{:db/id :ada, :first-name "Ada" :last-name "Lovelace" :gender :female}
-                          {:db/id :alan, :first-name "Alan" :last-name "Turing" :gender :male}])
+  (h/transact fix/*node* [{:db/id :ada, :first-name "Ada" :last-name "Lovelace" :gender :female :age 21}
+                          {:db/id :alan, :first-name "Alan" :last-name "Turing" :gender :male :age 22}
+                          {:db/id :adam, :first-name "Adam" :last-name "Smith" :gender :male :age 23}])
 
   (t/is (= #{[1]} (h/q '{:find [(count p)]
                          :where [[p :last-name "Lovelace"]
@@ -722,7 +723,20 @@
                          :where [[p :last-name "Lovelace"]
                                  (or [p :first-name "Ada"]
                                      [p :gender :female])]}
-                       (h/db fix/*node*)))))
+                       (h/db fix/*node*))))
+
+  (t/is (= #{[3]} (h/q '{:find [(count p)]
+                         :where [(or [p :last-name "Lovelace"]
+                                     [p :gender :male])]}
+                       (h/db fix/*node*))))
+
+
+  (t/is (= #{[:male 2 45] [:female 1 21]}
+           (h/q '{:find [gender (count p) (sum age)]
+                  :where [[p :gender gender]
+                          [p :age age]]}
+                (h/db fix/*node*)))
+        "implicit grouping"))
 
 (t/deftest datascript-test-aggregates
   (h/transact fix/*node* [{:db/id :cerberus :heads 3}

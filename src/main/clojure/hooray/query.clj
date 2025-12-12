@@ -325,7 +325,7 @@
         value-fns (mapv (fn [{:keys [->result inputs]}] (row->result-value-fn ->result inputs row-symbol->idx)) non-aggregates)
         ;; note this is a nil group if there are no non-aggregate find args
         ->group (fn [row]
-                  (mapv row value-fns))
+                  (mapv #(% row) value-fns))
         agg-fns (->> aggregates
                      (map :aggregate)
                      (mapv (fn [[agg-k {:keys [inputs aggregate-fn] :as _agg}]]
