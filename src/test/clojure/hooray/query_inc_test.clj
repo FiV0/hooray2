@@ -1,7 +1,5 @@
 (ns hooray.query-inc-test
   (:require [clojure.test :as t :refer [deftest is testing]]
-            [clojure.spec.alpha :as s]
-            [hooray.query :as query]
             [hooray.fixtures :as fix]
             [hooray.core :as h])
   (:import (clojure.lang ExceptionInfo)))

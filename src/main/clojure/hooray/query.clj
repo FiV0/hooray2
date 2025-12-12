@@ -286,10 +286,6 @@
          acc)
        x))))
 
-(defn order-result-fn [find-syms var->index]
-  (fn [row]
-    (mapv (fn [var] (nth row (var->index var))) find-syms)))
-
 (defn- emit-projection [[find-type find-form :as _find-arg]]
   (case find-type
     :variable {:logic-vars #{find-form}

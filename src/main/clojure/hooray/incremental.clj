@@ -109,15 +109,25 @@
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       (throw (ex-info "Unknown or not yet supported where clause type" {:where-clause where-clause})))))
 
-(defn compiled-find [order-fn ^IncrementalJoin compiled-inner]
-  (reify IncrementalJoin
-    (join [_ zset-indices]
-      (let [inner-results (.join compiled-inner zset-indices)]
-        (zset/update-keys inner-results order-fn)))))
+(defn order-result-fn [find-syms var->index]
+  (fn [row]
+    (mapv (fn [var] (nth row (var->index var))) find-syms)))
 
-(defn compile-query [order-fn compiled-patterns levels]
+(defn compile-find [conformed-find var->idx ^IncrementalJoin compiled-inner]
+  (let [find-syms (mapv (fn [[find-type find-arg]]
+                          (case find-type
+                            :variable find-arg
+                            :aggregate (throw (err/unsupported-ex "Aggregates not yet supported in incremental queries!"))))
+                        conformed-find)
+        order-fn (order-result-fn find-syms var->idx)]
+    (reify IncrementalJoin
+      (join [_ zset-indices]
+        (let [inner-results (.join compiled-inner zset-indices)]
+          (zset/update-keys inner-results order-fn))))))
+
+(defn compile-query [conformed-find var->idx compiled-patterns levels]
   (->> (IncrementalGenericJoin. compiled-patterns levels)
-       (compiled-find order-fn)))
+       (compile-find conformed-find var->idx)))
 
 ;; TODO unify this somehow with query/query
 (defn compile-incremental-q ^IncrementalJoin [db query]
@@ -125,14 +135,13 @@
   (let [zset-indices (zset-indices-clj->kt (db->zset-indices db))
         {:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query/query query)
         var-order (query/variable-order* where)
-        var-to-index (zipmap var-order (range))
-        compiled-patterns (map (partial compile-inc-pattern zset-indices var-order) where)
-        order-fn (query/order-result-fn find var-to-index)]
+        var->index (zipmap var-order (range))
+        compiled-patterns (map (partial compile-inc-pattern zset-indices var-order) where)]
     (when (seq in)
       (throw (ex-info "IN clauses not supported for incremental queries yet" {:in in})))
     (when (or (seq keys) (seq strs) (seq syms))
       (throw (ex-info "KEYS, STRS, and SYMS not supported for incremental queries yet" {:keys keys :strs strs :syms syms})))
-    (compile-query order-fn compiled-patterns (count var-order))))
+    (compile-query find var->index compiled-patterns (count var-order))))
 
 (defn compute-delta! [{:keys [^IncrementalJoin compiled-q !queue] :as _inc-q} db-before _db-after tx-data]
   (let [triples-by-op (db/tx-data->triples db-before tx-data)
