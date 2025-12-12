@@ -6,6 +6,7 @@
    [hooray.db :as db]
    [hooray.error :as err])
   (:import
+   (java.util Map HashMap)
    (org.hooray.algo
     GenericJoin
     Join
@@ -250,35 +251,98 @@
     (^long [^long acc] acc)
     (^long [^long acc _] (inc acc))))
 
-(defn order-result-fn [find-syms var-to-index]
+(defn order-result-fn [find-syms var->index]
   (fn [row]
-    (mapv (fn [var] (nth row (var-to-index var))) find-syms)))
+    (mapv (fn [var] (nth row (var->index var))) find-syms)))
 
 (defn- emit-projection [[find-type find-form :as _find-arg]]
   (case find-type
-    :variable {:logic-vars #{find-form} :code find-form}
+    :variable {:logic-vars #{find-form}
+               :inputs [find-form]
+               :->result first}
     :aggregate (let [{:keys [func arg]} find-form
                      agg-sym (gensym func)]
-                 {:aggregates {agg-sym {:aggregate-fn (aggregate func)
-                                        :logic-vars #{arg}
-                                        :args [arg]}}
-                  :code agg-sym})))
+                 {:aggregate [agg-sym {:aggregate-fn (aggregate func)
+                                       :logic-vars #{arg}
+                                       :inputs [arg]}]
+                  ;; not yet used
+                  :inputs [agg-sym]
+                  :->result first})))
+
+(defn row->input-fn [inputs symbol->idx]
+  (fn [row]
+    (mapv (fn [input] (nth row (symbol->idx input))) inputs)))
+
+(defn row->result-value-fn [->result inputs symbol->idx]
+  (fn [row]
+    (->result (mapv (fn [input] (nth row (symbol->idx input))) inputs))))
 
 (defn compile-find-args [conformed-find]
   (for [find-arg conformed-find]
     (emit-projection find-arg)))
 
-(defn agg-find-fn [find-args]
-  (throw (err/unsupported-ex "Aggregate functions not yet supported in :find")))
+;; terminology
+;; var->idx - logic-vars to index in join result
+;; row-symbol - either logic var or agg-sym
+;; row-symbol->idx - same as var->idx but also includes agg-syms
+
+;; heavily copied from XTDB
+(defn agg-find-fn [find-args row-symbol->idx]
+  ;; for now a group is defined just by a row before aggregate applications as there is no expression engine or any other logic
+  ;; this will likely need to change as more stuff gets added
+  (let [[aggregates non-aggregates] ((juxt filter remove) :aggregate find-args)
+        value-fns (mapv (fn [{:keys [->result inputs]}] (row->result-value-fn ->result inputs row-symbol->idx)) non-aggregates)
+        ;; note this is a nil group if there are no non-aggregate find args
+        ->group (fn [row]
+                  (mapv row value-fns))
+        agg-fns (->> aggregates
+                     (map :aggregate)
+                     (mapv (fn [[agg-k {:keys [inputs aggregate-fn] :as _agg}]]
+                             (let [->value (row->input-fn inputs row-symbol->idx)]
+                               [agg-k (fn
+                                        ([] (aggregate-fn))
+                                        ([acc row] (aggregate-fn acc (->value row)))
+                                        ;; finalize
+                                        ([acc] (aggregate-fn acc)))]))))]
+    (fn [rows]
+      (letfn [(init-aggs []
+                (mapv (fn [[agg-k aggregate-fn]]
+                        [agg-k aggregate-fn (volatile! (aggregate-fn))])
+                      agg-fns))
+
+              (step-aggs [^Map acc row]
+                (let [group-accs (.computeIfAbsent acc (->group row)
+                                                   (fn [_group]
+                                                     (init-aggs)))]
+                  (doseq [[_agg-k agg-fn !agg-acc] group-accs]
+                    (vswap! !agg-acc agg-fn row))))]
+
+        (let [acc (HashMap.)]
+          (doseq [row rows]
+            (step-aggs acc row))
+
+          (for [[group-k group-accs] acc]
+            ;; TODO get rid of this sort
+            (let [group-accs-by-idx (sort-by (comp row-symbol->idx first) group-accs)]
+              (into group-k
+                    (for [[_agg-k agg-fn !agg-acc] group-accs-by-idx]
+                      (agg-fn @!agg-acc))))))))))
 
 (defn compile-find [conformed-find var->idx]
   (let [find-args (compile-find-args conformed-find)]
-    (if-not (every? (comp empty? :aggregates) find-args)
-      (agg-find-fn find-args)
+    (if-not (every? (comp empty? :aggregate) find-args)
+      (let [row-symbol->idx (reduce (fn [row-symbol->idx {:keys [aggregate] :as _find-arg}]
+                                      (if aggregate
+                                        (assoc row-symbol->idx (first aggregate) (count row-symbol->idx))
+                                        row-symbol->idx))
+                                    var->idx
+                                    find-args)]
+        (agg-find-fn find-args row-symbol->idx))
 
-      (let [order-fn (order-result-fn (mapv second conformed-find) var->idx)]
+      (let [value-fns (mapv (fn [{:keys [->result inputs]}] (row->result-value-fn ->result inputs var->idx)) find-args)]
         (fn [rows]
-          (mapv order-fn rows))))))
+          (for [row rows]
+            (mapv #(% row) value-fns)))))))
 
 (defn- zipmap-fn [find keys var-to-index key-fn]
   (when (not= (count find) (count keys))
@@ -292,12 +356,12 @@
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query query)
-        var-in-join-order (variable-order* where)
-        var->idx (zipmap var-in-join-order (range))
+        vars-in-join-order (variable-order* where)
+        var->idx (zipmap vars-in-join-order (range))
         compiled-patterns (concat (in->iterators in var->idx args opts)
-                                  (map (partial compile-pattern db var-in-join-order) where))
+                                  (map (partial compile-pattern db vars-in-join-order) where))
         compiled-find (compile-find find var->idx)]
-    (cond->> (join compiled-patterns (count var-in-join-order) opts)
+    (cond->> (join compiled-patterns (count vars-in-join-order) opts)
       true (compiled-find)
       (seq keys) (map (zipmap-fn find keys var->idx keyword))
       (seq strs) (map (zipmap-fn find strs var->idx str))

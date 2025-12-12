@@ -710,10 +710,9 @@
 
 #_(ns-unmap *ns* 'test-aggregates)
 
-#_
-(t/deftest test-aggregates
+(t/deftest test-aggregates-and-or
   (h/transact fix/*node* [{:db/id :ada, :first-name "Ada" :last-name "Lovelace" :gender :female}
-                          {:db/id :ada, :first-name "Alan" :last-name "Turing" :gender :male}])
+                          {:db/id :alan, :first-name "Alan" :last-name "Turing" :gender :male}])
 
   (t/is (= #{[1]} (h/q '{:find [(count p)]
                          :where [[p :last-name "Lovelace"]
