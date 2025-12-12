@@ -28,7 +28,7 @@
 (s/def ::constant (complement symbol?))
 
 (s/def ::aggregate (s/and list?
-                          (s/cat :func #{'count #_#_#_#_'sum 'avg 'min 'max}
+                          (s/cat :func #{'count 'count-distinct 'sum 'min 'max}
                                  :arg ::variable)))
 
 (s/def ::pattern-element (s/or :variable ::variable
@@ -251,6 +251,41 @@
     (^long [^long acc] acc)
     (^long [^long acc _] (inc acc))))
 
+(defmethod aggregate 'count-distinct [_]
+  (fn aggregate-count-distinct
+    ([] (transient #{}))
+    ([acc] (count (persistent! acc)))
+    ([acc x] (conj! acc x))))
+
+(defmethod aggregate 'sum [_]
+  (fn aggregate-sum
+    ([] 0)
+    ([acc] acc)
+    ([acc x] (+ acc x))))
+
+(defmethod aggregate 'min [_]
+  (fn aggregate-min
+    ([])
+    ([acc] acc)
+    ([acc x]
+     (if acc
+       (if (pos? (compare acc x))
+         x
+         acc)
+       x))))
+
+(defmethod aggregate 'max [_]
+  (fn aggregate-max
+    ([])
+    ([acc] acc)
+    ([acc x]
+     (prn acc x)
+     (if acc
+       (if (neg? (compare acc x))
+         x
+         acc)
+       x))))
+
 (defn order-result-fn [find-syms var->index]
   (fn [row]
     (mapv (fn [var] (nth row (var->index var))) find-syms)))
@@ -298,10 +333,10 @@
         agg-fns (->> aggregates
                      (map :aggregate)
                      (mapv (fn [[agg-k {:keys [inputs aggregate-fn] :as _agg}]]
-                             (let [->value (row->input-fn inputs row-symbol->idx)]
+                             (let [->inputs (row->input-fn inputs row-symbol->idx)]
                                [agg-k (fn
                                         ([] (aggregate-fn))
-                                        ([acc row] (aggregate-fn acc (->value row)))
+                                        ([acc row] (apply aggregate-fn acc (->inputs row)))
                                         ;; finalize
                                         ([acc] (aggregate-fn acc)))]))))]
     (fn [rows]

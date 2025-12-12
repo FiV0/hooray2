@@ -708,8 +708,6 @@
                 (h/db fix/*node*)))
         "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
-#_(ns-unmap *ns* 'test-aggregates)
-
 (t/deftest test-aggregates-and-or
   (h/transact fix/*node* [{:db/id :ada, :first-name "Ada" :last-name "Lovelace" :gender :female}
                           {:db/id :alan, :first-name "Alan" :last-name "Turing" :gender :male}])
@@ -726,7 +724,17 @@
                                      [p :gender :female])]}
                        (h/db fix/*node*)))))
 
+(t/deftest datascript-test-aggregates
+  (h/transact fix/*node* [{:db/id :cerberus :heads 3}
+                          {:db/id :medusa :heads 1}
+                          {:db/id :cyclops :heads 1}
+                          {:db/id :chimera :heads 1}])
 
+  (t/testing "Multiple aggregates, correct grouping"
+    (t/is (= #{[6 1 3 4 2]}
+             (h/q '{:find [(sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)]
+                    :where [[?monster :heads ?heads]]}
+                  (h/db fix/*node*))))))
 #_
 (t/deftest datascript-test-aggregates
   (let [db (xt/db *api*)]
