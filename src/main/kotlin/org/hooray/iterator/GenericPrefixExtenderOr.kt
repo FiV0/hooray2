@@ -12,8 +12,8 @@ open class GenericPrefixExtenderOr(val children: List<PrefixExtender>) : PrefixE
 
     override fun count(prefix: Prefix) = children.sumOf { it.count(prefix) }
 
-    // TODO this currently returns two rows if a children proposes the same extension. Currently only filtered in later stages
-    override fun propose(prefix: Prefix) = children.flatMap { it.propose(prefix) }
+    // TODO the distinct call can likely be optimized to avoid large intermediate lists
+    override fun propose(prefix: Prefix) = children.flatMap { it.propose(prefix) }.distinct()
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         val result = mutableListOf<Extension>()
@@ -21,7 +21,7 @@ open class GenericPrefixExtenderOr(val children: List<PrefixExtender>) : PrefixE
             val childExtensions = child.intersect(prefix, extensions)
             result.addAll(childExtensions)
         }
-        return result
+        return result.distinct()
     }
 
     // All or clauses have the same variables, hence participate in the same levels
