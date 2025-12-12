@@ -10,23 +10,26 @@ import org.hooray.algo.PrefixExtender
 class GenericPrefixExtenderNot(val children: List<PrefixExtender>, val level: Int): PrefixExtender {
     override fun count(prefix: Prefix): Int = Int.MAX_VALUE
 
-    // If propose is called on NOT it means that the variable was not bound outside of NOT (Is this true?), so we propose all extensions.
+    // If propose is called on NOT it means that the variable was not bound outside of NOT
     override fun propose(prefix: Prefix): List<Extension> {
-        TODO()
+       throw IllegalStateException("Propose should not be called on NOT prefix extender")
     }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
-        val filteredExtensions = mutableListOf<Extension>()
-        for (extension in extensions) {
-            val resultTuple = prefix + extension
-            // TODO one could potentially only create GenericJoin once and have something like PrefixExtender.createExtenderFromPrefix+Extensions
-            val tuplePrefixExtender = PrefixExtender.createTupleExtender(resultTuple)
-            val join = GenericJoin(children + tuplePrefixExtender, resultTuple.size)
-            join.join().takeIf { it.isEmpty() }?.let {
-                filteredExtensions.add(extension)
-            }
-        }
-        return filteredExtensions
+        val prefixAndExtensionsExtender = PrefixExtender.createPrefixAndExtensionsExtender(prefix, extensions)
+        val extensionsToRemove: Set<Extension> = GenericJoin(children + prefixAndExtensionsExtender, prefix.size + 1).join().map { resultTuple -> resultTuple.last() }.toHashSet()
+
+        return extensions.filterNot { ext -> extensionsToRemove.contains(ext) }
+
+//        for (extension in extensions) {
+//            val resultTuple = prefix + extension
+//            val tuplePrefixExtender = PrefixExtender.createTupleExtender(resultTuple)
+//            val join = GenericJoin(children + tuplePrefixExtender, prefix.size + 1)
+//            join.join().takeIf { it.isEmpty() }?.let {
+//                filteredExtensions.add(extension)
+//            }
+//        }
+//        return filteredExtensions
     }
 
     override fun participatesInLevel(level: Int) = this.level == level

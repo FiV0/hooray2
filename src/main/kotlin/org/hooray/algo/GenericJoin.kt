@@ -50,6 +50,39 @@ interface PrefixExtender : LevelParticipation {
                 override fun participatesInLevel(level: Int) = level < tuple.size
             }
         }
+
+        fun createPrefixAndExtensionsExtender(fixedPrefix: Prefix, fixedExtensions: List<Extension>): PrefixExtender {
+            val extensionSet = fixedExtensions.toHashSet()
+            return object : PrefixExtender {
+                private fun isPrefixMatching(prefix: Prefix): Boolean =
+                    prefix.size <= fixedPrefix.size && fixedPrefix.take(prefix.size) == prefix
+
+                override fun count(prefix: Prefix): Int =
+                    if (isPrefixMatching(prefix))
+                        if (prefix.size < fixedPrefix.size) 1 else fixedExtensions.size
+                    else 0
+
+                override fun propose(prefix: Prefix): List<Extension> =
+                    if (isPrefixMatching(prefix))
+                        if (prefix.size < fixedPrefix.size) listOf(fixedPrefix[prefix.size]) else fixedExtensions
+                    else
+                        emptyList()
+
+                override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> =
+                    if (isPrefixMatching(prefix))
+                        if (prefix.size < fixedPrefix.size)
+                            if (extensions.contains(fixedPrefix[prefix.size]))
+                                listOf(fixedPrefix[prefix.size])
+                            else
+                                emptyList()
+                        else
+                            extensions.filter { ext -> extensionSet.contains(ext) }
+                    else
+                        emptyList()
+
+                override fun participatesInLevel(level: Int) = level <= fixedPrefix.size
+            }
+        }
     }
 }
 
