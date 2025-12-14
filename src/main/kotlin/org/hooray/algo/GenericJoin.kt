@@ -138,8 +138,7 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
         // For every level, perform a single join with the extenders participating in that level
         for (extenderSet in extenderSets) {
             val singleJoin = GenericSingleJoin(extenderSet, prefixes)
-            val newTuples = singleJoin.join()
-            prefixes = newTuples
+            prefixes = singleJoin.join()
         }
         // After all levels are processed, the prefixes are the result tuples
         return prefixes
