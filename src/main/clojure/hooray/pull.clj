@@ -114,3 +114,15 @@
 (s/def ::pattern
   (s/and vector?
          (s/coll-of ::attr-spec :min-count 1)))
+
+(defn pull [db pattern eid]
+  {:pre [(db/db? db) (s/valid? ::pattern pattern)]}
+  (let [conformed-pull (s/conform ::pattern pattern)]
+    (throw (ex-info "Pull not yet implemented" {:db db :pattern conformed-pull :eid eid})))
+
+  )
+
+(comment
+  (s/conform ::pattern [:artist/name :artist/startYear])
+
+  )

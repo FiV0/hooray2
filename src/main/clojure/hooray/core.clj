@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
             [hooray.query :as query]
+            [hooray.pull :as pull]
             [hooray.transact :as t]
             [hooray.incremental :as incremental])
   (:import (java.io Closeable)))
@@ -43,6 +44,10 @@
 (defn entity [db eid]
   {:pre [(db/db? db)]}
   (db/entity db eid))
+
+(defn pull [db pattern eid]
+  {:pre [(db/db? db)]}
+  (pull/pull db pattern eid))
 
 (defn q [query db & args]
   {:pre [(db/db? db)]}
