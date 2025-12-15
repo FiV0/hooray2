@@ -77,6 +77,7 @@ but this will likely have significant overhead and is making initial exploratory
 
 ### DBSP / incremental computation
 - [zsxf](https://github.com/saberstack/zsxf) - WIP Datomic API for DBSP, uses transducers for everything
+- [clj-3df](https://github.com/sixthnormal/clj-3df) - Datalog compiled to Differential Dataflow
 - [relic](https://github.com/wotbrew/relic) - Incremental relational programming based on the [Out of the tar pit](https://curtclifton.net/papers/MoseleyMarks06a.pdf) paper
 - [wizard](https://github.com/jumraiya/wizard) - IVM for Datascript - hooks into datascript
 
