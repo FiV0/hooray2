@@ -72,6 +72,35 @@ I am currently using two different paths for standard queries and incremental qu
 In Theory™ this is not necessary as you can model standard queries also as zsets (the delta is your database state),
 but this will likely have significant overhead and is making initial exploratory programming a lot harder.
 
+## Roadmap
+
+- Standard queries
+    - [x] Standard data pattern
+	- [x] Or
+	- [x] And
+	- [x] Not
+	- [ ] Or-join
+	- [ ] Not-join
+	- [ ] predicates
+	- [ ] functions
+	- [ ] aggregates
+	- [ ] pull
+	- [ ] rules
+- Incremental
+    - [x] Standard data pattern
+	- [ ] Or
+	- [ ] And
+	- [ ] Not
+	- [ ] Or-join
+	- [ ] Not-join
+	- [ ] predicates
+	- [ ] functions
+	- [ ] aggregates
+	- [ ] pull
+	- [ ] rules
+
+Out of scope for now
+- [ ] rules - rules are very powerful, but they also require you to deal with recursive query evaluation and fixed point calculations. So for a first pass, let's forget about them.
 
 ## Other projects in this space
 
