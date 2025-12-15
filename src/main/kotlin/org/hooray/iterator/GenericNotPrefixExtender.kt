@@ -7,7 +7,7 @@ import org.hooray.algo.PrefixExtender
 
 // The level NOT participates in is the level after all variables appearing in its children are bound.
 // For now this is just the maximum level
-class GenericPrefixExtenderNot(val children: List<PrefixExtender>, val level: Int): PrefixExtender {
+class GenericNotPrefixExtender(val children: List<PrefixExtender>, val level: Int): PrefixExtender {
     override fun count(prefix: Prefix): Int = Int.MAX_VALUE
 
     // If propose is called on NOT it means that the variable was not bound outside of NOT
@@ -16,6 +16,7 @@ class GenericPrefixExtenderNot(val children: List<PrefixExtender>, val level: In
     }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+        // TODO make this more efficient by restricting to prefixes that actually appear in children
         val prefixAndExtensionsExtender = PrefixExtender.createPrefixAndExtensionsExtender(prefix, extensions)
         val extensionsToRemove: Set<Extension> = GenericJoin(children + prefixAndExtensionsExtender, prefix.size + 1).join().map { resultTuple -> resultTuple.last() }.toHashSet()
 

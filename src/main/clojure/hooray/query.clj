@@ -18,9 +18,9 @@
     AVLIndex$AVLSetIndex
     AVLLeapfrogIndex
     GenericPrefixExtender
-    GenericPrefixExtenderAnd
-    GenericPrefixExtenderNot
-    GenericPrefixExtenderOr
+    GenericAndPrefixExtender
+    GenericNotPrefixExtender
+    GenericOrPrefixExtender
     SealedIndex$MapIndex
     SealedIndex$SetIndex)))
 
@@ -206,9 +206,9 @@
                     (create-iterator opts (get index a-const empty-map) var-in-join-order participates-in-level))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
-      :or (GenericPrefixExtenderOr. (mapv (partial compile-pattern db var-in-join-order) pattern))
-      :and (GenericPrefixExtenderAnd. (mapv (partial compile-pattern db var-in-join-order) pattern))
-      :not (GenericPrefixExtenderNot. (mapv (partial compile-pattern db var-in-join-order) pattern) (dec (count var-in-join-order))))))
+      :or (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
+      :and (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
+      :not (GenericNotPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern) (dec (count var-in-join-order))))))
 
 (defn- transpose [mtx]
   (apply mapv vector mtx))

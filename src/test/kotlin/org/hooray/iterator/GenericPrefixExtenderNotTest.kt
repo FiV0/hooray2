@@ -17,7 +17,7 @@ class GenericPrefixExtenderNotTest {
         val divisibleByThreeExtender = GenericPrefixExtender(divisibleByThreeIndex, listOf(1))
 
         // NOT extender participates at level 1 (after level 0 is bound)
-        val notExtender = GenericPrefixExtenderNot(listOf(evenExtender, divisibleByThreeExtender), 1)
+        val notExtender = GenericNotPrefixExtender(listOf(evenExtender, divisibleByThreeExtender), 1)
 
         // Simulate the join process
         val resultTuples = mutableListOf<ResultTuple>()
@@ -67,7 +67,7 @@ class GenericPrefixExtenderNotTest {
         val combinedExtender = GenericPrefixExtender(combinedIndex, listOf(0, 1))
 
         // NOT extender participates at level 1 (after level 0 is bound)
-        val notExtender = GenericPrefixExtenderNot(listOf(combinedExtender), 1)
+        val notExtender = GenericNotPrefixExtender(listOf(combinedExtender), 1)
 
         // Simulate the join process
         val resultTuples = mutableListOf<ResultTuple>()

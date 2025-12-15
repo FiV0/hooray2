@@ -5,7 +5,7 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import java.util.*
 
-class AVLPrefixExtenderOr(children: List<AVLPrefixExtender>): GenericPrefixExtenderOr(children) {
+class AVLOrPrefixExtender(children: List<AVLPrefixExtender>): GenericOrPrefixExtender(children) {
 
     private fun mergeSortedLists(lists: List<List<Extension>>): List<Extension> {
         val priorityQueue = PriorityQueue<Pair<Int, Int>>(
