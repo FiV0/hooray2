@@ -73,6 +73,14 @@
 (s/def ::schema-tx (s/and vector?
                           (s/every ::attribute-entity-schema :min-count 1)))
 
+(s/def ::user-defined-attribute-schema
+  (s/and ::attribute-entity-schema
+         #(not= "db" (namespace (:db/ident %)))))
+
+(defn check-user-defined-schema! [m]
+  (or (s/valid? ::user-defined-attribute-schema m)
+      (throw (ex-info "Attribute schema contains reserved keywords" {:attribute-entity m}))))
+
 (def initial-schema
   [ ;; The identity attribute - names schema entities
    {:db/id          -1

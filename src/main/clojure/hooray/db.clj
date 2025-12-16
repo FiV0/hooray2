@@ -36,7 +36,7 @@
 (defn ->db [{:keys [storage] :as opts}]
   (->
    (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts {})
-   (transact schema/initial-schema)))
+   (transact schema/initial-schema {:user-tx? false})))
 
 (defn db? [x]
   (instance? Db x))
@@ -120,13 +120,17 @@
 
 ;; TODO: properly support attribute schema as first class entities and initialize the db with
 ;; the attribute schema attributes
-(defn transact [{:keys [schema] :as db} tx-data]
+(defn transact [{:keys [schema] :as db} tx-data & {:keys [user-tx?] :or {user-tx? true}}]
   {:pre [(db? db)]}
   (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples db tx-data)
         new-schema (cond-> schema
                      (t/schema-tx? tx-data) (t/index-schema tx-data))]
-    (when-not (t/schema-tx? tx-data)
-      (run! check-triple (concat add retract)))
+    ;; schema checks
+    (if-not (t/schema-tx? tx-data)
+      (run! check-triple (concat add retract))
+      (when user-tx?
+        (run! schema/check-user-defined-schema! tx-data)))
+
     (as-> db db
       (reduce index-triple-add db add)
       (reduce index-triple-retract db retract)
