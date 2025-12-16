@@ -34,12 +34,11 @@
 (deftest schema-tx
   (h/transact fix/*node* [g/edge-attribute])
 
-  (t/is (= {:g/to
-            {:db/cardinality :db.cardinality/many,
-             :db/id :db/edge-attribute,
-             :db/valueType :db.type/long,
-             :db/ident :g/to}}
-           (:schema (h/db fix/*node*)))))
+  (t/is (= {:db/cardinality :db.cardinality/many,
+            :db/id :db/edge-attribute,
+            :db/valueType :db.type/long,
+            :db/ident :g/to}
+           (-> (h/db fix/*node*) :schema :g/to))))
 
 (deftest cardinality-one-and-many
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])

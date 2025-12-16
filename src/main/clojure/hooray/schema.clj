@@ -41,7 +41,7 @@
   (contains? #{:db.unique/identity :db.unique/value} v))
 
 
-(s/def :db/ident (s/and keyword? (fn [k] (not= "db" (namespace k)))))
+(s/def :db/ident keyword?)
 
 (s/def :db/cardinality valid-cardinality?)
 

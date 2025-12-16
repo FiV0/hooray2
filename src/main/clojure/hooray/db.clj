@@ -3,6 +3,7 @@
             [hooray.util.persistent-map :as btree-map]
             [hooray.util :as util]
             [hooray.transact :as t]
+            [hooray.schema :as schema]
             [me.tonsky.persistent-sorted-set :as btree-set])
   (:import (org.hooray UniversalComparator)
            (clojure.data.avl AVLMap)
@@ -30,8 +31,12 @@
     :avl (util/create-update-in (avl/sorted-map-by universal-comp))
     :btree (util/create-update-in (btree-map/sorted-map universal-comp))))
 
+(declare transact)
+
 (defn ->db [{:keys [storage] :as opts}]
-  (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts {}))
+  (->
+   (->Db (map* storage) (map* storage) (map* storage) (map* storage) opts {})
+   (transact schema/initial-schema)))
 
 (defn db? [x]
   (instance? Db x))
