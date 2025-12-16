@@ -37,6 +37,7 @@
   (t/is (= {:g/to
             {:db/cardinality :db.cardinality/many,
              :db/id :db/edge-attribute,
+             :db/valueType :db.type/long,
              :db/ident :g/to}}
            (:schema (h/db fix/*node*)))))
 
@@ -48,6 +49,7 @@
 
   (h/transact fix/*node* [{:db/id :db/edge-attribute
                            :db/ident :g/to
+                           :db/valueType :db.type/long
                            :db/cardinality :db.cardinality/many}])
   (h/transact fix/*node* [[:db/add 1 :g/to 2]
                           [:db/add 1 :g/to 3]])
@@ -78,6 +80,7 @@
 
   (h/transact fix/*node* [{:db/id :db/edge-attribute
                            :db/ident :g/to
+                           :db/valueType :db.type/long
                            :db/cardinality :db.cardinality/many}])
   (h/transact fix/*node* [[:db/add 2 :g/to 3]
                           [:db/add 2 :g/to 4]

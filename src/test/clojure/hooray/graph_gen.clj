@@ -4,6 +4,7 @@
 (def edge-attribute
   {:db/id :db/edge-attribute
    :db/ident :g/to
+   :db/valueType :db.type/long
    :db/cardinality :db.cardinality/many})
 
 (defn complete-graph [n]

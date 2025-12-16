@@ -1,4 +1,5 @@
-(ns hooray.schema)
+(ns hooray.schema
+  (:require [clojure.spec.alpha :as s]))
 
 (def type-predicates
   {:db.type/bigdec   #(instance? java.math.BigDecimal %)
@@ -10,8 +11,7 @@
    :db.type/instant  #(instance? java.util.Date %)
    :db.type/keyword  keyword?
    :db.type/long     #(instance? Long %)
-   :db.type/ref      (fn [_] (throw (ex-info "Check-value" {})))
-
+   :db.type/ref      any?
    #_#(or (integer? %)     ;; entity id
           (keyword? %)     ;; ident
           (and (vector? %) ;; lookup ref
@@ -40,6 +40,39 @@
 (defn valid-uniqueness? [v]
   (contains? #{:db.unique/identity :db.unique/value} v))
 
+
+(s/def :db/ident (s/and keyword? (fn [k] (not= "db" (namespace k)))))
+
+(s/def :db/cardinality valid-cardinality?)
+
+(s/def :db/valueType valid-value-type?)
+
+(s/def :db/unique valid-uniqueness?)
+
+(s/def :db/doc string?)
+
+(s/def :db/index boolean?)
+
+(s/def :db.attr/preds (s/coll-of symbol? :kind vector? :min-count 1))
+
+(s/def ::attribute-entity-schema
+  (s/and (s/keys :req [:db/id
+                       :db/ident
+                       :db/valueType
+                       :db/cardinality]
+                 :opt [:db/unique
+                       :db/doc
+                       :db/index
+                       :db.attr/preds])
+         #(or (neg-int? (:db/id %))
+              (s/and keyword? (fn [k] (= "db" (namespace k)))))))
+
+(defn attribute-schema? [m]
+  (s/valid? ::attribute-entity-schema m))
+
+(s/def ::schema-tx (s/and vector?
+                          (s/every ::attribute-entity-schema :min-count 1)))
+
 (def initial-schema
   [ ;; The identity attribute - names schema entities
    {:db/id          -1
@@ -55,7 +88,7 @@
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db/doc         "Type of value an attribute can hold"
-    :db.attr/preds  'hooray.schema/valid-value-type?}
+    :db.attr/preds  ['hooray.schema/valid-value-type?]}
 
    ;; The cardinality attribute
    {:db/id          -3
@@ -63,7 +96,7 @@
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db/doc         "Whether attribute is single or multi-valued"
-    :db.attr/preds  'hooray.schema/valid-cardinality?}
+    :db.attr/preds  ['hooray.schema/valid-cardinality?]}
 
    ;; The uniqueness attribute
    {:db/id          -4
@@ -71,7 +104,7 @@
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db/doc         "Uniqueness constraint for attribute values"
-    :db.attr/preds  'hooray.schema/valid-uniqueness?}
+    :db.attr/preds  ['hooray.schema/valid-uniqueness?]}
 
    ;; The doc attribute
    {:db/id          -5

@@ -1,5 +1,6 @@
 (ns hooray.transact
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [hooray.schema :as schema]))
 
 (s/def ::entity (s/keys :req [:db/id]))
 (s/def ::add-transaction #(and (= :db/add (first %)) (vector? %) (= 4 (count %))))
@@ -21,25 +22,12 @@
              :db/ident :g/to
              :db/cardinality :db.cardinality/many}))
 
-(s/def :db/ident (s/and keyword? (fn [k] (not= "db" (namespace k)))))
-
-(s/def :db/cardinality #{:db.cardinality/one :db.cardinality/many})
-
-(s/def ::attribute-entity-schema (s/keys :req [:db/ident]
-                                         :opt [:db/cardinality]))
-
-(defn attribute-schema? [m]
-  (s/valid? ::attribute-entity-schema m))
-
-(s/def ::schema-tx (s/and vector?
-                          (s/every ::attribute-entity-schema :min-count 1)))
-
 (defn schema-tx? [tx-data]
   (if (and (every? #(s/valid? ::transaction %) tx-data)
-           (some attribute-schema? tx-data)
-           (some (comp not attribute-schema?) tx-data))
+           (some schema/attribute-schema? tx-data)
+           (some (comp not schema/attribute-schema?) tx-data))
     (throw (ex-info "Currently schema transaction cannot be mixed with non-schema transactions" {:tx-data tx-data}))
-    (s/valid? ::schema-tx tx-data)))
+    (s/valid? ::schema/schema-tx tx-data)))
 
 (defn index-schema [schema tx-data]
   (merge schema (-> (group-by :db/ident tx-data)
