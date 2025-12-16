@@ -123,11 +123,14 @@
 (defn transact [{:keys [schema] :as db} tx-data & {:keys [user-tx?] :or {user-tx? true}}]
   {:pre [(db? db)]}
   (let [{:keys [add retract] :as _triples-by-op} (tx-data->triples db tx-data)
+        triples (concat add retract)
         new-schema (cond-> schema
                      (t/schema-tx? tx-data) (t/index-schema tx-data))]
+
     ;; schema checks
+    (schema/enforce-schema! new-schema triples)
     (if-not (t/schema-tx? tx-data)
-      (run! check-triple (concat add retract))
+      (run! check-triple triples)
       (when user-tx?
         (run! schema/check-user-defined-schema! tx-data)))
 

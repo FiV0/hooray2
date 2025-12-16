@@ -3,7 +3,7 @@
             [hooray.fixtures :as fix]
             [hooray.core :as h]))
 
-(use-fixtures :each fix/with-node)
+(use-fixtures :each fix/with-node fix/with-people-schema)
 
 (deftest test-get-entity
   (h/transact fix/*node* [{:db/id 1 :name "Ivan" :age 30}])

@@ -53,7 +53,8 @@
 
 (s/def :db/index boolean?)
 
-(s/def :db.attr/preds (s/coll-of symbol? :kind vector? :min-count 1))
+(s/def :db.attr/preds symbol?
+  #_(s/coll-of symbol? :kind vector? :min-count 1))
 
 (s/def ::attribute-entity-schema
   (s/and (s/keys :req [:db/id
@@ -96,7 +97,7 @@
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db/doc         "Type of value an attribute can hold"
-    :db.attr/preds  ['hooray.schema/valid-value-type?]}
+    :db.attr/preds  'hooray.schema/valid-value-type?}
 
    ;; The cardinality attribute
    {:db/id          -3
@@ -104,7 +105,7 @@
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db/doc         "Whether attribute is single or multi-valued"
-    :db.attr/preds  ['hooray.schema/valid-cardinality?]}
+    :db.attr/preds  'hooray.schema/valid-cardinality?}
 
    ;; The uniqueness attribute
    {:db/id          -4
@@ -112,7 +113,7 @@
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
     :db/doc         "Uniqueness constraint for attribute values"
-    :db.attr/preds  ['hooray.schema/valid-uniqueness?]}
+    :db.attr/preds  'hooray.schema/valid-uniqueness?}
 
    ;; The doc attribute
    {:db/id          -5
@@ -180,3 +181,30 @@
     :db/cardinality :db.cardinality/one
     :db/doc         "Value type for homogeneous tuple"}
    ])
+
+(defn enforce-schema! [attr->schema triples]
+  (doseq [[_ a val :as triple] triples]
+    (if-let [schema-entity (get attr->schema a)]
+      (let [value-type   (:db/valueType schema-entity)
+            ;; TODO for now db.attr/preds is a single symbol, later can be a collection
+            preds        (cond-> []
+                           (:db.attr/preds schema-entity)
+                           (conj (:db.attr/preds schema-entity)))]
+        (when-not (check-value value-type val)
+          (throw (ex-info (str "Value " val " does not conform to type " value-type
+                               " for attribute " a)
+                          {:attribute a
+                           :value     val
+                           :value-type value-type})))
+        (when (seq preds)
+          (doseq [pred-sym preds]
+            (let [pred-fn (resolve pred-sym)]
+              (when (and pred-fn (not (pred-fn val)))
+                (throw (ex-info (str "Value " val " does not satisfy predicate "
+                                     pred-sym " for attribute " a)
+                                {:attribute a
+                                 :value     val
+                                 :predicate pred-sym})))))))
+      (throw (ex-info "Attribute is not defined in schema"
+                      {:triple triple
+                       :attribute a})))))

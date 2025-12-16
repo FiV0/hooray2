@@ -4,7 +4,7 @@
             [hooray.core :as h])
   (:import (clojure.lang ExceptionInfo)))
 
-(t/use-fixtures :each fix/with-node)
+(t/use-fixtures :each fix/with-node fix/with-people-schema)
 
 (def ^:dynamic *inc-q* nil)
 

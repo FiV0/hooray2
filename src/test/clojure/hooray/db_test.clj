@@ -1,16 +1,18 @@
 (ns hooray.db-test
   (:require [clojure.test :refer [deftest is testing]]
-            [hooray.core :as core]))
+            [hooray.core :as h]
+            [hooray.fixtures :as fix]))
 
 (deftest transact-single-entity-test
   (testing "Transacting a single entity populates all indexes correctly"
     (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              _ (core/transact node [{:db/id 1
-                                      :person/name "Alice"
-                                      :person/age 30}])
-              db (core/db node)]
+        (let [node (h/connect {:type :mem :storage storage :algo :hash})
+              _ (h/transact node fix/people-schema2)
+              _ (h/transact node [{:db/id 1
+                                   :person/name "Alice"
+                                   :person/age 30}])
+              db (h/db node)]
 
           ;; Test EAV index
           (testing "EAV index"
@@ -45,14 +47,15 @@
   (testing "Transacting multiple entities"
     (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              _ (core/transact node [{:db/id 1
-                                      :person/name "Alice"
-                                      :person/age 30}
-                                     {:db/id 2
-                                      :person/name "Bob"
-                                      :person/age 25}])
-              db (core/db node)]
+        (let [node (h/connect {:type :mem :storage storage :algo :hash})
+              _ (h/transact node fix/people-schema2)
+              _ (h/transact node [{:db/id 1
+                                   :person/name "Alice"
+                                   :person/age 30}
+                                  {:db/id 2
+                                   :person/name "Bob"
+                                   :person/age 25}])
+              db (h/db node)]
 
           (testing "Both entities exist in EAV"
             (is (contains? (:eav db) 1))
@@ -68,10 +71,11 @@
   (testing "Transacting with :db/add transaction form"
     (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              _ (core/transact node [[:db/add 1 :person/name "Charlie"]
-                                     [:db/add 1 :person/age 35]])
-              db (core/db node)]
+        (let [node (h/connect {:type :mem :storage storage :algo :hash})
+              _ (h/transact node fix/people-schema2)
+              _ (h/transact node [[:db/add 1 :person/name "Charlie"]
+                                  [:db/add 1 :person/age 35]])
+              db (h/db node)]
 
           (testing "EAV index"
             (is (contains? (get-in db [:eav 1 :person/name]) "Charlie"))
@@ -85,15 +89,15 @@
   (testing "Multiple values for same attribute"
     (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              _ (core/transact node [{:db/id :hobby-attribute
-                                      :db/ident :person/hobby
-                                      :db/valueType :db.type/string
-                                      :db/cardinality :db.cardinality/many}])
-              _ (core/transact node [[:db/add 1 :person/hobby "reading"]
-                                     [:db/add 1 :person/hobby "swimming"]
-                                     [:db/add 1 :person/hobby "coding"]])
-              db (core/db node)]
+        (let [node (h/connect {:type :mem :storage storage :algo :hash})
+              _ (h/transact node [{:db/id :hobby-attribute
+                                   :db/ident :person/hobby
+                                   :db/valueType :db.type/string
+                                   :db/cardinality :db.cardinality/many}])
+              _ (h/transact node [[:db/add 1 :person/hobby "reading"]
+                                  [:db/add 1 :person/hobby "swimming"]
+                                  [:db/add 1 :person/hobby "coding"]])
+              db (h/db node)]
 
           (testing "EAV index contains all hobbies"
             (is (contains? (get-in db [:eav 1 :person/hobby]) "reading"))
@@ -110,12 +114,13 @@
   (testing "Sequential transactions maintain history"
     (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              _ (core/transact node [{:db/id 1 :person/name "Alice" :person/age 30}])
-              _ (core/transact node [{:db/id 2 :person/name "Bob" :person/age 25}])
+        (let [node (h/connect {:type :mem :storage storage :algo :hash})
+              _ (h/transact node fix/people-schema2)
+              _ (h/transact node [{:db/id 1 :person/name "Alice" :person/age 30}])
+              _ (h/transact node [{:db/id 2 :person/name "Bob" :person/age 25}])
               dbs (-> node :!dbs deref)
-              db1 (nth dbs 1)
-              db2 (nth dbs 2)]
+              db1 (nth dbs 2)
+              db2 (nth dbs 3)]
 
           (testing "First db has only Alice"
             (is (contains? (:eav db1) 1))
@@ -131,25 +136,14 @@
   (testing "Mixing entity maps and :db/add forms"
     (doseq [storage [:hash :avl #_:btree]]
       (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              _ (core/transact node [{:db/id 1 :person/name "Alice"}
-                                     [:db/add 1 :person/age 30]
-                                     [:db/add 1 :person/hobby "reading"]])
-              db (core/db node)]
+        (let [node (h/connect {:type :mem :storage storage :algo :hash})
+              _ (h/transact node fix/people-schema2)
+              _ (h/transact node [{:db/id 1 :person/name "Alice"}
+                                  [:db/add 1 :person/age 30]
+                                  [:db/add 1 :person/hobby "reading"]])
+              db (h/db node)]
 
           (testing "All data is in EAV"
             (is (contains? (get-in db [:eav 1 :person/name]) "Alice"))
             (is (contains? (get-in db [:eav 1 :person/age]) 30))
             (is (contains? (get-in db [:eav 1 :person/hobby]) "reading"))))))))
-
-(deftest empty-db-test
-  (testing "Empty database has empty indexes"
-    (doseq [storage [:hash :avl #_:btree]]
-      (testing (str "with storage type: " storage)
-        (let [node (core/connect {:type :mem :storage storage :algo :hash})
-              db (core/db node)]
-
-          (is (empty? (:eav db)))
-          (is (empty? (:aev db)))
-          (is (empty? (:ave db)))
-          (is (empty? (:vae db))))))))

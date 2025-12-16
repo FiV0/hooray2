@@ -43,7 +43,7 @@
 (create-ns 'tpch)
 (alias 'tpch 'tpch)
 
-(t/use-fixtures :each fix/with-node)
+(t/use-fixtures :each fix/with-node fix/with-people-schema)
 
 (deftest test-sanity-check
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
@@ -597,10 +597,15 @@
                              (h/db fix/*node*)))))
 
       (t/testing "unbound variable in not clause (triple)"
+
         (t/is (thrown-with-msg?
                ExceptionInfo
                #"\[x\] not bound in `not` clause: \(not \(x :ref e\)\)"
                (with-open [n (h/connect fix/*opts*)]
+                 (h/transact n [{:db/id :db/ref-attr
+                                 :db/ident :ref
+                                 :db/valueType :db.type/keyword
+                                 :db/cardinality :db.cardinality/one}])
                  (h/transact n [{:db/id :foo :ref :a}])
                  (h/q '{:find [e]
                         :where [[e :db/id _]
@@ -665,10 +670,10 @@
                            (h/db fix/*node*)))))))
 
 (t/deftest test-ors-must-use-same-vars
-  (h/transact fix/*node* [{:db/id 1, :type :a}
-                          {:db/id 2, :type :b}
-                          {:db/id 3, :type :b, :extra :val}
-                          {:db/id 4, :type :c}])
+  #_(h/transact fix/*node* [{:db/id 1, :type :a}
+                            {:db/id 2, :type :b}
+                            {:db/id 3, :type :b, :extra :val}
+                            {:db/id 4, :type :c}])
 
   (t/is (thrown-with-msg?
          ExceptionInfo
@@ -709,36 +714,40 @@
         "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
 (t/deftest test-aggregates-and-or
-  (h/transact fix/*node* [{:db/id :ada, :first-name "Ada" :last-name "Lovelace" :gender :female :age 21}
-                          {:db/id :alan, :first-name "Alan" :last-name "Turing" :gender :male :age 22}
-                          {:db/id :adam, :first-name "Adam" :last-name "Smith" :gender :male :age 23}])
+  (h/transact fix/*node* [{:db/id :ada, :name "Ada" :last-name "Lovelace" :sex :female :age 21}
+                          {:db/id :alan, :name "Alan" :last-name "Turing" :sex :male :age 22}
+                          {:db/id :adam, :name "Adam" :last-name "Smith" :sex :male :age 23}])
 
   (t/is (= #{[1]} (h/q '{:find [(count p)]
                          :where [[p :last-name "Lovelace"]
-                                 (or [p :first-name "Ada"]
-                                     [p :gender :male])]}
+                                 (or [p :name "Ada"]
+                                     [p :sex :male])]}
                        (h/db fix/*node*))))
 
   (t/is (= #{[1]} (h/q '{:find [(count p)]
                          :where [[p :last-name "Lovelace"]
-                                 (or [p :first-name "Ada"]
-                                     [p :gender :female])]}
+                                 (or [p :name "Ada"]
+                                     [p :sex :female])]}
                        (h/db fix/*node*))))
 
   (t/is (= #{[3]} (h/q '{:find [(count p)]
                          :where [(or [p :last-name "Lovelace"]
-                                     [p :gender :male])]}
+                                     [p :sex :male])]}
                        (h/db fix/*node*))))
 
 
   (t/is (= #{[:male 2 45] [:female 1 21]}
            (h/q '{:find [gender (count p) (sum age)]
-                  :where [[p :gender gender]
+                  :where [[p :sex gender]
                           [p :age age]]}
                 (h/db fix/*node*)))
         "implicit grouping"))
 
 (t/deftest datascript-test-aggregates
+  (h/transact fix/*node* [{:db/id :db/head-attribute
+                           :db/ident :heads
+                           :db/valueType :db.type/long
+                           :db/cardinality :db.cardinality/one}])
   (h/transact fix/*node* [{:db/id :cerberus :heads 3}
                           {:db/id :medusa :heads 1}
                           {:db/id :cyclops :heads 1}

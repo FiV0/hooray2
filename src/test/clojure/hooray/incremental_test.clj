@@ -1,7 +1,8 @@
 (ns hooray.incremental-test
   (:require [clojure.test :refer [deftest is testing]]
-            [hooray.core :as core]
-            [hooray.incremental :as incremental])
+            [hooray.core :as h]
+            [hooray.incremental :as incremental]
+            [hooray.fixtures :as fix])
   (:import (org.hooray.incremental IntegerWeight)))
 
 (def ^:private one IntegerWeight/ONE)
@@ -22,13 +23,13 @@
             next-val))))))
 
 (defn- create-node []
-  (core/connect {:type :mem :storage :hash :algo :hash}))
+  (h/connect {:type :mem :storage :hash :algo :hash}))
 
 ;; Test 1: Add with cardinality/one (default)
 (deftest calc-zset-indices-add-cardinality-one-test
   (testing "Adding a triple with default cardinality/one creates positive weights in all indices"
     (let [node (create-node)
-          db-before (core/db node)
+          db-before (h/db node)
           result (incremental/calc-zset-indices db-before {:add [[1 :person/name "Alice"]]
                                                            :retract []})]
       (testing "EAV index"
@@ -44,11 +45,11 @@
 (deftest calc-zset-indices-add-cardinality-many-test
   (testing "Adding a triple with cardinality/many creates positive weights in all indices"
     (let [node (create-node)
-          _ (core/transact node [{:db/id :hobby-attr
-                                  :db/ident :person/hobby
-                                  :db/valueType :db.type/string
-                                  :db/cardinality :db.cardinality/many}])
-          db-before (core/db node)
+          _ (h/transact node [{:db/id :hobby-attr
+                               :db/ident :person/hobby
+                               :db/valueType :db.type/string
+                               :db/cardinality :db.cardinality/many}])
+          db-before (h/db node)
           result (incremental/calc-zset-indices db-before {:add [[1 :person/hobby "reading"]]
                                                            :retract []})]
       (testing "EAV index"
@@ -64,8 +65,9 @@
 (deftest calc-zset-indices-retract-existing-test
   (testing "Retracting an existing triple creates negative weights in all indices"
     (let [node (create-node)
-          _ (core/transact node [{:db/id 1 :person/name "Alice"}])
-          db-before (core/db node)
+          _ (h/transact node fix/people-schema2)
+          _ (h/transact node [{:db/id 1 :person/name "Alice"}])
+          db-before (h/db node)
           result (incremental/calc-zset-indices db-before {:add []
                                                            :retract [[1 :person/name "Alice"]]})]
       (testing "EAV index has weight -1"
@@ -81,7 +83,7 @@
 (deftest calc-zset-indices-retract-nonexisting-test
   (testing "Retracting a non-existing triple results in empty indices"
     (let [node (create-node)
-          db-before (core/db node)
+          db-before (h/db node)
           result (incremental/calc-zset-indices db-before {:add []
                                                            :retract [[1 :person/name "Alice"]]})]
       (testing "All indices are empty"
@@ -94,12 +96,12 @@
 (deftest calc-zset-indices-add-duplicate-many-test
   (testing "Adding a duplicate value with cardinality/many results in empty indices"
     (let [node (create-node)
-          _ (core/transact node [{:db/id :hobby-attr
-                                  :db/ident :person/hobby
-                                  :db/valueType :db.type/string
-                                  :db/cardinality :db.cardinality/many}])
-          _ (core/transact node [[:db/add 1 :person/hobby "reading"]])
-          db-before (core/db node)
+          _ (h/transact node [{:db/id :hobby-attr
+                               :db/ident :person/hobby
+                               :db/valueType :db.type/string
+                               :db/cardinality :db.cardinality/many}])
+          _ (h/transact node [[:db/add 1 :person/hobby "reading"]])
+          db-before (h/db node)
           result (incremental/calc-zset-indices db-before {:add [[1 :person/hobby "reading"]]
                                                            :retract []})]
       (testing "All indices are empty (no change needed)"
@@ -112,8 +114,9 @@
 (deftest calc-zset-indices-overwrite-one-test
   (testing "Adding a new value with cardinality/one retracts old and adds new"
     (let [node (create-node)
-          _ (core/transact node [{:db/id 1 :person/name "Alice"}])
-          db-before (core/db node)
+          _ (h/transact node fix/people-schema2)
+          _ (h/transact node [{:db/id 1 :person/name "Alice"}])
+          db-before (h/db node)
           result (incremental/calc-zset-indices db-before {:add [[1 :person/name "Bob"]]
                                                            :retract []})]
       (testing "EAV index has -1 for Alice and +1 for Bob"
