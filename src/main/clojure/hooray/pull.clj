@@ -1,9 +1,6 @@
 (ns hooray.pull
   (:require [clojure.spec.alpha :as s]
-            [hooray.core :as h]
-            [hooray.db :as db]
-            [hooray.util :as u]
-            [clojure.set :as set]))
+            [hooray.db :as db]))
 
 ;; =============================================================================
 ;; Pull Pattern Spec Definitions

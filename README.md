@@ -85,7 +85,6 @@ but this will likely have significant overhead and is making initial exploratory
 	- [ ] functions
 	- [ ] aggregates
 	- [ ] pull
-	- [ ] rules
 - Incremental
     - [x] Standard data pattern
 	- [ ] Or
@@ -97,7 +96,6 @@ but this will likely have significant overhead and is making initial exploratory
 	- [ ] functions
 	- [ ] aggregates
 	- [ ] pull
-	- [ ] rules
 
 Out of scope for now
 - [ ] rules - rules are very powerful, but they also require you to deal with recursive query evaluation and fixed point calculations. So for a first pass, let's forget about them.
