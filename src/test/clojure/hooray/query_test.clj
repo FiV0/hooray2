@@ -743,6 +743,16 @@
                 (h/db fix/*node*)))
         "implicit grouping"))
 
+(t/deftest test-aggregate-set-semantics
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :city "NYC"}
+                          {:db/id :bob :name "Bob" :city "NYC"}
+                          {:db/id :carol :name "Carol" :city "LA"}])
+
+  ;; TODO do we want Datomic or XTDB semantics here?
+  (t/is (= #{[3]} (h/q '{:find [(count city)]
+                         :where [[p :city city]]}
+                       (h/db fix/*node*)))))
+
 (t/deftest datascript-test-aggregates
   (h/transact fix/*node* [{:db/id :db/head-attribute
                            :db/ident :heads

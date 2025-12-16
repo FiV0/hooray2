@@ -70,3 +70,7 @@
 '{:type :project
   :projections [?name ?pull-result ?count]
   :child 'unique-child-plan}
+
+;; mainly important for DBSP
+'{:type :distinct
+  :child 'unique-child-plan}

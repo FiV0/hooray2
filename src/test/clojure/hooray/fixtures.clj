@@ -36,6 +36,10 @@
                               {:db/id -104
                                :db/ident :salary
                                :db/valueType :db.type/long
+                               :db/cardinality :db.cardinality/one}
+                              {:db/id -105
+                               :db/ident :city
+                               :db/valueType :db.type/string
                                :db/cardinality :db.cardinality/one}])
 
 (def people-schema2
