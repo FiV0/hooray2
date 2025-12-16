@@ -47,6 +47,7 @@ dependencies {
     // dev
     devImplementation( "com.datomic", "local", "1.0.291")
     devImplementation("datascript", "datascript", "1.7.8")
+    devImplementation("vvvvalvalval", "scope-capture", "0.3.3")
 
     testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
     nrepl("cider", "cider-nrepl", "0.58.0")
