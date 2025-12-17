@@ -60,5 +60,7 @@ data class IntegerWeight(val value: Int) : Weight<IntegerWeight> {
         val ZERO = IntegerWeight(0)
         @JvmField
         val ONE = IntegerWeight(1)
+        @JvmField
+        val MINUS_ONE = IntegerWeight(-1)
     }
 }
