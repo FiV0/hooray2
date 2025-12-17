@@ -155,3 +155,16 @@
 
     (t/is (= [[["Ivan"] -1]]
              (h/consume-delta! *inc-q*)))))
+#_
+(deftest test-dbsp-distinct-semantics-retractions
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :city "NYC"}
+                          {:db/id :bob :name "Bob" :city "NYC"}
+                          {:db/id :carol :name "Carol" :city "LA"}])
+  (with-transaction-and-inc-q
+      [[:db/retractEntity :bob]]
+
+      '{:find [city]
+        :where [[e :city city]]}
+
+    (t/is (= []
+             (h/consume-delta! *inc-q*)))))
