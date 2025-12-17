@@ -22,7 +22,7 @@ interface ZSetPrefixExtender {
                 override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = zset
 
                 override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    zset.naturalJoin(extensions)
+                    zset.equiJoin(extensions)
             }
         }
 
@@ -36,7 +36,7 @@ interface ZSetPrefixExtender {
                 override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>
 
                 override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    (indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>).naturalJoin(extensions)
+                    (indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>).equiJoin(extensions)
             }
         }
     }
@@ -93,7 +93,7 @@ class IncrementalGenericJoin(private val relations: List<IncrementalIndex>, priv
             }
 
                            // Δ_{1..i-1} ⋈ Δᵢ
-            runningDelta = runningDelta.naturalJoin(deltaJ) +
+            runningDelta = runningDelta.equiJoin(deltaJ) +
                            // + Δ_{1..i-1} ⋈ z⁻¹(i)
                            relations[j].accumulated.intersect(prefix, runningDelta) +
                            // + Δᵢ ⋈ z⁻¹(1) ⋈ z⁻¹(2) ⋈ ... ⋈ z⁻¹(i-1)

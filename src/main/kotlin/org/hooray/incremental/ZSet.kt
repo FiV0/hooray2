@@ -189,7 +189,7 @@ class ZSet<K, W : Weight<W>> private constructor(
         return "ZSet(${data.entries.joinToString(", ") { "${it.key}: ${it.value}" }})"
     }
 
-    fun naturalJoin(other: ZSet<K, W>): ZSet<K, W> {
+    fun equiJoin(other: ZSet<K, W>): ZSet<K, W> {
         val (smaller, larger) = if (this.size <= other.size) this to other else other to this
         val result = mutableMapOf<K, W>()
         for ((key, weight) in smaller.data) {
