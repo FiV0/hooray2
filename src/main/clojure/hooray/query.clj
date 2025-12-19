@@ -67,9 +67,37 @@
                            (s/conformer (fn [{:keys [patterns]}] patterns)
                                         (fn [patterns] {:type 'or :patterns patterns}))))
 
+(def ^:private predicates #{'= 'not= '< '<= '> '>=})
+
+(s/def ::predicate-pattern (s/and vector?
+                                  (s/tuple (s/and list?
+                                                  (s/cat :predicate predicates
+                                                         :args (s/+ ::pattern-element))))
+                                  (s/conformer (fn [vector-wrapped] (first vector-wrapped))
+                                               (fn [unwrapped] [unwrapped]))))
+
+(comment
+  (s/conform ::predicate-pattern '[(= ?x 10)])
+  (s/unform ::predicate-pattern (s/conform ::predicate-pattern '(= ?x 10))))
+
+(def ^:private fns #{'identity 'inc 'dec 'str})
+
+(s/def ::fn-pattern (s/and vector?
+                           (s/tuple (s/and list?
+                                           (s/cat :fn fns
+                                                  :args (s/+ ::pattern-element)))
+                                    ::variable)))
+
+(comment
+  (s/conform ::fn-pattern  '[(identity ?x) ?y])
+  (s/unform ::fn-pattern (s/conform ::fn-pattern '[(identity ?x) ?y])))
+
+
 (s/def ::pattern (s/or :triple ::triple-pattern
                        :not ::not-pattern
-                       :or ::or-pattern))
+                       :or ::or-pattern
+                       :predicate ::predicate-pattern
+                       :fn ::fn-pattern))
 
 (s/def ::find (s/and vector?
                      (s/+ (s/or :variable ::variable
