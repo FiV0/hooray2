@@ -84,4 +84,101 @@ class GenericJoinTest {
         )
         assertEquals(expected, result)
     }
+
+    @Test
+    fun `test createFromPrefixExtender participates in correct levels`() {
+        val extender = PrefixExtender.createFromPrefixExtender(listOf(0, 2), listOf("a", "b"))
+
+        assertEquals(true, extender.participatesInLevel(0))
+        assertEquals(false, extender.participatesInLevel(1))
+        assertEquals(true, extender.participatesInLevel(2))
+        assertEquals(false, extender.participatesInLevel(3))
+    }
+
+    @Test
+    fun `test createFromPrefixExtender count with matching prefix`() {
+        // Extender expects value "x" at level 0 and "y" at level 2
+        val extender = PrefixExtender.createFromPrefixExtender(listOf(0, 2), listOf("x", "y"))
+
+        // Empty prefix - no levels to check yet, so it matches
+        assertEquals(1, extender.count(emptyList()))
+
+        // Prefix with matching value at level 0
+        assertEquals(1, extender.count(listOf("x")))
+
+        // Prefix with non-matching value at level 0
+        assertEquals(0, extender.count(listOf("z")))
+
+        // Prefix with matching values at levels 0 and 2 (level 1 can be anything)
+        assertEquals(1, extender.count(listOf("x", "anything", "y")))
+
+        // Prefix with matching value at level 0 but non-matching at level 2
+        assertEquals(0, extender.count(listOf("x", "anything", "z")))
+    }
+
+    @Test
+    fun `test createFromPrefixExtender propose with matching prefix`() {
+        // Extender expects value "x" at level 0 and "y" at level 2
+        val extender = PrefixExtender.createFromPrefixExtender(listOf(0, 2), listOf("x", "y"))
+
+        // Empty prefix - propose first value "x"
+        assertEquals(listOf("x"), extender.propose(emptyList()))
+
+        // Prefix with matching value at level 0 - propose "y" (next value for level 2)
+        assertEquals(listOf("y"), extender.propose(listOf("x")))
+
+        // Prefix with non-matching value at level 0
+        assertEquals(emptyList<Any>(), extender.propose(listOf("z")))
+
+        // Prefix with matching value at level 0, arbitrary value at level 1
+        assertEquals(listOf("y"), extender.propose(listOf("x", "anything")))
+    }
+
+    @Test
+    fun `test createFromPrefixExtender intersect with matching prefix`() {
+        // Extender expects value "x" at level 0 and "y" at level 2
+        val extender = PrefixExtender.createFromPrefixExtender(listOf(0, 2), listOf("x", "y"))
+
+        // Empty prefix, extensions contain the expected value
+        assertEquals(listOf("x"), extender.intersect(emptyList(), listOf("x", "a", "b")))
+
+        // Empty prefix, extensions don't contain the expected value
+        assertEquals(emptyList<Any>(), extender.intersect(emptyList(), listOf("a", "b", "c")))
+
+        // Matching prefix at level 0, extensions contain expected value "y"
+        assertEquals(listOf("y"), extender.intersect(listOf("x"), listOf("y", "z")))
+
+        // Matching prefix at level 0, extensions don't contain expected value
+        assertEquals(emptyList<Any>(), extender.intersect(listOf("x"), listOf("a", "b")))
+
+        // Non-matching prefix
+        assertEquals(emptyList<Any>(), extender.intersect(listOf("wrong"), listOf("x", "y")))
+    }
+
+    @Test
+    fun `test createFromPrefixExtender in GenericJoin`() {
+        // Create a scenario with 3 levels where we use createFromPrefixExtender
+        // Level 0: values 1, 2, 3
+        // Level 1: values "a", "b"
+        // Level 2: values "x", "y"
+
+        val level0Extender = PrefixExtender.createSingleLevel(listOf(1, 2, 3), 0)
+        val level1Extender = PrefixExtender.createSingleLevel(listOf("a", "b"), 1)
+        val level2Extender = PrefixExtender.createSingleLevel(listOf("x", "y"), 2)
+
+        // This extender constrains: level 0 = 2, level 2 = "x"
+        val constraintExtender = PrefixExtender.createFromPrefixExtender(listOf(0, 2), listOf(2, "x"))
+
+        val extenders = listOf(level0Extender, level1Extender, level2Extender, constraintExtender)
+        val join = GenericJoin(extenders, 3)
+        val result = join.join()
+
+        // Only tuples where level 0 = 2 and level 2 = "x" should remain
+        // Level 1 can be "a" or "b"
+        val expected = listOf(
+            listOf(2, "a", "x"),
+            listOf(2, "b", "x")
+        )
+        assertEquals(expected, result)
+    }
 }

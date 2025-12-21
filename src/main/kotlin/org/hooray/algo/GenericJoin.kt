@@ -19,7 +19,7 @@ interface PrefixExtender : LevelParticipation {
 
     companion object {
         @JvmStatic
-        fun createSingleLevel(values: List<Int>, participatesInLevel: Int): PrefixExtender {
+        fun createSingleLevel(values: List<Any>, participatesInLevel: Int): PrefixExtender {
             val sortedValues = values.sortedWith(UniversalComparator)
             return object : PrefixExtender {
                 override fun count(prefix: Prefix): Int = sortedValues.size
@@ -49,6 +49,58 @@ interface PrefixExtender : LevelParticipation {
 
                 override fun participatesInLevel(level: Int) = level < tuple.size
             }
+        }
+
+        @JvmStatic
+        fun createFromPrefixExtender(participatingLevels: List<Int>, partialPrefix: Prefix): PrefixExtender {
+            val levelSet = participatingLevels.toHashSet()
+            return object : PrefixExtender {
+                private fun isPrefixMatching(prefix: Prefix): Boolean {
+                    var i = 0
+                    for (level in participatingLevels) {
+                        if (level >= prefix.size) break
+                        if (partialPrefix[i] != prefix[level]) {
+                            return false
+                        }
+                        i++
+                    }
+                    return true
+                }
+
+                override fun count(prefix: Prefix): Int =
+                    if (isPrefixMatching(prefix)) 1 else 0
+
+                override fun propose(prefix: Prefix): List<Extension> {
+                    var i = 0
+                    for (level in participatingLevels) {
+                        if (level >= prefix.size) break
+                        if (partialPrefix[i] != prefix[level]) {
+                            return emptyList()
+                        }
+                        i++
+                    }
+                    return listOf(partialPrefix[i])
+                }
+
+                override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+                    var i = 0
+                    for (level in participatingLevels) {
+                        if (level >= prefix.size) break
+                        if (partialPrefix[i] != prefix[level]) {
+                            return emptyList()
+                        }
+                        i++
+                    }
+                    if (!extensions.contains(partialPrefix[i])) {
+                        return emptyList()
+                    }
+                    return listOf(partialPrefix[i])
+                }
+
+                override fun participatesInLevel(level: Int) = levelSet.contains(level)
+            }
+
+
         }
 
         fun createPrefixAndExtensionsExtender(fixedPrefix: Prefix, fixedExtensions: List<Extension>): PrefixExtender {
