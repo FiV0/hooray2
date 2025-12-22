@@ -24,6 +24,7 @@
     GenericNotPrefixExtender
     GenericOrPrefixExtender
     GenericPredicatePrefixExtender
+    GenericFnPrefixExtender
     SealedIndex$MapIndex
     SealedIndex$SetIndex)))
 
@@ -83,11 +84,11 @@
   (s/conform ::predicate-pattern '[(= ?x 10)])
   (s/unform ::predicate-pattern (s/conform ::predicate-pattern '(= ?x 10))))
 
-(def ^:private fns #{'identity 'inc 'dec 'str})
+(def ^:private fns #{'identity 'inc 'dec 'str 'quot '+ '-})
 
 (s/def ::fn-pattern (s/and vector?
                            (s/tuple (s/and list?
-                                           (s/cat :fn fns
+                                           (s/cat :fun fns
                                                   :args (s/+ ::pattern-element)))
                                     ::variable)))
 
@@ -156,7 +157,12 @@
         :predicate (let [{:keys [args]} value]
                      (->> args
                           (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
-                          (map second))))
+                          (map second)))
+        :fn (let [[{:keys [args]} ret-var] value]
+              (-> (->> args
+                       (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
+                       (map second))
+                  (conj ret-var))))
       distinct))
 
 (defn- in->variables [in]
@@ -250,7 +256,7 @@
     [[:variable _]] (util/->function (fn [a] (f a)))
     :else (throw (ex-info "Unknown function pattern" {:fn f :args args}))))
 
-(defn resolve-predicate [f-symbol]
+(defn resolve-fn [f-symbol]
   (if (= f-symbol 're-find)
     (fn [a b] (boolean (re-find a b)))
     (resolve f-symbol)))
@@ -286,7 +292,15 @@
                        variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
                                           (map second))]
                    (GenericPredicatePrefixExtender. (sort (mapv var->idx variable-args))
-                                                    (fn+args->function (resolve-predicate predicate) args var->idx))))))
+                                                    (fn+args->function (resolve-fn predicate) args var->idx)))
+
+      :fn (let [_ (prn pattern)
+                [{:keys [fun args]} ret-var] pattern
+                variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
+                                   (map second))]
+            (GenericFnPrefixExtender. (sort (mapv var->idx variable-args))
+                                      (get var->idx ret-var)
+                                      (fn+args->function (resolve-fn fun) args var->idx))))))
 
 (defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))

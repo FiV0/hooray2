@@ -924,20 +924,22 @@
                                 [(re-find #"o" name)]
                                 [(= age name)]]} (h/db fix/*node*))))))
 
-    #_
     (t/testing "Bind result to var"
       (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
                (h/q '{:find [name half-age]
                       :where [[e :name name]
                               [e :age age]
-                              [(quot age 2) half-age]]} (h/db fix/*node*))))
+                              [(quot age 2) half-age]]}
+                    (h/db fix/*node*))))
+
 
       (t/testing "Order of joins is rearranged to ensure arguments are bound"
         (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
                  (h/q '{:find [name half-age]
                         :where [[e :name name]
                                 [e :age real-age]
-                                [(quot real-age 2) half-age]]} (h/db fix/*node*)))))
+                                [(quot real-age 2) half-age]]}
+                      (h/db fix/*node*)))))
 
       (t/testing "Binding more than once intersects result"
         (t/is (= #{["Ivan" 15]}
@@ -945,7 +947,8 @@
                         :where [[e :name name]
                                 [e :age real-age]
                                 [(quot real-age 2) half-age]
-                                [(- real-age 15) half-age]]} (h/db fix/*node*)))))
+                                [(- real-age 15) half-age]]}
+                      (h/db fix/*node*)))))
 
       (t/testing "Binding can use range predicates"
         (t/is (= #{["Dominic" 25]}
@@ -953,7 +956,8 @@
                         :where [[e :name name]
                                 [e :age real-age]
                                 [(quot real-age 2) half-age]
-                                [(> half-age 20)]]} (h/db fix/*node*))))))))
+                                [(> half-age 20)]]}
+                      (h/db fix/*node*))))))))
 
 #_(t/deftest datascript-test-aggregates
     (let [db (xt/db *api*)]
