@@ -164,6 +164,19 @@
                 [["Ivan" "Ivanov"]
                  ["Petr" "Petrov"]]))))
 
+(deftest test-order-of-vars-in-predicate
+  (t/is (= #{[10 11]}
+           (h/q '{:find [in1 in2]
+                  :in [in1 in2]
+                  :where [[(<= in1 in2)]]}
+                (h/db fix/*node*)
+                10 11)
+           (h/q '{:find [in1 in2]
+                  :in [in2 in1]
+                  :where [[(<= in1 in2)]]}
+                (h/db fix/*node*)
+                11 10))))
+
 (deftest test-query-with-arguments
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
