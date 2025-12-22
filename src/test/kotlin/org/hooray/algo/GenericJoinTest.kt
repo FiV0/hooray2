@@ -181,4 +181,145 @@ class GenericJoinTest {
         )
         assertEquals(expected, result)
     }
+
+    // Tests for createFromPrefixesExtender (multiple prefixes)
+
+    @Test
+    fun `test createFromPrefixesExtender participates in correct levels`() {
+        val extender = PrefixExtender.createFromPrefixesExtender(
+            listOf(0, 2),
+            listOf(listOf("a", "b"), listOf("x", "y"))
+        )
+
+        assertEquals(true, extender.participatesInLevel(0))
+        assertEquals(false, extender.participatesInLevel(1))
+        assertEquals(true, extender.participatesInLevel(2))
+        assertEquals(false, extender.participatesInLevel(3))
+    }
+
+    @Test
+    fun `test createFromPrefixesExtender count with matching prefixes`() {
+        // Extender accepts two prefixes: ["a", "b"] or ["x", "y"] at levels [0, 2]
+        val extender = PrefixExtender.createFromPrefixesExtender(
+            listOf(0, 2),
+            listOf(listOf("a", "b"), listOf("x", "y"))
+        )
+
+        // Empty prefix - both prefixes match
+        assertEquals(2, extender.count(emptyList()))
+
+        // Prefix with "a" at level 0 - only first prefix matches
+        assertEquals(1, extender.count(listOf("a")))
+
+        // Prefix with "x" at level 0 - only second prefix matches
+        assertEquals(1, extender.count(listOf("x")))
+
+        // Prefix with non-matching value at level 0
+        assertEquals(0, extender.count(listOf("z")))
+
+        // Full match for first prefix
+        assertEquals(1, extender.count(listOf("a", "anything", "b")))
+
+        // Full match for second prefix
+        assertEquals(1, extender.count(listOf("x", "anything", "y")))
+
+        // Partial match at level 0 but mismatch at level 2
+        assertEquals(0, extender.count(listOf("a", "anything", "y")))
+    }
+
+    @Test
+    fun `test createFromPrefixesExtender propose with matching prefixes`() {
+        val extender = PrefixExtender.createFromPrefixesExtender(
+            listOf(0, 2),
+            listOf(listOf("a", "b"), listOf("x", "y"))
+        )
+
+        // Empty prefix - propose first values from both prefixes (distinct)
+        assertEquals(listOf("a", "x"), extender.propose(emptyList()))
+
+        // Prefix with "a" at level 0 - propose "b" from first prefix
+        assertEquals(listOf("b"), extender.propose(listOf("a")))
+
+        // Prefix with "x" at level 0 - propose "y" from second prefix
+        assertEquals(listOf("y"), extender.propose(listOf("x")))
+
+        // Non-matching prefix
+        assertEquals(emptyList<Any>(), extender.propose(listOf("z")))
+
+        // Prefix with "a" at level 0, anything at level 1 - propose "b"
+        assertEquals(listOf("b"), extender.propose(listOf("a", "anything")))
+    }
+
+    @Test
+    fun `test createFromPrefixesExtender intersect with matching prefixes`() {
+        val extender = PrefixExtender.createFromPrefixesExtender(
+            listOf(0, 2),
+            listOf(listOf("a", "b"), listOf("x", "y"))
+        )
+
+        // Empty prefix, extensions contain both expected values
+        assertEquals(listOf("a", "x"), extender.intersect(emptyList(), listOf("a", "x", "z")))
+
+        // Empty prefix, extensions contain only one expected value
+        assertEquals(listOf("a"), extender.intersect(emptyList(), listOf("a", "z")))
+
+        // Empty prefix, extensions don't contain expected values
+        assertEquals(emptyList<Any>(), extender.intersect(emptyList(), listOf("z", "w")))
+
+        // Matching prefix at level 0 for first prefix
+        assertEquals(listOf("b"), extender.intersect(listOf("a"), listOf("b", "y", "z")))
+
+        // Matching prefix at level 0 for second prefix
+        assertEquals(listOf("y"), extender.intersect(listOf("x"), listOf("b", "y", "z")))
+
+        // Non-matching prefix
+        assertEquals(emptyList<Any>(), extender.intersect(listOf("z"), listOf("a", "b", "x", "y")))
+    }
+
+    @Test
+    fun `test createFromPrefixesExtender in GenericJoin`() {
+        // Create a scenario with 2 levels
+        // Level 0: values "Ivan", "Petr", "Bob"
+        // Level 1: values "Ivanov", "Petrov", "Smith"
+
+        val level0Extender = PrefixExtender.createSingleLevel(listOf("Ivan", "Petr", "Bob"), 0)
+        val level1Extender = PrefixExtender.createSingleLevel(listOf("Ivanov", "Petrov", "Smith"), 1)
+
+        // This extender constrains to only allow: ["Ivan", "Ivanov"] or ["Petr", "Petrov"]
+        val constraintExtender = PrefixExtender.createFromPrefixesExtender(
+            listOf(0, 1),
+            listOf(listOf("Ivan", "Ivanov"), listOf("Petr", "Petrov"))
+        )
+
+        val extenders = listOf(level0Extender, level1Extender, constraintExtender)
+        val join = GenericJoin(extenders, 2)
+        val result = join.join()
+
+        // Only the two valid combinations should remain
+        val expected = listOf(
+            listOf("Ivan", "Ivanov"),
+            listOf("Petr", "Petrov")
+        )
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun `test createFromPrefixesExtender with single prefix behaves like createFromPrefixExtender`() {
+        val singleExtender = PrefixExtender.createFromPrefixExtender(listOf(0, 1), listOf("a", "b"))
+        val multiExtender = PrefixExtender.createFromPrefixesExtender(listOf(0, 1), listOf(listOf("a", "b")))
+
+        // Both should behave identically
+        assertEquals(singleExtender.count(emptyList()), multiExtender.count(emptyList()))
+        assertEquals(singleExtender.count(listOf("a")), multiExtender.count(listOf("a")))
+        assertEquals(singleExtender.count(listOf("z")), multiExtender.count(listOf("z")))
+
+        assertEquals(singleExtender.propose(emptyList()), multiExtender.propose(emptyList()))
+        assertEquals(singleExtender.propose(listOf("a")), multiExtender.propose(listOf("a")))
+        assertEquals(singleExtender.propose(listOf("z")), multiExtender.propose(listOf("z")))
+
+        assertEquals(
+            singleExtender.intersect(emptyList(), listOf("a", "b", "c")),
+            multiExtender.intersect(emptyList(), listOf("a", "b", "c"))
+        )
+    }
 }

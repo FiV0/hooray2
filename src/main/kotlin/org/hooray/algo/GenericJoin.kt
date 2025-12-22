@@ -53,7 +53,7 @@ interface PrefixExtender : LevelParticipation {
 
         @JvmStatic
         fun createFromPrefixExtender(participatingLevels: List<Int>, partialPrefix: Prefix): PrefixExtender {
-            val levelSet = participatingLevels.toHashSet()
+            val levelSet = participatingLevels.toSet()
             return object : PrefixExtender {
                 private fun isPrefixMatching(prefix: Prefix): Boolean {
                     var i = 0
@@ -99,8 +99,54 @@ interface PrefixExtender : LevelParticipation {
 
                 override fun participatesInLevel(level: Int) = levelSet.contains(level)
             }
+        }
 
+        @JvmStatic
+        fun createFromPrefixesExtender(participatingLevels: List<Int>, partialPrefixes: List<Prefix>): PrefixExtender {
+            val levelSet = participatingLevels.toSet()
 
+            return object : PrefixExtender {
+                // TODO the matchingPrefixes and nextLevelIndex could get unified for efficiency
+                private fun matchingPrefixes(prefix: Prefix): List<Prefix> {
+                    return partialPrefixes.filter { partialPrefix ->
+                        var i = 0
+                        var matches = true
+                        for (level in participatingLevels) {
+                            if (level >= prefix.size) break
+                            if (partialPrefix[i] != prefix[level]) {
+                                matches = false
+                                break
+                            }
+                            i++
+                        }
+                        matches
+                    }
+                }
+
+                private fun nextLevelIndex(prefix: Prefix): Int {
+                    var i = 0
+                    for (level in participatingLevels) {
+                        if (level >= prefix.size) break
+                        i++
+                    }
+                    return i
+                }
+
+                override fun count(prefix: Prefix): Int = matchingPrefixes(prefix).size
+
+                override fun propose(prefix: Prefix): List<Extension> {
+                    val idx = nextLevelIndex(prefix)
+                    return matchingPrefixes(prefix).map { it[idx] }.distinct()
+                }
+
+                override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+                    val idx = nextLevelIndex(prefix)
+                    val validExtensions = matchingPrefixes(prefix).map { it[idx] }.toSet()
+                    return extensions.filter { validExtensions.contains(it) }
+                }
+
+                override fun participatesInLevel(level: Int) = levelSet.contains(level)
+            }
         }
 
         fun createPrefixAndExtensionsExtender(fixedPrefix: Prefix, fixedExtensions: List<Extension>): PrefixExtender {
