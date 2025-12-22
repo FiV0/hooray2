@@ -4,9 +4,11 @@
    [clojure.set]
    [clojure.spec.alpha :as s]
    [hooray.db :as db]
-   [hooray.error :as err])
+   [hooray.error :as err]
+   [hooray.util :as util])
   (:import
    (java.util Map HashMap)
+   (java.util.function Function BiFunction)
    (org.hooray.algo
     GenericJoin
     Join
@@ -21,6 +23,7 @@
     GenericAndPrefixExtender
     GenericNotPrefixExtender
     GenericOrPrefixExtender
+    GenericPredicatePrefixExtender
     SealedIndex$MapIndex
     SealedIndex$SetIndex)))
 
@@ -67,7 +70,7 @@
                            (s/conformer (fn [{:keys [patterns]}] patterns)
                                         (fn [patterns] {:type 'or :patterns patterns}))))
 
-(def ^:private predicates #{'= 'not= '< '<= '> '>=})
+(def ^:private predicates #{'= 'not= '< '<= '> '>= 'string?})
 
 (s/def ::predicate-pattern (s/and vector?
                                   (s/tuple (s/and list?
@@ -124,6 +127,12 @@
 (s/def ::query (s/keys :req-un [::find ::where]
                        :opt-un [::in ::keys ::strs ::syms]))
 
+(comment
+  (s/explain ::query '{:find [name]
+                       :in [[name ...]]
+                       :where [[(string? name)]]})
+  )
+
 ;; We don't (yet) support a where clause of the form
 ;; [1 x "Alice"]
 ;; This is a very unlikely with Datomic as you will know your attributes.
@@ -143,13 +152,31 @@
                     [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
                     [_ [:variable _] _] (err/unsupported-ex "Currently varialbles in attribute position are not supported")))
 
-        (:or :and :not) (variable-order* value))
+        (:or :and :not) (variable-order* value)
+        :predicate (let [{:keys [args]} value]
+                     (->> args
+                          (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
+                          (map second))))
       distinct))
+
+(defn- in->variables [in]
+  (-> (for [[type var] in]
+        (case type
+          :scale-binding [var]
+          :collection-binding [var]
+          :tuple-binding var
+          :relation-binding var))
+      flatten))
 
 (defn variable-order* [patterns]
   (->> (map variable-order patterns)
        flatten
        distinct))
+
+(defn query->variable-order [{:keys [in where] :as _conformed-query}]
+  (let [in-vars (in->variables in)
+        where-vars (variable-order* where)]
+    (-> (concat in-vars where-vars) distinct)))
 
 (defn free-variables [pattern]
   (set (variable-order pattern)))
@@ -211,6 +238,16 @@
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
+(defn fn+args->function [f args]
+  (match args
+    [[:constant c1] [:constant c2]] (util/->closure (fn [] (f c1 c2)))
+    [[:constant c1] [:variable _]] (util/->function (fn [a] (f c1 a)))
+    [[:variable _] [:constant c2]] (util/->function (fn [a] (f a c2)))
+    [[:variable _] [:variable _]] (util/->bifunction (fn [a b] (f a b)))
+    [[:constant c]] (util/->closure (fn [] (f c)))
+    [[:variable _]] (util/->function (fn [a] (f a)))
+    :else (throw (ex-info "Unknown function pattern" {:fn f :args args}))))
+
 (defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-in-join-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
@@ -236,33 +273,42 @@
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       :or (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
       :and (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
-      :not (GenericNotPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern) (dec (count var-in-join-order))))))
+      :not (GenericNotPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern) (dec (count var-in-join-order)))
 
-(defn- transpose [mtx]
-  (apply mapv vector mtx))
+      :predicate (let [{:keys [predicate args]} pattern
+                       variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
+                                          (map second))]
+                   (GenericPredicatePrefixExtender. (mapv var-to-index variable-args)
+                                                    (fn+args->function (resolve predicate) args))))))
 
 (defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))
     (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
-  (let [create-iterator (case algo
-                          :leapfrog (fn [var args] (LeapfrogIndex/createSingleLevel args (var->idx var)))
-                          :generic (fn [var args] (PrefixExtender/createSingleLevel args (var->idx var))))]
+  (let [create-single-iterator (case algo
+                                 :leapfrog (fn [var args] (LeapfrogIndex/createSingleLevel args (var->idx var)))
+                                 :generic (fn [var args] (PrefixExtender/createSingleLevel args (var->idx var))))
+        create-from-prefix-iterator (case algo
+                                      :leapfrog (throw (err/unsupported-ex "Not yet supported!"))
+                                      :generic (fn [vars args]
+                                                 ;; createFromPrefixExtender wants List<int> for vars
+                                                 (PrefixExtender/createFromPrefixExtender (mapv (comp int var->idx) vars) args)))
+        create-from-prefixes-iterator (case algo
+                                        :leapfrog (throw (err/unsupported-ex "Not yet supported!"))
+                                        :generic (fn [vars args]
+                                                   ;; createFromPrefixesExtender wants List<int> for vars
+                                                   (PrefixExtender/createFromPrefixesExtender (mapv (comp int var->idx) vars) args)))]
     (letfn [(in->iterator [[[type var] arg]]
               (case type
-                :scale-binding [(create-iterator var [arg])]
-                :collection-binding [(create-iterator var arg)]
+                :scale-binding (create-single-iterator var [arg])
+                :collection-binding (create-single-iterator var arg)
                 :tuple-binding (if-not (= (count var) (count arg))
                                  (throw (IllegalArgumentException. (format ":tuple %s and args %s must have same length!"
                                                                            (pr-str var) (pr-str arg))))
-                                 (->> (zipmap var arg)
-                                      (map (fn [[var arg]] (create-iterator var [arg])))))
+                                 (create-from-prefix-iterator var arg))
                 ;; TODO error handling for :relation-binding
-                :relation-binding (let [args-by-position (transpose arg)]
-                                    (->> (zipmap (first var) args-by-position)
-                                         (map (fn [[var args]]
-                                                (create-iterator var args)))))))]
+                :relation-binding (create-from-prefixes-iterator (first var) arg)))]
       (->> (zipmap in args)
-           (mapcat in->iterator)))))
+           (map in->iterator)))))
 
 
 (defn join [compiled-patterns levels {:keys [algo] :as _opts}]
@@ -307,7 +353,6 @@
     ([])
     ([acc] acc)
     ([acc x]
-     (prn acc x)
      (if acc
        (if (neg? (compare acc x))
          x
@@ -414,8 +459,8 @@
 
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
-  (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query query)
-        vars-in-join-order (variable-order* where)
+  (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
+        vars-in-join-order (query->variable-order conformed-query)
         var->idx (zipmap vars-in-join-order (range))
         compiled-patterns (concat (in->iterators in var->idx args opts)
                                   (map (partial compile-pattern db vars-in-join-order) where))

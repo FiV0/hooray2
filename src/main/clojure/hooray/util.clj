@@ -1,4 +1,7 @@
-(ns hooray.util)
+(ns hooray.util
+  (:import (java.util.concurrent Callable)
+           (java.util.function Function BiFunction)
+           (kotlin.jvm.functions Function0 Function1 Function2)))
 
 (defn create-update-in
   "Creates a function that behaves like `clojure.core/update-in` but defaults to `default-map`
@@ -21,3 +24,18 @@
 
   (def m2 (sorted-update-in m [1 2] disj 3))
   (sorted? m2))
+
+(defn ->closure[f]
+  (reify Function0
+    (invoke [_this]
+      (f))))
+
+(defn ->function [f]
+  (reify Function1
+    (invoke [_this arg]
+      (f arg))))
+
+(defn ->bifunction [f]
+  (reify Function2
+    (invoke [_this arg1 arg2]
+      (f arg1 arg2))))

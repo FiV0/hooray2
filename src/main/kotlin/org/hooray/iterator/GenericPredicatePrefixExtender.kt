@@ -22,6 +22,10 @@ class GenericPredicatePrefixExtender(val levels: List<Int>, val predicate: Any) 
     @Suppress("UNCHECKED_CAST")
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         return when (levels.size) {
+            0 -> {
+                val pred = predicate as () -> Boolean
+                if (pred()) extensions else emptyList()
+            }
             1 -> {
                 val pred = predicate as Predicate1<Any>
                 extensions.filter { ext -> pred(ext) }

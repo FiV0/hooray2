@@ -48,7 +48,8 @@
 (deftest test-sanity-check
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
   (t/is (= #{[1]} (h/q '{:find [e]
-                         :where [[e :name "Ivan"]]} (h/db fix/*node*)))))
+                         :where [[e :name "Ivan"]]}
+                       (h/db fix/*node*)))))
 
 (deftest test-basic-query
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -138,6 +139,30 @@
                           :strs [name]
                           :where [[e :name name]]} db))
           ":keys and :strs can't both be present")))
+
+(deftest fix-tuple-and-relation-binding
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                          {:db/id :petr :name "Petr" :last-name "Petrov"}])
+
+  (t/is (= #{["Ivan" "Ivanov"]}
+           (h/q '{:find [name last-name]
+                  :in [[name last-name]]
+                  :where [[e :name name]
+                          [e :last-name last-name]]}
+                (h/db fix/*node*)
+                ["Ivan" "Ivanov"])))
+
+
+  (t/is (= #{["Ivan" "Ivanov"]
+             ["Petr" "Petrov"]}
+           (h/q '{:find [name last-name]
+                  :in [[[name last-name]]]
+                  ;; TODO allow no where
+                  ;; just a placeholder for now
+                  :where [[e :name "Ivan"]]}
+                (h/db fix/*node*)
+                [["Ivan" "Ivanov"]
+                 ["Petr" "Petrov"]]))))
 
 (deftest test-query-with-arguments
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -237,60 +262,65 @@
                [:petr]} (h/q '{:find [e]
                                :in [[[name last-name]]]
                                :where [[e :name name]
-                                       [e :last-name last-name]]
-                               :args [{:name "Ivan" :last-name "Ivanov"}
-                                      {:name "Petr" :last-name "Petrov"}]}
+                                       [e :last-name last-name]]}
                              (h/db fix/*node*)
                              [["Ivan" "Ivanov"] ["Petr" "Petrov"]]))))
 
-  #_(t/testing "Can query predicates based on arguments alone"
-      (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                  :where [[(re-find #"I" name)]]
-                                  :args [{:name "Ivan"}
-                                         {:name "Petr"}]} (h/db fix/*node*))))
+  #_
+  (t/testing "Can query predicates based on arguments alone"
+    #_
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[(re-find #"I" name)]]
+                                :args [{:name "Ivan"}
+                                       {:name "Petr"}]} (h/db fix/*node*))))
+    #_
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[(re-find #"I" name)]
+                                        [(= last-name "Ivanov")]]
+                                :args [{:name "Ivan" :last-name "Ivanov"}
+                                       {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
 
-      (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                  :where [[(re-find #"I" name)]
-                                          [(= last-name "Ivanov")]]
-                                  :args [{:name "Ivan" :last-name "Ivanov"}
-                                         {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
+    (t/is (= #{["Ivan"]
+               ["Petr"]} (h/q '{:find [name]
+                                :in [[name ...]]
+                                :where [[(string? name)]]}
+                              (h/db fix/*node*)
+                              ["Ivan" "Petr"])))
+    #_
+    (t/is (= #{["Ivan" "Ivanov"]
+               ["Petr" "Petrov"]} (h/q '{:find [name last-name]
+                                         :in [[[name last-name]]]
+                                         :where [[(not= last-name name)]]}
+                                       (h/db fix/*node*)
+                                       [["Ivan" "Ivanov"]
+                                        ["Petr" "Petrov"]
+                                        #_["Bob" "Bob"]])))
 
-      (t/is (= #{["Ivan"]
-                 ["Petr"]} (h/q '{:find [name]
-                                  :where [[(string? name)]]
-                                  :args [{:name "Ivan"}
-                                         {:name "Petr"}]} (h/db fix/*node*))))
+    #_#_#_#_
+    (t/is (= #{["Ivan"]} (h/q '{:find [name]
+                                :where [[(string? name)]
+                                        [(re-find #"I" name)]]
+                                :args [{:name "Ivan"}
+                                       {:name "Petr"}]} (h/db fix/*node*))))
 
-      (t/is (= #{["Ivan" "Ivanov"]
-                 ["Petr" "Petrov"]} (h/q '{:find [name last-name]
-                                           :where [[(not= last-name name)]]
-                                           :args [{:name "Ivan" :last-name "Ivanov"}
-                                                  {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
+    (t/is (= #{} (h/q '{:find [name]
+                        :where [[(number? name)]]
+                        :args [{:name "Ivan"}
+                               {:name "Petr"}]} (h/db fix/*node*))))
 
-      (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                  :where [[(string? name)]
-                                          [(re-find #"I" name)]]
-                                  :args [{:name "Ivan"}
-                                         {:name "Petr"}]} (h/db fix/*node*))))
+    (t/is (= #{} (h/q '{:find [name]
+                        :where [(not [(string? name)])]
+                        :args [{:name "Ivan"}
+                               {:name "Petr"}]} (h/db fix/*node*))))
 
-      (t/is (= #{} (h/q '{:find [name]
-                          :where [[(number? name)]]
-                          :args [{:name "Ivan"}
-                                 {:name "Petr"}]} (h/db fix/*node*))))
+    (t/testing "Can use range constraints on arguments"
+      (t/is (= #{} (h/q '{:find [age]
+                          :where [[(>= age 21)]]
+                          :args [{:age 20}]} (h/db fix/*node*))))
 
-      (t/is (= #{} (h/q '{:find [name]
-                          :where [(not [(string? name)])]
-                          :args [{:name "Ivan"}
-                                 {:name "Petr"}]} (h/db fix/*node*))))
-
-      (t/testing "Can use range constraints on arguments"
-        (t/is (= #{} (h/q '{:find [age]
-                            :where [[(>= age 21)]]
-                            :args [{:age 20}]} (h/db fix/*node*))))
-
-        (t/is (= #{[22]} (h/q '{:find [age]
-                                :where [[(>= age 21)]]
-                                :args [{:age 22}]} (h/db fix/*node*)))))))
+      (t/is (= #{[22]} (h/q '{:find [age]
+                              :where [[(>= age 21)]]
+                              :args [{:age 22}]} (h/db fix/*node*)))))))
 
 #_(t/deftest test-query-with-in-bindings
     (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
