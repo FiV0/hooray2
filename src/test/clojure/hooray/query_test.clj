@@ -823,116 +823,246 @@
                     :where [[?monster :heads ?heads]]}
                   (h/db fix/*node*))))))
 
-#_
-(t/deftest datascript-test-aggregates
-  (let [db (xt/db *api*)]
-    #_(t/testing "with"
-        (t/is (= (d/q '[:find ?heads
-                        :with ?monster
-                        :in [[?monster ?heads]]]
-                      [["Medusa" 1]
-                       ["Cyclops" 1]
-                       ["Chimera" 1]])
-                 [[1] [1] [1]])))
+(deftest test-predicate-expression
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
+                          {:db/id :bob :name "Bob" :last-name "Ivanov" :age 40}
+                          {:db/id :dominic :name "Dominic" :last-name "Monroe" :age 50}])
 
-    ;; This is solved as XTDB performs the aggregation before turning
-    ;; it into a set.
-    #_(t/testing "Wrong grouping without :with"
-        (t/is (= (xt/q db '[:find (sum ?heads)
+  (t/testing "range expressions"
+    (t/is (= #{["Ivan"] ["Bob"]}
+             (h/q '{:find [name]
+                    :where [[e :name name]
+                            [e :age age]
+                            [(< age 50)]]}
+                  (h/db fix/*node*))))
+
+    (t/is (= #{["Dominic"]}
+             (h/q '{:find [name]
+                    :where [[e :name name]
+                            [e :age age]
+                            [(>= age 50)]]} (h/db fix/*node*))))
+
+    (t/testing "fallback to built in predicate for vars"
+      (t/is (= #{["Ivan" 30 "Ivan" 30]
+                 ["Ivan" 30 "Bob" 40]
+                 ["Ivan" 30 "Dominic" 50]
+                 ["Bob" 40 "Bob" 40]
+                 ["Bob" 40 "Dominic" 50]
+                 ["Dominic" 50 "Dominic" 50]}
+               (h/q '{:find [name age1 name2 age2]
+                      :where [[e :name name]
+                              [e :age age1]
+                              [e2 :name name2]
+                              [e2 :age age2]
+                              [(<= age1 age2)]]} (h/db fix/*node*))))))
+
+  (t/testing "clojure.core predicate"
+    (t/is (= #{["Bob"] ["Dominic"]}
+             (h/q '{:find [name]
+                    :where [[e :name name]
+                            [(re-find #"o" name)]]}
+                  (h/db fix/*node*))))
+
+    (t/testing "No results"
+      (t/is (empty? (h/q '{:find [name]
+                           :where [[e :name name]
+                                   [(re-find #"X" name)]]}
+                         (h/db fix/*node*)))))
+
+    (t/testing "Not predicate"
+      (t/is (= #{["Ivan"]}
+               (h/q '{:find [name]
+                      :where [[e :name name]
+                              (not [(re-find #"o" name)])]}
+                    (h/db fix/*node*)))))
+
+    (t/testing "Entity variable"
+      (t/is (= #{["Ivan"]}
+               (h/q '{:find [name]
+                      :where [[e :name name]
+                              [(= :ivan e)]]}
+                    (h/db fix/*node*))))
+
+      (t/testing "Filtered by value"
+        (t/is (= #{[:bob] [:ivan]}
+                 (h/q '{:find [e]
+                        :where [[e :last-name last-name]
+                                [(= "Ivanov" last-name)]]}
+                      (h/db fix/*node*))))
+
+        (t/is (= #{[:ivan]}
+                 (h/q '{:find [e]
+                        :where [[e :last-name last-name]
+                                [e :age age]
+                                [(= "Ivanov" last-name)]
+                                [(= 30 age)]]}
+                      (h/db fix/*node*))))))
+
+    (t/testing "Several variables"
+      (t/is (= #{["Bob"]}
+               (h/q '{:find [name]
+                      :where [[e :name name]
+                              [e :age age]
+                              [(= 40 age)]
+                              [(re-find #"o" name)]
+                              [(not= age name)]]}
+                    (h/db fix/*node*))))
+
+      (t/is (= #{[:bob "Ivanov"]}
+               (h/q '{:find [e last-name]
+                      :where [[e :last-name last-name]
+                              [e :age age]
+                              [(re-find #"ov$" last-name)]
+                              (not [(= age 30)])]}
+                    (h/db fix/*node*))))
+
+      (t/testing "No results"
+        (t/is (= #{}
+                 (h/q '{:find [name]
+                        :where [[e :name name]
+                                [e :age age]
+                                [(re-find #"o" name)]
+                                [(= age name)]]} (h/db fix/*node*))))))
+
+    #_
+    (t/testing "Bind result to var"
+      (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
+               (h/q '{:find [name half-age]
+                      :where [[e :name name]
+                              [e :age age]
+                              [(quot age 2) half-age]]} (h/db fix/*node*))))
+
+      (t/testing "Order of joins is rearranged to ensure arguments are bound"
+        (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
+                 (h/q '{:find [name half-age]
+                        :where [[e :name name]
+                                [e :age real-age]
+                                [(quot real-age 2) half-age]]} (h/db fix/*node*)))))
+
+      (t/testing "Binding more than once intersects result"
+        (t/is (= #{["Ivan" 15]}
+                 (h/q '{:find [name half-age]
+                        :where [[e :name name]
+                                [e :age real-age]
+                                [(quot real-age 2) half-age]
+                                [(- real-age 15) half-age]]} (h/db fix/*node*)))))
+
+      (t/testing "Binding can use range predicates"
+        (t/is (= #{["Dominic" 25]}
+                 (h/q '{:find [name half-age]
+                        :where [[e :name name]
+                                [e :age real-age]
+                                [(quot real-age 2) half-age]
+                                [(> half-age 20)]]} (h/db fix/*node*))))))))
+
+#_(t/deftest datascript-test-aggregates
+    (let [db (xt/db *api*)]
+      #_(t/testing "with"
+          (t/is (= (d/q '[:find ?heads
+                          :with ?monster
+                          :in [[?monster ?heads]]]
+                        [["Medusa" 1]
+                         ["Cyclops" 1]
+                         ["Chimera" 1]])
+                   [[1] [1] [1]])))
+
+      ;; This is solved as XTDB performs the aggregation before turning
+      ;; it into a set.
+      #_(t/testing "Wrong grouping without :with"
+          (t/is (= (xt/q db '[:find (sum ?heads)
+                              :where [(identity [["Cerberus" 3]
+                                                 ["Medusa" 1]
+                                                 ["Cyclops" 1]
+                                                 ["Chimera" 1]]) [[?monster ?heads]]]])
+                   #{[4]})))
+
+      (t/testing "Multiple aggregates, correct grouping with :with"
+        (t/is (= (xt/q db '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
+                            ;; :with ?monster
                             :where [(identity [["Cerberus" 3]
                                                ["Medusa" 1]
                                                ["Cyclops" 1]
                                                ["Chimera" 1]]) [[?monster ?heads]]]])
-                 #{[4]})))
+                 #{[6 1 3 4 2]})))
 
-    (t/testing "Multiple aggregates, correct grouping with :with"
-      (t/is (= (xt/q db '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
-                          ;; :with ?monster
-                          :where [(identity [["Cerberus" 3]
-                                             ["Medusa" 1]
-                                             ["Cyclops" 1]
-                                             ["Chimera" 1]]) [[?monster ?heads]]]])
-               #{[6 1 3 4 2]})))
+      (t/testing "Min and max are using comparator instead of default compare"
+        ;; Wrong: using js '<' operator
+        ;; (apply min [:a/b :a-/b :a/c]) => :a-/b
+        ;; (apply max [:a/b :a-/b :a/c]) => :a/c
+        ;; Correct: use IComparable interface
+        ;; (sort compare [:a/b :a-/b :a/c]) => (:a/b :a/c :a-/b)
+        (t/is (= (xt/q db '[:find (min ?x) (max ?x)
+                            :where [(identity [:a-/b :a/b]) [?x ...]]])
+                 #{[:a/b :a-/b]}))
 
-    (t/testing "Min and max are using comparator instead of default compare"
-      ;; Wrong: using js '<' operator
-      ;; (apply min [:a/b :a-/b :a/c]) => :a-/b
-      ;; (apply max [:a/b :a-/b :a/c]) => :a/c
-      ;; Correct: use IComparable interface
-      ;; (sort compare [:a/b :a-/b :a/c]) => (:a/b :a/c :a-/b)
-      (t/is (= (xt/q db '[:find (min ?x) (max ?x)
-                          :where [(identity [:a-/b :a/b]) [?x ...]]])
-               #{[:a/b :a-/b]}))
+        (t/is (= (xt/q db '[:find (min 2 ?x) (max 2 ?x)
+                            :where [(identity [:a/b :a-/b :a/c]) [?x ...]]])
+                 #{[[:a/b :a/c] [:a/c :a-/b]]})))
 
-      (t/is (= (xt/q db '[:find (min 2 ?x) (max 2 ?x)
-                          :where [(identity [:a/b :a-/b :a/c]) [?x ...]]])
-               #{[[:a/b :a/c] [:a/c :a-/b]]})))
+      (t/testing "Grouping"
+        (t/is (= (set (xt/q db '[:find ?color (max ?x) (min ?x)
+                                 :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                                                    [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+                 #{[:red 5 1]
+                   [:blue 8 7]})))
 
-    (t/testing "Grouping"
-      (t/is (= (set (xt/q db '[:find ?color (max ?x) (min ?x)
-                               :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                                                  [:blue 7] [:blue 8]]) [[?color ?x]]]]))
-               #{[:red 5 1]
-                 [:blue 8 7]})))
+      (t/testing "Grouping and parameter passing"
+        (t/is (= (set (xt/q db '[:find ?color (max 3 ?x) (min 3 ?x)
+                                 :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                                                    [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+                 #{[:red [3 4 5] [1 2 3]]
+                   [:blue [7 8] [7 8]]})))
 
-    (t/testing "Grouping and parameter passing"
-      (t/is (= (set (xt/q db '[:find ?color (max 3 ?x) (min 3 ?x)
-                               :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                                                  [:blue 7] [:blue 8]]) [[?color ?x]]]]))
-               #{[:red [3 4 5] [1 2 3]]
-                 [:blue [7 8] [7 8]]})))
+      ;; NOTE: XTDB only support a single final logic var in aggregates.
+      #_(t/testing "Grouping and parameter passing"
+          (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
+                             :in [[?color ?x]] ?amount]
+                           [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                            [:blue 7] [:blue 8]]
+                           3))
+                 #{[:red [3 4 5] [1 2 3]]
+                   [:blue [7 8] [7 8]]})))
 
-    ;; NOTE: XTDB only support a single final logic var in aggregates.
-    #_(t/testing "Grouping and parameter passing"
-        (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
-                           :in [[?color ?x]] ?amount]
-                         [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                          [:blue 7] [:blue 8]]
-                         3))
-               #{[:red [3 4 5] [1 2 3]]
-                 [:blue [7 8] [7 8]]})))
+      (t/testing "avg aggregate"
+        (t/is (= (ffirst (xt/q db '[:find (avg ?x)
+                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
+                 31)))
 
-    (t/testing "avg aggregate"
-      (t/is (= (ffirst (xt/q db '[:find (avg ?x)
-                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
-               31)))
+      (t/testing "median aggregate"
+        (t/is (= (ffirst (xt/q db '[:find (median ?x)
+                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
+                 20)))
 
-    (t/testing "median aggregate"
-      (t/is (= (ffirst (xt/q db '[:find (median ?x)
-                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
-               20)))
+      (t/testing "variance aggregate"
+        (t/is (= (ffirst (xt/q db '[:find (variance ?x)
+                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
+                 554.0))) ;; double
 
-    (t/testing "variance aggregate"
-      (t/is (= (ffirst (xt/q db '[:find (variance ?x)
-                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
-               554.0))) ;; double
+      (t/testing "stddev aggregate"
+        (t/is (= (ffirst (xt/q db '[:find (stddev ?x)
+                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
+                 23.53720459187964)))
 
-    (t/testing "stddev aggregate"
-      (t/is (= (ffirst (xt/q db '[:find (stddev ?x)
-                                  :where [(identity [10 15 20 35 75]) [?x ...]]]))
-               23.53720459187964)))
+      (t/testing "distinct aggregate"
+        (t/is (= (ffirst (xt/q db '[:find (distinct ?x)
+                                    :where [(identity [:a :b :c :a :d]) [?x ...]]]))
+                 #{:a :b :c :d})))
 
-    (t/testing "distinct aggregate"
-      (t/is (= (ffirst (xt/q db '[:find (distinct ?x)
-                                  :where [(identity [:a :b :c :a :d]) [?x ...]]]))
-               #{:a :b :c :d})))
+      (t/testing "sample aggregate"
+        (t/is (= (count (ffirst (xt/q db '[:find (sample 7 ?x)
+                                           :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+                 4)))
 
-    (t/testing "sample aggregate"
-      (t/is (= (count (ffirst (xt/q db '[:find (sample 7 ?x)
-                                         :where [(identity [:a :b :c :a :d]) [?x ...]]])))
-               4)))
+      (t/testing "rand aggregate"
+        (t/is (= (count (ffirst (xt/q db '[:find (rand 7 ?x)
+                                           :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+                 7)))
 
-    (t/testing "rand aggregate"
-      (t/is (= (count (ffirst (xt/q db '[:find (rand 7 ?x)
-                                         :where [(identity [:a :b :c :a :d]) [?x ...]]])))
-               7)))
-
-    (t/testing "Custom aggregates"
-      (t/is (= (set (xt/q db '[:find ?color (sort-reverse ?x)
-                               :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
-                                                  [:blue 7] [:blue 8]]) [[?color ?x]]]]))
-               #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
-
+      (t/testing "Custom aggregates"
+        (t/is (= (set (xt/q db '[:find ?color (sort-reverse ?x)
+                                 :where [(identity [[:red 1] [:red 2] [:red 3] [:red 4] [:red 5]
+                                                    [:blue 7] [:blue 8]]) [[?color ?x]]]]))
+                 #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
 
 #_(t/deftest test-basic-query-at-t
     (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
@@ -1092,136 +1222,6 @@
                                                  :where [[e :name name]
                                                          (not (or [e :last-name "Ivanov"]
                                                                   [e :name "Bob"]))]})))))
-
-#_(t/deftest test-predicate-expression
-    (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
-                                      {:xt/id :bob :name "Bob" :last-name "Ivanov" :age 40}
-                                      {:xt/id :dominic :name "Dominic" :last-name "Monroe" :age 50}]))
-
-    (t/testing "range expressions"
-      (t/is (= #{["Ivan"] ["Bob"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             [e :age age]
-                                             [(< age 50)]]})))
-
-      (t/is (= #{["Dominic"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             [e :age age]
-                                             [(>= age 50)]]})))
-
-      (t/testing "fallback to built in predicate for vars"
-        (t/is (= #{["Ivan" 30 "Ivan" 30]
-                   ["Ivan" 30 "Bob" 40]
-                   ["Ivan" 30 "Dominic" 50]
-                   ["Bob" 40 "Bob" 40]
-                   ["Bob" 40 "Dominic" 50]
-                   ["Dominic" 50 "Dominic" 50]}
-                 (xt/q (xt/db *api*) '{:find [name age1 name2 age2]
-                                       :where [[e :name name]
-                                               [e :age age1]
-                                               [e2 :name name2]
-                                               [e2 :age age2]
-                                               [(<= age1 age2)]]})))
-
-        (t/is (= #{["Ivan" "Dominic"]
-                   ["Ivan" "Bob"]
-                   ["Dominic" "Bob"]}
-                 (xt/q (xt/db *api*) '{:find [name1 name2]
-                                       :where [[e :name name1]
-                                               [e2 :name name2]
-                                               [(> name1 name2)]]})))))
-
-    (t/testing "clojure.core predicate"
-      (t/is (= #{["Bob"] ["Dominic"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             [(re-find #"o" name)]]})))
-
-      (t/testing "No results"
-        (t/is (empty? (xt/q (xt/db *api*) '{:find [name]
-                                            :where [[e :name name]
-                                                    [(re-find #"X" name)]]}))))
-
-      (t/testing "Not predicate"
-        (t/is (= #{["Ivan"]}
-                 (xt/q (xt/db *api*) '{:find [name]
-                                       :where [[e :name name]
-                                               (not [(re-find #"o" name)])]}))))
-
-      (t/testing "Entity variable"
-        (t/is (= #{["Ivan"]}
-                 (xt/q (xt/db *api*) '{:find [name]
-                                       :where [[e :name name]
-                                               [(= :ivan e)]]})))
-
-        (t/testing "Filtered by value"
-          (t/is (= #{[:bob] [:ivan]}
-                   (xt/q (xt/db *api*) '{:find [e]
-                                         :where [[e :last-name last-name]
-                                                 [(= "Ivanov" last-name)]]})))
-
-          (t/is (= #{[:ivan]}
-                   (xt/q (xt/db *api*) '{:find [e]
-                                         :where [[e :last-name last-name]
-                                                 [e :age age]
-                                                 [(= "Ivanov" last-name)]
-                                                 [(= 30 age)]]})))))
-
-      (t/testing "Several variables"
-        (t/is (= #{["Bob"]}
-                 (xt/q (xt/db *api*) '{:find [name]
-                                       :where [[e :name name]
-                                               [e :age age]
-                                               [(= 40 age)]
-                                               [(re-find #"o" name)]
-                                               [(not= age name)]]})))
-
-        (t/is (= #{[:bob "Ivanov"]}
-                 (xt/q (xt/db *api*) '{:find [e last-name]
-                                       :where [[e :last-name last-name]
-                                               [e :age age]
-                                               [(re-find #"ov$" last-name)]
-                                               (not [(= age 30)])]})))
-
-        (t/testing "No results"
-          (t/is (= #{}
-                   (xt/q (xt/db *api*) '{:find [name]
-                                         :where [[e :name name]
-                                                 [e :age age]
-                                                 [(re-find #"o" name)]
-                                                 [(= age name)]]})))))
-
-      (t/testing "Bind result to var"
-        (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
-                 (xt/q (xt/db *api*) '{:find [name half-age]
-                                       :where [[e :name name]
-                                               [e :age age]
-                                               [(quot age 2) half-age]]})))
-
-        (t/testing "Order of joins is rearranged to ensure arguments are bound"
-          (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
-                   (xt/q (xt/db *api*) '{:find [name half-age]
-                                         :where [[e :name name]
-                                                 [e :age real-age]
-                                                 [(quot real-age 2) half-age]]}))))
-
-        (t/testing "Binding more than once intersects result"
-          (t/is (= #{["Ivan" 15]}
-                   (xt/q (xt/db *api*) '{:find [name half-age]
-                                         :where [[e :name name]
-                                                 [e :age real-age]
-                                                 [(quot real-age 2) half-age]
-                                                 [(- real-age 15) half-age]]}))))
-
-        (t/testing "Binding can use range predicates"
-          (t/is (= #{["Dominic" 25]}
-                   (xt/q (xt/db *api*) '{:find [name half-age]
-                                         :where [[e :name name]
-                                                 [e :age real-age]
-                                                 [(quot real-age 2) half-age]
-                                                 [(> half-age 20)]]})))))))
 
 #_(t/deftest test-attributes-with-multiple-values
     (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}

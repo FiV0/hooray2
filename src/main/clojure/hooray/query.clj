@@ -2,6 +2,7 @@
   (:require
    [clojure.core.match :refer [match]]
    [clojure.set]
+   [clojure.string]
    [clojure.spec.alpha :as s]
    [hooray.db :as db]
    [hooray.error :as err]
@@ -69,7 +70,7 @@
                            (s/conformer (fn [{:keys [patterns]}] patterns)
                                         (fn [patterns] {:type 'or :patterns patterns}))))
 
-(def ^:private predicates #{'= 'not= '< '<= '> '>= 'string? 'number?})
+(def ^:private predicates #{'= 'not= '< '<= '> '>= 'string? 'number? 're-find})
 
 (s/def ::predicate-pattern (s/and vector?
                                   (s/tuple (s/and list?
@@ -249,6 +250,11 @@
     [[:variable _]] (util/->function (fn [a] (f a)))
     :else (throw (ex-info "Unknown function pattern" {:fn f :args args}))))
 
+(defn resolve-predicate [f-symbol]
+  (if (= f-symbol 're-find)
+    (fn [a b] (boolean (re-find a b)))
+    (resolve f-symbol)))
+
 (defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-in-join-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
@@ -280,7 +286,7 @@
                        variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
                                           (map second))]
                    (GenericPredicatePrefixExtender. (sort (mapv var->idx variable-args))
-                                                    (fn+args->function (resolve predicate) args var->idx))))))
+                                                    (fn+args->function (resolve-predicate predicate) args var->idx))))))
 
 (defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))
