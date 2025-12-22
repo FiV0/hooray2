@@ -959,6 +959,33 @@
                                 [(> half-age 20)]]}
                       (h/db fix/*node*))))))))
 
+#_
+(deftest test-not-join
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                          {:db/id :malcolm :name "Malcolm" :last-name "Ofsparks"}
+                          {:db/id :dominic :name "Dominic" :last-name "Monroe"}])
+
+  (t/testing "Rudimentary not-join"
+    (t/is (= #{["Ivan"] ["Malcolm"]}
+             (h/q '{:find [name]
+                    :where [[e :name name]
+                            (not-join [e]
+                                      [e :last-name "Monroe"])]} (h/db fix/*node*))))
+
+    (t/is (= #{["Ivan"] ["Malcolm"]}
+             (h/q '{:find [name]
+                    :where [[e :name name]
+                            (not-join [e]
+                                      [e :last-name last-name]
+                                      [(= last-name "Monroe")])]} (h/db fix/*node*))))
+
+    (t/is (= #{["Dominic"]}
+             (h/q '{:find [name]
+                    :where [[e :name name]
+                            (not-join [e]
+                                      [e :last-name last-name]
+                                      [(not= last-name "Monroe")])]} (h/db fix/*node*))))))
+
 #_(t/deftest datascript-test-aggregates
     (let [db (xt/db *api*)]
       #_(t/testing "with"
@@ -1181,32 +1208,6 @@
                                                                            [?p2 :sex :female])
                                                                       (and [?p2 :last-name "Ivanov"]
                                                                            [?p2 :sex :male]))]}))))))
-
-#_(t/deftest test-not-join
-    (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
-                                      {:name "Malcolm" :last-name "Ofsparks"}
-                                      {:name "Dominic" :last-name "Monroe"}]))
-
-    (t/testing "Rudimentary not-join"
-      (t/is (= #{["Ivan"] ["Malcolm"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             (not-join [e]
-                                                       [e :last-name "Monroe"])]})))
-
-      (t/is (= #{["Ivan"] ["Malcolm"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             (not-join [e]
-                                                       [e :last-name last-name]
-                                                       [(= last-name "Monroe")])]})))
-
-      (t/is (= #{["Dominic"]}
-               (xt/q (xt/db *api*) '{:find [name]
-                                     :where [[e :name name]
-                                             (not-join [e]
-                                                       [e :last-name last-name]
-                                                       [(not= last-name "Monroe")])]})))))
 
 #_(t/deftest test-mixing-expressions
     (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
