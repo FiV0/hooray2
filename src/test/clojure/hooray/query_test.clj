@@ -629,12 +629,12 @@
                                        (not [e :last-name "Ivannotov"]
                                             [e :name "Ivan"])]}
                              (h/db fix/*node*)))))
-      #_#_(t/is (= 2 (count (h/q '{:find [e]
-                                   :where [[e :name name]
-                                           [e :name "Ivan"]
-                                           (not [e :last-name "Ivannotov"]
-                                                [(string? name)])]}
-                                 (h/db fix/*node*)))))
+      (t/is (= 2 (count (h/q '{:find [e]
+                               :where [[e :name name]
+                                       [e :name "Ivan"]
+                                       (not [e :last-name "Ivannotov"]
+                                            [(string? name)])]}
+                             (h/db fix/*node*)))))
 
       (t/is (= 3 (count (h/q '{:find [e]
                                :where [[e :name name]
@@ -822,6 +822,7 @@
              (h/q '{:find [(sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)]
                     :where [[?monster :heads ?heads]]}
                   (h/db fix/*node*))))))
+
 #_
 (t/deftest datascript-test-aggregates
   (let [db (xt/db *api*)]
