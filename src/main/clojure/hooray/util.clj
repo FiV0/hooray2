@@ -1,7 +1,5 @@
 (ns hooray.util
-  (:import (java.util.concurrent Callable)
-           (java.util.function Function BiFunction)
-           (kotlin.jvm.functions Function0 Function1 Function2)))
+  (:import (kotlin.jvm.functions Function0 Function1 Function2)))
 
 (defn create-update-in
   "Creates a function that behaves like `clojure.core/update-in` but defaults to `default-map`
