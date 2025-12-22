@@ -8,7 +8,6 @@
    [hooray.util :as util])
   (:import
    (java.util Map HashMap)
-   (java.util.function Function BiFunction)
    (org.hooray.algo
     GenericJoin
     Join
@@ -70,7 +69,7 @@
                            (s/conformer (fn [{:keys [patterns]}] patterns)
                                         (fn [patterns] {:type 'or :patterns patterns}))))
 
-(def ^:private predicates #{'= 'not= '< '<= '> '>= 'string?})
+(def ^:private predicates #{'= 'not= '< '<= '> '>= 'string? 'number?})
 
 (s/def ::predicate-pattern (s/and vector?
                                   (s/tuple (s/and list?
@@ -238,12 +237,14 @@
 
     :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
 
-(defn fn+args->function [f args]
+(defn fn+args->function [f args var->idx]
   (match args
     [[:constant c1] [:constant c2]] (util/->closure (fn [] (f c1 c2)))
     [[:constant c1] [:variable _]] (util/->function (fn [a] (f c1 a)))
     [[:variable _] [:constant c2]] (util/->function (fn [a] (f a c2)))
-    [[:variable _] [:variable _]] (util/->bifunction (fn [a b] (f a b)))
+    [[:variable v1] [:variable v2]] (if (< (var->idx v1) (var->idx v2))
+                                      (util/->bifunction (fn [a b] (f a b)))
+                                      (util/->bifunction (fn [a b] (f b a))))
     [[:constant c]] (util/->closure (fn [] (f c)))
     [[:variable _]] (util/->function (fn [a] (f a)))
     :else (throw (ex-info "Unknown function pattern" {:fn f :args args}))))
@@ -251,7 +252,7 @@
 (defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-in-join-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
-        var-to-index (zipmap var-in-join-order (range))]
+        var->idx (zipmap var-in-join-order (range))]
     (case type
       :triple (let [{:keys [e a v]} pattern]
                 (match [e a v]
@@ -259,14 +260,14 @@
                   (err/unsupported-ex)
 
                   [[:constant e-const] [:constant a-const] [:variable v-var]]
-                  (create-iterator opts (get-in eav [e-const a-const] empty-set) var-in-join-order [(get var-to-index v-var)])
+                  (create-iterator opts (get-in eav [e-const a-const] empty-set) var-in-join-order [(get var->idx v-var)])
 
                   [[:variable e-var] [:constant a-const] [:constant v-const]]
-                  (create-iterator opts (get-in ave [a-const v-const] empty-set) var-in-join-order [(get var-to-index e-var)])
+                  (create-iterator opts (get-in ave [a-const v-const] empty-set) var-in-join-order [(get var->idx e-var)])
 
                   [[:variable e-var] [:constant a-const] [:variable v-var]]
-                  (let [e-index (var-to-index e-var)
-                        v-index (var-to-index v-var)
+                  (let [e-index (var->idx e-var)
+                        v-index (var->idx v-var)
                         [index participates-in-level] (if (< e-index v-index)  [aev [e-index v-index]] [ave [v-index e-index]])]
                     (create-iterator opts (get index a-const empty-map) var-in-join-order participates-in-level))
 
@@ -278,8 +279,8 @@
       :predicate (let [{:keys [predicate args]} pattern
                        variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
                                           (map second))]
-                   (GenericPredicatePrefixExtender. (mapv var-to-index variable-args)
-                                                    (fn+args->function (resolve predicate) args))))))
+                   (GenericPredicatePrefixExtender. (sort (mapv var->idx variable-args))
+                                                    (fn+args->function (resolve predicate) args var->idx))))))
 
 (defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))

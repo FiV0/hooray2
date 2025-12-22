@@ -4,6 +4,7 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
 
+typealias Predicate0 = () -> Boolean
 typealias Predicate1<A> = (A) -> Boolean
 typealias Predicate2<A, B> = (A, B) -> Boolean
 
@@ -23,7 +24,7 @@ class GenericPredicatePrefixExtender(val levels: List<Int>, val predicate: Any) 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         return when (levels.size) {
             0 -> {
-                val pred = predicate as () -> Boolean
+                val pred = predicate as Predicate0
                 if (pred()) extensions else emptyList()
             }
             1 -> {

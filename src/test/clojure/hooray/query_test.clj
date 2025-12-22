@@ -266,7 +266,7 @@
                              (h/db fix/*node*)
                              [["Ivan" "Ivanov"] ["Petr" "Petrov"]]))))
 
-  #_
+
   (t/testing "Can query predicates based on arguments alone"
     #_
     (t/is (= #{["Ivan"]} (h/q '{:find [name]
@@ -286,17 +286,18 @@
                                 :where [[(string? name)]]}
                               (h/db fix/*node*)
                               ["Ivan" "Petr"])))
-    #_
-    (t/is (= #{["Ivan" "Ivanov"]
-               ["Petr" "Petrov"]} (h/q '{:find [name last-name]
-                                         :in [[[name last-name]]]
-                                         :where [[(not= last-name name)]]}
-                                       (h/db fix/*node*)
-                                       [["Ivan" "Ivanov"]
-                                        ["Petr" "Petrov"]
-                                        #_["Bob" "Bob"]])))
 
-    #_#_#_#_
+    (t/is (= #{["Ivan" "Ivanov"]
+               ["Petr" "Petrov"]}
+             (h/q '{:find [name last-name]
+                    :in [[[name last-name]]]
+                    :where [[(not= last-name name)]]}
+                  (h/db fix/*node*)
+                  [["Ivan" "Ivanov"]
+                   ["Petr" "Petrov"]
+                   ["Bob" "Bob"]])))
+
+    #_
     (t/is (= #{["Ivan"]} (h/q '{:find [name]
                                 :where [[(string? name)]
                                         [(re-find #"I" name)]]
@@ -304,23 +305,33 @@
                                        {:name "Petr"}]} (h/db fix/*node*))))
 
     (t/is (= #{} (h/q '{:find [name]
-                        :where [[(number? name)]]
-                        :args [{:name "Ivan"}
-                               {:name "Petr"}]} (h/db fix/*node*))))
+                        :in [[name ...]]
+                        :where [[(number? name)]]}
+                      (h/db fix/*node*)
+                      ["Ivan" "Petr"])))
 
+    ;; TODO validate-patterns should incorporate :in
+    #_
     (t/is (= #{} (h/q '{:find [name]
-                        :where [(not [(string? name)])]
-                        :args [{:name "Ivan"}
-                               {:name "Petr"}]} (h/db fix/*node*))))
+                        :in [[name ...]]
+                        :where [(not [(string? name)])]}
+                      (h/db fix/*node*)
+                      ["Ivan" "Petr"])))
 
     (t/testing "Can use range constraints on arguments"
-      (t/is (= #{} (h/q '{:find [age]
-                          :where [[(>= age 21)]]
-                          :args [{:age 20}]} (h/db fix/*node*))))
+      (t/is (= #{}
+               (h/q '{:find [age]
+                      :in [age]
+                      :where [[(>= age 21)]]}
+                    (h/db fix/*node*)
+                    20)))
 
-      (t/is (= #{[22]} (h/q '{:find [age]
-                              :where [[(>= age 21)]]
-                              :args [{:age 22}]} (h/db fix/*node*)))))))
+      (t/is (= #{[22]}
+               (h/q '{:find [age]
+                      :in [age]
+                      :where [[(>= age 21)]]}
+                    (h/db fix/*node*)
+                    22))))))
 
 #_(t/deftest test-query-with-in-bindings
     (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
