@@ -440,8 +440,12 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
 
     override fun valAt(key: Any?, notFound: Any?): Any? = data[key] ?: notFound
 
-    override fun iterator(): MutableIterator<Map.Entry<K, IZSet<*, W, *>>> =
-        data.entries.iterator() as MutableIterator<Map.Entry<K, IZSet<*, W, *>>>
+    override fun iterator(): MutableIterator<Map.Entry<K, IZSet<*, W, *>>> = object : MutableIterator<Map.Entry<K, IZSet<*, W, *>>> {
+        private val delegate = data.entries.iterator()
+        override fun hasNext() = delegate.hasNext()
+        override fun next() = delegate.next()
+        override fun remove() = throw UnsupportedOperationException("IndexedZSet is immutable")
+    }
 
     companion object {
         /**
