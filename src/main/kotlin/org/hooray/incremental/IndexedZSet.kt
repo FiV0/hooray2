@@ -41,16 +41,12 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      * @return The value at the end of the path, or null if not found
      */
     @Suppress("UNCHECKED_CAST")
-    fun getByPrefix(prefix: Prefix): IZSet<K, W, *> {
+    fun getByPrefix(prefix: Prefix): IZSet<out Any?, W, *>? {
         if (prefix.isEmpty()) {
             return this
         }
         val firstKey = prefix[0] as K
-        val inner = data[firstKey] ?: return if (depth() == 2) {
-            ZSet.empty(zero)
-        } else {
-            empty<K, W>(zero, one)
-        }
+        val inner = data[firstKey] ?: return null
 
         return if (prefix.size == 1) {
             when (inner) {
@@ -69,7 +65,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
             val remainingPrefix = prefix.drop(1)
             when (inner) {
                 is IndexedZSet<*, W> ->
-                    inner.getByPrefix(remainingPrefix) as IZSet<K, W, *>
+                    inner.getByPrefix(remainingPrefix)
                 else -> {
                     throw IllegalArgumentException("Expected IndexedZSet for intermediate prefix, found ${inner::class}")
                 }

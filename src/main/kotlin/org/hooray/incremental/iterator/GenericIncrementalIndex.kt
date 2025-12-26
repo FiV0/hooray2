@@ -14,18 +14,23 @@ import org.hooray.incremental.getByType
 
 class GenericIncrementalIndex(val indexType: IndexType,
                               val fixedPrefix: Prefix,
-                              initialAccumulated: IZSet<*, IntegerWeight, *>,
                               val participatesInLevel: List<Int>): IncrementalIndex {
     var accumulatedZSet: IZSet<*, IntegerWeight, *>
     var deltaZSet: IZSet<*, IntegerWeight, *>
+    var empty: IZSet<*, IntegerWeight, *>
 
     init {
-        accumulatedZSet = initialAccumulated
-        deltaZSet = IndexedZSet.empty<Any, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
+        accumulatedZSet = when (fixedPrefix.size) {
+            0, 1 -> IndexedZSet.empty<Any, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
+            2 -> ZSet.empty()
+            else -> throw IllegalArgumentException("Unsupported prefix size ${fixedPrefix.size} for GenericIncrementalIndex")
+        }
+        empty = accumulatedZSet
+        deltaZSet = empty
     }
 
     override fun receiveDelta(delta: ZSetIndices) {
-        deltaZSet = delta.getByType(indexType).getByPrefix(fixedPrefix)
+        deltaZSet = delta.getByType(indexType).getByPrefix(fixedPrefix) ?: empty
     }
 
     @Suppress("UNCHECKED_CAST")

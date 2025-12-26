@@ -31,12 +31,13 @@ interface ZSetPrefixExtender {
         // TODO This constant prefix extraction will definitely cost us here.
         fun fromIndexedZSet(indexedZSet: IndexedZSet<*, IntegerWeight>, prefixExtracter: (Prefix) -> Prefix): ZSetPrefixExtender {
             return object : ZSetPrefixExtender {
-                override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefixExtracter(prefix)).size
+                override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefixExtracter(prefix))?.size ?: 0
 
-                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>
+                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> =
+                    (indexedZSet.getByPrefix(prefixExtracter(prefix))?.zSetView() ?: ZSet.empty()) as ZSet<Extension, IntegerWeight>
 
                 override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    (indexedZSet.getByPrefix(prefixExtracter(prefix)).zSetView() as ZSet<Extension, IntegerWeight>).equiJoin(extensions)
+                    ((indexedZSet.getByPrefix(prefixExtracter(prefix))?.zSetView() ?: ZSet.empty()) as ZSet<Extension, IntegerWeight>).equiJoin(extensions)
             }
         }
     }
