@@ -46,7 +46,11 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
             return this
         }
         val firstKey = prefix[0] as K
-        val inner = data[firstKey] ?: return ZSet.empty(zero)
+        val inner = data[firstKey] ?: return if (depth() == 2) {
+            ZSet.empty(zero)
+        } else {
+            empty<K, W>(zero, one)
+        }
 
         return if (prefix.size == 1) {
             when (inner) {

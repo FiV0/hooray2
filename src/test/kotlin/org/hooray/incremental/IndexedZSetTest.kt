@@ -484,7 +484,7 @@ class IndexedZSetTest {
 
         val result = indexed.getByPrefix(listOf("nonexistent"))
 
-        assertEquals(ZSet.empty<IntegerWeight>(), result)
+        assertNull(result)
     }
 
     @Test
@@ -507,7 +507,7 @@ class IndexedZSetTest {
         // Using an Int when a String is expected
         val result = indexed.getByPrefix(listOf(123))
 
-        assertEquals(ZSet.empty<IntegerWeight>() ,result)
+        assertNull(result)
     }
 
     // ========== Integration Tests ==========
