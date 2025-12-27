@@ -22,6 +22,7 @@
 
 (def db (d/db conn))
 
+
 (comment
   (d/q '[:find ?title ?album ?year
          :in $ [?artist-name ...]
@@ -33,7 +34,12 @@
          [?r :release/media ?m]
          [?r :release/name  ?album]
          [?r :release/year  ?year]]
-       db ["John Lennon"]))
+       db ["John Lennon"])
+
+  (d/q '[:find (pull ?attr [*])
+         :where
+         [?attr :db/ident]]
+       db))
 
 (comment
   (d/create-database client {:db-name "not-unbound"})
