@@ -83,6 +83,13 @@
                empty-indexed-zset)
              zset))
 
+(defn project [zset f]
+  (reduce-kv (fn [acc k v] (update acc (f k) (fnil add IntegerWeight/ZERO) v))
+             (if (instance? ZSet zset)
+               empty-zset
+               empty-indexed-zset)
+             zset))
+
 (comment
   (-> (IndexedZSet/singleton "foo" (ZSet/singleton "bar" (IntegerWeight/ONE)) IntegerWeight/ZERO IntegerWeight/ONE)
       indexed-zset->result-set)
@@ -92,4 +99,6 @@
 
   (-> (IndexedZSet/singleton "foo" (ZSet/singleton "bar" (IntegerWeight/ONE)) IntegerWeight/ZERO IntegerWeight/ONE)
       (update-keys clojure.string/upper-case))
-  )
+
+  (-> (ZSet/fromMap {[:a :b] (->int-weight 5), [:c :b] (->int-weight 10)})
+      (project second)))
