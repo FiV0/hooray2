@@ -42,35 +42,19 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
      */
     @Suppress("UNCHECKED_CAST")
     fun getByPrefix(prefix: Prefix): IZSet<out Any?, W, *>? {
-        if (prefix.isEmpty()) {
-            return this
-        }
-        val firstKey = prefix[0] as K
-        val inner = data[firstKey] ?: return null
-
-        return if (prefix.size == 1) {
-            when (inner) {
-                is ZSet<*, W> -> {
-                    inner as ZSet<K, W>
-                }
+        var current: IZSet<out Any?, W, *> = this
+        for (i in prefix.indices) {
+            val key = prefix[i]
+            current = when (current) {
                 is IndexedZSet<*, W> -> {
-                    inner as IndexedZSet<K, W>
+                    val next = current.data[key as K] ?: return null
+                    next
                 }
-                else -> {
-                    throw IllegalArgumentException("Expected ZSet at the end of prefix, found ${inner::class}")
-                }
-            }
-        } else {
-            // Recursive case: inner must be an IndexedZSet
-            val remainingPrefix = prefix.drop(1)
-            when (inner) {
-                is IndexedZSet<*, W> ->
-                    inner.getByPrefix(remainingPrefix)
-                else -> {
-                    throw IllegalArgumentException("Expected IndexedZSet for intermediate prefix, found ${inner::class}")
-                }
+                is ZSet<*, W> -> throw IllegalArgumentException("Cannot index into a ZSet at prefix index $i with key: $key")
+                else -> throw IllegalStateException("Unexpected IZSet type: ${current::class}")
             }
         }
+        return current
     }
 
     @Suppress("UNCHECKED_CAST")
