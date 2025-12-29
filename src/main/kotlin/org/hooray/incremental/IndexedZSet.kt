@@ -1,6 +1,7 @@
 package org.hooray.incremental
 
 import clojure.lang.*
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.algo.Prefix
 import org.hooray.algo.ResultTuple
 
@@ -97,8 +98,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
             when (current) {
                 is IndexedZSet<*, W> -> {
                     for ((key, inner) in current.data.entries) {
-                        val newPrefix = prefix + key
-                        recurse(inner, newPrefix as Prefix)
+                        recurse(inner, (prefix + key) as Prefix)
                     }
                 }
                 is ZSet<*, W> -> {
@@ -110,7 +110,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
             }
         }
 
-        recurse(this, emptyList())
+        recurse(this, persistentListOf())
     }
 
     /**
