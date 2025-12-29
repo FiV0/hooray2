@@ -360,7 +360,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     }
 
     // TODO this is not efficient (not a view)
-    override fun zSetView(): ZSet<K, W> =
+    override fun asZSetView(): ZSet<K, W> =
         ZSet.fromMap(
             data.keys.associateWith { one },
             zero
