@@ -22,6 +22,10 @@ interface LayeredIndex {
     fun maxLevel(): Int
 }
 
+interface NotLeapfrogIndex : LevelParticipation {
+    fun checkNegation(positiveTuple: ResultTuple) : Boolean
+}
+
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
     companion object {
         @JvmStatic
@@ -73,6 +77,47 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 override fun participatesInLevel(level: Int): Boolean {
                     return level < maxLevels
                 }
+            }
+        }
+
+        @JvmStatic
+        fun createFromTuple(tuple: ResultTuple): LeapfrogIndex {
+            return object : LeapfrogIndex {
+                private var currentLevel = 0
+                private var pastValue = false
+
+                override fun seek(key: Any) {
+                    val value = tuple[currentLevel]
+                    pastValue = UniversalComparator.compare(key, value) > 0
+                }
+
+                override fun next(): Any {
+                    pastValue = true
+                    return Unit
+                }
+
+                override fun key(): Any {
+                    if (pastValue) throw IllegalStateException("At end")
+                    return tuple[currentLevel]
+                }
+
+                override fun atEnd(): Boolean = pastValue
+
+                override fun openLevel() {
+                    currentLevel++
+                    pastValue = false
+                }
+
+                override fun closeLevel() {
+                    currentLevel--
+                    pastValue = false
+                }
+
+                override fun level(): Int = currentLevel
+
+                override fun maxLevel(): Int = tuple.size
+
+                override fun participatesInLevel(level: Int): Boolean = level < tuple.size
             }
         }
     }

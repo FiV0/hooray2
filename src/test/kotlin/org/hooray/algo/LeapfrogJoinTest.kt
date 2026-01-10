@@ -1,5 +1,6 @@
 package org.hooray.algo
 
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.UniversalComparator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -122,5 +123,140 @@ class LeapfrogJoinTest {
             listOf(12, 40)
         )
         assertEquals(expected, result)
+    }
+
+    @Test
+    fun `test createFromTuple basic iteration`() {
+        val tuple = persistentListOf<Any>(1, 2, 3)
+        val index = LeapfrogIndex.createFromTuple(tuple)
+
+        assertEquals(0, index.level())
+        assertEquals(3, index.maxLevel())
+        assertEquals(false, index.atEnd())
+        assertEquals(1, index.key())
+
+        index.next()
+        assertEquals(true, index.atEnd())
+    }
+
+    @Test
+    fun `test createFromTuple seek behavior`() {
+        val tuple = persistentListOf<Any>(5, 10, 15)
+        val index = LeapfrogIndex.createFromTuple(tuple)
+
+        // Seek to value less than tuple value - should still be at the value
+        index.seek(3)
+        assertEquals(false, index.atEnd())
+        assertEquals(5, index.key())
+
+        // Seek to exact value - should still be at the value
+        index.seek(5)
+        assertEquals(false, index.atEnd())
+        assertEquals(5, index.key())
+
+        // Seek past the value - should be at end
+        index.seek(6)
+        assertEquals(true, index.atEnd())
+    }
+
+    @Test
+    fun `test createFromTuple multi-level navigation`() {
+        val tuple = persistentListOf<Any>(1, 2, 3)
+        val index = LeapfrogIndex.createFromTuple(tuple)
+
+        // Level 0
+        assertEquals(0, index.level())
+        assertEquals(1, index.key())
+
+        // Open to level 1
+        index.openLevel()
+        assertEquals(1, index.level())
+        assertEquals(false, index.atEnd())
+        assertEquals(2, index.key())
+
+        // Open to level 2
+        index.openLevel()
+        assertEquals(2, index.level())
+        assertEquals(false, index.atEnd())
+        assertEquals(3, index.key())
+
+        // Close back to level 1
+        index.closeLevel()
+        assertEquals(1, index.level())
+        assertEquals(false, index.atEnd())
+        assertEquals(2, index.key())
+
+        // Close back to level 0
+        index.closeLevel()
+        assertEquals(0, index.level())
+        assertEquals(false, index.atEnd())
+        assertEquals(1, index.key())
+    }
+
+    @Test
+    fun `test createFromTuple participatesInLevel`() {
+        val tuple = persistentListOf<Any>(1, 2, 3)
+        val index = LeapfrogIndex.createFromTuple(tuple)
+
+        assertEquals(true, index.participatesInLevel(0))
+        assertEquals(true, index.participatesInLevel(1))
+        assertEquals(true, index.participatesInLevel(2))
+        assertEquals(false, index.participatesInLevel(3))
+    }
+
+    @Test
+    fun `test createFromTuple in join with matching tuple`() {
+        val tuple = persistentListOf<Any>(6)
+        val tupleIndex = LeapfrogIndex.createFromTuple(tuple)
+        val rangeIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10))
+
+        val join = LeapfrogJoin(listOf(tupleIndex, rangeIndex), 1)
+        val result = join.join()
+
+        assertEquals(1, result.size)
+        assertEquals(listOf(listOf(6)), result)
+    }
+
+    @Test
+    fun `test createFromTuple in join with non-matching tuple`() {
+        val tuple = persistentListOf<Any>(5)
+        val tupleIndex = LeapfrogIndex.createFromTuple(tuple)
+        val rangeIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10))
+
+        val join = LeapfrogJoin(listOf(tupleIndex, rangeIndex), 1)
+        val result = join.join()
+
+        assertEquals(0, result.size)
+    }
+
+    @Test
+    fun `test createFromTuple resets position on openLevel`() {
+        val tuple = persistentListOf<Any>(1, 2)
+        val index = LeapfrogIndex.createFromTuple(tuple)
+
+        // Advance past value at level 0
+        index.next()
+        assertEquals(true, index.atEnd())
+
+        // Open level - should reset
+        index.openLevel()
+        assertEquals(false, index.atEnd())
+        assertEquals(2, index.key())
+    }
+
+    @Test
+    fun `test createFromTuple resets position on closeLevel`() {
+        val tuple = persistentListOf<Any>(1, 2)
+        val index = LeapfrogIndex.createFromTuple(tuple)
+
+        index.openLevel()
+        // Advance past value at level 1
+        index.next()
+        assertEquals(true, index.atEnd())
+
+        // Close level - should reset level 0
+        index.closeLevel()
+        assertEquals(false, index.atEnd())
+        assertEquals(1, index.key())
     }
 }
