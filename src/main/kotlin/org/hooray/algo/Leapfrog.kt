@@ -23,7 +23,7 @@ interface LayeredIndex {
 }
 
 interface NotLeapfrogIndex : LevelParticipation {
-    fun checkNegation(positiveTuple: ResultTuple) : Boolean
+    fun checkNegation(positiveTuples: List<ResultTuple>) : List<ResultTuple>
 }
 
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {

@@ -1,259 +1,120 @@
 package org.hooray.iterator
 
-import org.hooray.UniversalComparator
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.algo.LeapfrogIndex
+import org.hooray.algo.ResultTuple
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 
 class AVLNotLeapfrogIndexTest {
 
     @Test
-    fun `test negative with different maxLevels fails`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3), maxLevels = 1)
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 3), maxLevels = 2)
+    fun `test empty negatives list returns all tuples`() {
+        val notIndex = AVLNotLeapfrogIndex(emptyList(), participationLevel = 0)
 
-        assertThrows<IllegalArgumentException> {
-            AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
-        }
+        val tuples: List<ResultTuple> = listOf(
+            persistentListOf(1),
+            persistentListOf(2),
+            persistentListOf(3)
+        )
+
+        val result = notIndex.checkNegation(tuples)
+
+        assertEquals(tuples, result)
     }
 
     @Test
-    fun `test empty negative list behaves like positive index`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5))
-        val notIndex = AVLNotLeapfrogIndex(positive, emptyList(), participationLevel = 0)
+    fun `test single negative excludes matching tuples`() {
+        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10))
+        val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
-        val results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            results.add(notIndex.key())
-            notIndex.next()
-        }
+        val tuples: List<ResultTuple> = (1..10).map { persistentListOf<Any>(it) }
 
-        assertEquals(listOf(1, 2, 3, 4, 5), results)
+        val result = notIndex.checkNegation(tuples)
+
+        // Should keep odds only (tuples NOT in negative)
+        val expected: List<ResultTuple> = listOf(1, 3, 5, 7, 9).map { persistentListOf<Any>(it) }
+        assertEquals(expected, result)
     }
 
     @Test
-    fun `test single negative child excludes matching elements`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10)) // evens
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
+    fun `test disjoint sets returns all tuples`() {
+        val negative = LeapfrogIndex.createSingleLevel(listOf(100, 200, 300))
+        val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
-        val results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            results.add(notIndex.key())
-            notIndex.next()
-        }
+        val tuples: List<ResultTuple> = listOf(
+            persistentListOf(1),
+            persistentListOf(2),
+            persistentListOf(3)
+        )
 
-        // Should return odds only (positive minus negative)
-        assertEquals(listOf(1, 3, 5, 7, 9), results)
-    }
+        val result = notIndex.checkNegation(tuples)
 
-    @Test
-    fun `test disjoint sets returns all positive elements`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 3, 5, 7, 9)) // odds
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10)) // evens
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
-
-        val results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            results.add(notIndex.key())
-            notIndex.next()
-        }
-
-        // No overlap, so all positive elements returned
-        assertEquals(listOf(1, 3, 5, 7, 9), results)
+        assertEquals(tuples, result)
     }
 
     @Test
     fun `test complete overlap returns empty`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6))
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10))
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
+        val negative = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5))
+        val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
-        assertEquals(true, notIndex.atEnd())
+        val tuples: List<ResultTuple> = listOf(
+            persistentListOf(2),
+            persistentListOf(4)
+        )
+
+        val result = notIndex.checkNegation(tuples)
+
+        assertEquals(emptyList<ResultTuple>(), result)
     }
 
     @Test
-    fun `test AND semantics with multiple negative children`() {
-        // With AND semantics: exclude only if key exists in ALL negative children
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))
+    fun `test AND semantics with multiple negatives`() {
+        // With multiple negatives: exclude only if tuple matches ALL negatives
         val multiplesOfTwo = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
         val multiplesOfThree = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(multiplesOfTwo, multiplesOfThree), participationLevel = 0)
+        val notIndex = AVLNotLeapfrogIndex(listOf(multiplesOfTwo, multiplesOfThree), participationLevel = 0)
 
-        val results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            results.add(notIndex.key())
-            notIndex.next()
-        }
+        val tuples: List<ResultTuple> = (1..12).map { persistentListOf<Any>(it) }
+
+        val result = notIndex.checkNegation(tuples)
 
         // Exclude only multiples of 6 (both 2 AND 3): 6, 12
         // Keep: 1, 2, 3, 4, 5, 7, 8, 9, 10, 11
-        assertEquals(listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11), results)
+        val expected: List<ResultTuple> = listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11).map { persistentListOf<Any>(it) }
+        assertEquals(expected, result)
     }
 
     @Test
     fun `test AND semantics excludes nothing if any negative is disjoint`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5))
-        val negativeOne = LeapfrogIndex.createSingleLevel(listOf(2, 4)) // overlaps
-        val negativeTwo = LeapfrogIndex.createSingleLevel(listOf(100, 200)) // disjoint
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negativeOne, negativeTwo), participationLevel = 0)
+        val negativeOne = LeapfrogIndex.createSingleLevel(listOf(2, 4))
+        val negativeTwo = LeapfrogIndex.createSingleLevel(listOf(100, 200))
+        val notIndex = AVLNotLeapfrogIndex(listOf(negativeOne, negativeTwo), participationLevel = 0)
 
-        val results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            results.add(notIndex.key())
-            notIndex.next()
-        }
+        val tuples: List<ResultTuple> = (1..5).map { persistentListOf<Any>(it) }
 
-        // Nothing is excluded because no key exists in ALL negative children
-        assertEquals(listOf(1, 2, 3, 4, 5), results)
+        val result = notIndex.checkNegation(tuples)
+
+        // Nothing excluded because no tuple exists in ALL negatives
+        assertEquals(tuples, result)
     }
 
     @Test
-    fun `test seek on NOT index`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10))
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
+    fun `test participatesInLevel`() {
+        val notIndex = AVLNotLeapfrogIndex(emptyList(), participationLevel = 1)
 
-        notIndex.seek(4)
-
-        val results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            results.add(notIndex.key())
-            notIndex.next()
-        }
-
-        // After seek(4), should get odd numbers >= 4: 5, 7, 9
-        assertEquals(listOf(5, 7, 9), results)
-    }
-
-    @Test
-    fun `test seek to excluded value advances to next valid`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5))
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2, 3, 4))
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
-
-        notIndex.seek(2) // 2 is excluded, should advance to 5
-
-        assertEquals(5, notIndex.key())
-    }
-
-    @Test
-    fun `test seek past all elements results in atEnd`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3))
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2))
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
-
-        notIndex.seek(100)
-
-        assertEquals(true, notIndex.atEnd())
-    }
-
-    @Test
-    fun `test multi-level with openLevel and closeLevel`() {
-        class MultiLevelIndex(
-            private val levelData: List<List<Int>>
-        ) : LeapfrogIndex {
-            private var currentLevel = 0
-            private val indexPerLevel = MutableList(levelData.size) { 0 }
-
-            override fun seek(key: Any) {
-                val values = levelData[currentLevel]
-                var currentIndex = indexPerLevel[currentLevel]
-                while (currentIndex < values.size && UniversalComparator.compare(values[currentIndex], key) < 0) {
-                    currentIndex++
-                }
-                indexPerLevel[currentLevel] = currentIndex
-            }
-
-            override fun next(): Any {
-                val values = levelData[currentLevel]
-                val currentIndex = indexPerLevel[currentLevel]
-                if (currentIndex < values.size) {
-                    indexPerLevel[currentLevel] = currentIndex + 1
-                }
-                return if (atEnd()) Unit else values[indexPerLevel[currentLevel]]
-            }
-
-            override fun key(): Any {
-                val values = levelData[currentLevel]
-                val currentIndex = indexPerLevel[currentLevel]
-                return if (atEnd()) throw IllegalStateException("At end") else values[currentIndex]
-            }
-
-            override fun atEnd(): Boolean {
-                val values = levelData[currentLevel]
-                val currentIndex = indexPerLevel[currentLevel]
-                return currentIndex >= values.size
-            }
-
-            override fun openLevel() {
-                currentLevel++
-                indexPerLevel[currentLevel] = 0
-            }
-
-            override fun closeLevel() {
-                currentLevel--
-            }
-
-            override fun level(): Int {
-                return currentLevel
-            }
-
-            override fun maxLevel(): Int {
-                return levelData.size
-            }
-
-            override fun participatesInLevel(level: Int): Boolean {
-                return level < levelData.size
-            }
-        }
-
-        val positive = MultiLevelIndex(listOf(
-            listOf(1, 2, 3, 4, 5),
-            listOf(10, 20, 30, 40, 50)
-        ))
-
-        val negative = MultiLevelIndex(listOf(
-            listOf(2, 4),
-            listOf(20, 40)
-        ))
-
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
-
-        assertEquals(0, notIndex.level())
-        assertEquals(2, notIndex.maxLevel())
-
-        // At level 0, should exclude 2 and 4
-        val level0Results = mutableListOf<Any>()
-        while (!notIndex.atEnd()) {
-            level0Results.add(notIndex.key())
-            notIndex.next()
-        }
-
-        assertEquals(listOf(1, 3, 5), level0Results)
-    }
-
-    @Test
-    fun `test participatesInLevel returns true at participation level`() {
-        val positive = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3), maxLevels = 3)
-        val negative = LeapfrogIndex.createSingleLevel(listOf(2), maxLevels = 3)
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 1)
-
-        // At participation level 1, should return true
+        assertEquals(false, notIndex.participatesInLevel(0))
         assertEquals(true, notIndex.participatesInLevel(1))
-
-        // At other levels, delegates to positive
-        assertEquals(true, notIndex.participatesInLevel(0))
-        assertEquals(true, notIndex.participatesInLevel(2))
+        assertEquals(false, notIndex.participatesInLevel(2))
     }
 
     @Test
-    fun `test NOT with positive being empty`() {
-        val positive = LeapfrogIndex.createSingleLevel(emptyList())
+    fun `test empty tuples list returns empty`() {
         val negative = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3))
-        val notIndex = AVLNotLeapfrogIndex(positive, listOf(negative), participationLevel = 0)
+        val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
-        assertEquals(true, notIndex.atEnd())
+        val result = notIndex.checkNegation(emptyList())
+
+        assertEquals(emptyList<ResultTuple>(), result)
     }
 }
