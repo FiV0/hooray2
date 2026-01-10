@@ -10,20 +10,13 @@ class AVLNotLeapfrogIndex(
     private val participationLevel: Int
 ) : NotLeapfrogIndex {
 
-    override fun checkNegation(positiveTuples: List<ResultTuple>): List<ResultTuple> {
-        if (negatives.isEmpty()) return positiveTuples
+    override fun checkNegation(positiveTuple: ResultTuple): Boolean {
+        if (negatives.isEmpty()) return true
 
-        val result = mutableListOf<ResultTuple>()
-
-        for (tuple in positiveTuples) {
-            val tupleIndex = LeapfrogIndex.createFromTuple(tuple)
-            val join = LeapfrogJoin(negatives + tupleIndex, tuple.size)
-            if (join.join().isEmpty()) {
-                result.add(tuple)
-            }
-        }
-
-        return result
+        negatives.forEach { it.reinit() }
+        val tupleIndex = LeapfrogIndex.createFromTuple(positiveTuple)
+        val join = LeapfrogJoin(negatives + tupleIndex, positiveTuple.size)
+        return join.join().isEmpty()
     }
 
     override fun participatesInLevel(level: Int) = level == participationLevel

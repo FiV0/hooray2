@@ -2,6 +2,7 @@ package org.hooray.algo
 
 import kotlinx.collections.immutable.persistentListOf
 import org.hooray.UniversalComparator
+import org.hooray.iterator.AVLNotLeapfrogIndex
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -265,5 +266,60 @@ class LeapfrogJoinTest {
         index.closeLevel()
         assertEquals(false, index.atEnd())
         assertEquals(1, index.key())
+    }
+
+    @Test
+    fun `test LeapfrogJoin with NotLeapfrogIndex excludes matching tuples`() {
+        val evenIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
+        val divisibleByThreeIndex = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
+
+        // Negative: exclude multiples of 4
+        val multiplesOfFour = LeapfrogIndex.createSingleLevel(listOf(4, 8, 12))
+        val notIndex = AVLNotLeapfrogIndex(listOf(multiplesOfFour), participationLevel = 0)
+
+        val indexes = listOf(evenIndex, divisibleByThreeIndex)
+        val join = LeapfrogJoin(indexes, 1, listOf(notIndex))
+        val result = join.join()
+
+        // Intersection of evens and divisible by 3: 6, 12
+        // After excluding multiples of 4: only 6 remains (12 is excluded)
+        assertEquals(1, result.size)
+        assertEquals(listOf(listOf(6)), result)
+    }
+
+    @Test
+    fun `test LeapfrogJoin with NotLeapfrogIndex that excludes nothing`() {
+        val evenIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
+        val divisibleByThreeIndex = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
+
+        // Negative: disjoint set, excludes nothing
+        val disjointNegative = LeapfrogIndex.createSingleLevel(listOf(100, 200, 300))
+        val notIndex = AVLNotLeapfrogIndex(listOf(disjointNegative), participationLevel = 0)
+
+        val indexes = listOf(evenIndex, divisibleByThreeIndex)
+        val join = LeapfrogJoin(indexes, 1, listOf(notIndex))
+        val result = join.join()
+
+        // Intersection of evens and divisible by 3: 6, 12 - nothing excluded
+        assertEquals(2, result.size)
+        val expected = listOf(listOf(6), listOf(12))
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun `test LeapfrogJoin with NotLeapfrogIndex that excludes all`() {
+        val evenIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
+        val divisibleByThreeIndex = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
+
+        // Negative: includes both 6 and 12
+        val allMatching = LeapfrogIndex.createSingleLevel(listOf(6, 12))
+        val notIndex = AVLNotLeapfrogIndex(listOf(allMatching), participationLevel = 0)
+
+        val indexes = listOf(evenIndex, divisibleByThreeIndex)
+        val join = LeapfrogJoin(indexes, 1, listOf(notIndex))
+        val result = join.join()
+
+        // All results are excluded
+        assertEquals(0, result.size)
     }
 }

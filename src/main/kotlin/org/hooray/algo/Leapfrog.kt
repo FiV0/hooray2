@@ -24,7 +24,7 @@ interface LayeredIndex {
 }
 
 interface NotLeapfrogIndex : LevelParticipation {
-    fun checkNegation(positiveTuples: List<ResultTuple>) : List<ResultTuple>
+    fun checkNegation(positiveTuple: ResultTuple) : Boolean
 }
 
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
@@ -184,7 +184,11 @@ class LeapfrogSingleJoin(private val iterators: List<LeapfrogIterator>) {
     }
 }
 
-class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<ResultTuple>  {
+class LeapfrogJoin @JvmOverloads constructor(
+    val indexes: List<LeapfrogIndex>,
+    val levels: Int,
+    val notIndexes: List<NotLeapfrogIndex> = emptyList()
+) : Join<ResultTuple>  {
     val participants : List<List<LeapfrogIndex>>
     val singleJoinStack : Stack<LeapfrogSingleJoin> = Stack()
 
@@ -214,7 +218,10 @@ class LeapfrogJoin(val indexes: List<LeapfrogIndex>, val levels: Int) : Join<Res
             assert(level == candidateTuple.size) { "Level should always match candidate size. Level $level, candidate size ${candidateTuple.size}" }
             if (currentJoin.search(candidateTuple)) {
                 if (level == levels - 1) {
-                    results.add(candidateTuple.toPersistentList())
+                    val resultTuple = candidateTuple.toPersistentList()
+                    if (notIndexes.all { it.checkNegation(resultTuple) }) {
+                        results.add(resultTuple)
+                    }
                     candidateTuple.removeLast()
                     currentJoin.next()
                 } else {
