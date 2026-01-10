@@ -10,7 +10,7 @@ import org.hooray.algo.LeapfrogIterator
 import java.util.Stack
 
 @Suppress("UNCHECKED_CAST")
-class AVLLeapfrogIndex(index: AVLIndex , val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
+class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
     var level = 0
     var iteratorStack: Stack<LeapfrogIterator>
 
@@ -86,6 +86,15 @@ class AVLLeapfrogIndex(index: AVLIndex , val variableOrder: List<Symbol>, val va
         check(level > 0) { "Cannot close level below 0" }
         iteratorStack.pop()
         level--
+    }
+
+    override fun reinit() {
+        level = 0
+        iteratorStack = Stack<LeapfrogIterator>()
+        when(index) {
+            is AVLIndex.AVLSetIndex -> iteratorStack.push(AVLLeapfrogIteratorSet(index.set))
+            is AVLIndex.AVLMapIndex -> iteratorStack.push(AVLLeapFrogIteratorMap(index.map))
+        }
     }
 
     override fun level() = level

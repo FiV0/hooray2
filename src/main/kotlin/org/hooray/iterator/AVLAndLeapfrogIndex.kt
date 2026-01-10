@@ -99,6 +99,13 @@ class AVLAndLeapfrogIndex(private val children: List<LeapfrogIndex>) : LeapfrogI
         findNextMatch()
     }
 
+    override fun reinit() {
+        children.forEach { it.reinit() }
+        isAtEnd = false
+        currentKey = null
+        findNextMatch()
+    }
+
     override fun level(): Int = children.first().level()
 
     override fun maxLevel(): Int = children.first().maxLevel()

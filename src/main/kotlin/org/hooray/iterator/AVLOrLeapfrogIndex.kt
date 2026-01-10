@@ -46,6 +46,10 @@ class AVLOrLeapfrogIndex(private val children: List<LeapfrogIndex>) : LeapfrogIn
         children.forEach { it.closeLevel() }
     }
 
+    override fun reinit() {
+        children.forEach { it.reinit() }
+    }
+
     override fun level(): Int = children.first().level()
 
     override fun maxLevel(): Int = children.first().maxLevel()

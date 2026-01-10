@@ -83,6 +83,13 @@ class LeapfrogJoinTest {
                 currentLevel--
             }
 
+            override fun reinit() {
+                currentLevel = 0
+                for (i in indexPerLevel.indices) {
+                    indexPerLevel[i] = 0
+                }
+            }
+
             override fun level(): Int {
                 return currentLevel
             }

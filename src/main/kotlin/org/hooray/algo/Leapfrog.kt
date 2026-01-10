@@ -20,6 +20,7 @@ interface LayeredIndex {
     fun closeLevel()
     fun level() : Int
     fun maxLevel(): Int
+    fun reinit()
 }
 
 interface NotLeapfrogIndex : LevelParticipation {
@@ -66,6 +67,11 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                     currentIndex = 0
                 }
 
+                override fun reinit() {
+                    currentIndex = 0
+                    currentLevel = 0
+                }
+
                 override fun level(): Int {
                     return currentLevel
                 }
@@ -110,6 +116,11 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun closeLevel() {
                     currentLevel--
+                    pastValue = false
+                }
+
+                override fun reinit() {
+                    currentLevel = 0
                     pastValue = false
                 }
 
