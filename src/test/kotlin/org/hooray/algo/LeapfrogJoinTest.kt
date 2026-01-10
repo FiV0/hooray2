@@ -269,7 +269,7 @@ class LeapfrogJoinTest {
     }
 
     @Test
-    fun `test LeapfrogJoin with NotLeapfrogIndex excludes matching tuples`() {
+    fun `test LeapfrogJoin with FilterLeapfrogIndex excludes matching tuples`() {
         val evenIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
         val divisibleByThreeIndex = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
 
@@ -288,7 +288,7 @@ class LeapfrogJoinTest {
     }
 
     @Test
-    fun `test LeapfrogJoin with NotLeapfrogIndex that excludes nothing`() {
+    fun `test LeapfrogJoin with FilterLeapfrogIndex that excludes nothing`() {
         val evenIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
         val divisibleByThreeIndex = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
 
@@ -307,7 +307,7 @@ class LeapfrogJoinTest {
     }
 
     @Test
-    fun `test LeapfrogJoin with NotLeapfrogIndex that excludes all`() {
+    fun `test LeapfrogJoin with FilterLeapfrogIndex that excludes all`() {
         val evenIndex = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10, 12))
         val divisibleByThreeIndex = LeapfrogIndex.createSingleLevel(listOf(3, 6, 9, 12))
 

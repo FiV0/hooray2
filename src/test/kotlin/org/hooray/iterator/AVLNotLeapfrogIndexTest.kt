@@ -12,9 +12,9 @@ class AVLNotLeapfrogIndexTest {
     fun `test empty negatives list returns true for any tuple`() {
         val notIndex = AVLNotLeapfrogIndex(emptyList(), participationLevel = 0)
 
-        assertEquals(true, notIndex.checkNegation(persistentListOf(1)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(2)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(3)))
+        assertEquals(true, notIndex.accept(persistentListOf(1)))
+        assertEquals(true, notIndex.accept(persistentListOf(2)))
+        assertEquals(true, notIndex.accept(persistentListOf(3)))
     }
 
     @Test
@@ -23,14 +23,14 @@ class AVLNotLeapfrogIndexTest {
         val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
         // Odds should return true (not excluded)
-        assertEquals(true, notIndex.checkNegation(persistentListOf(1)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(3)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(5)))
+        assertEquals(true, notIndex.accept(persistentListOf(1)))
+        assertEquals(true, notIndex.accept(persistentListOf(3)))
+        assertEquals(true, notIndex.accept(persistentListOf(5)))
 
         // Evens should return false (excluded)
-        assertEquals(false, notIndex.checkNegation(persistentListOf(2)))
-        assertEquals(false, notIndex.checkNegation(persistentListOf(4)))
-        assertEquals(false, notIndex.checkNegation(persistentListOf(6)))
+        assertEquals(false, notIndex.accept(persistentListOf(2)))
+        assertEquals(false, notIndex.accept(persistentListOf(4)))
+        assertEquals(false, notIndex.accept(persistentListOf(6)))
     }
 
     @Test
@@ -38,9 +38,9 @@ class AVLNotLeapfrogIndexTest {
         val negative = LeapfrogIndex.createSingleLevel(listOf(100, 200, 300))
         val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
-        assertEquals(true, notIndex.checkNegation(persistentListOf(1)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(2)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(3)))
+        assertEquals(true, notIndex.accept(persistentListOf(1)))
+        assertEquals(true, notIndex.accept(persistentListOf(2)))
+        assertEquals(true, notIndex.accept(persistentListOf(3)))
     }
 
     @Test
@@ -51,21 +51,21 @@ class AVLNotLeapfrogIndexTest {
         val notIndex = AVLNotLeapfrogIndex(listOf(multiplesOfTwo, multiplesOfThree), participationLevel = 0)
 
         // Multiples of 6 (both 2 AND 3) should be excluded
-        assertEquals(false, notIndex.checkNegation(persistentListOf(6)))
-        assertEquals(false, notIndex.checkNegation(persistentListOf(12)))
+        assertEquals(false, notIndex.accept(persistentListOf(6)))
+        assertEquals(false, notIndex.accept(persistentListOf(12)))
 
         // Numbers that are only multiples of 2 should be kept
-        assertEquals(true, notIndex.checkNegation(persistentListOf(2)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(4)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(8)))
+        assertEquals(true, notIndex.accept(persistentListOf(2)))
+        assertEquals(true, notIndex.accept(persistentListOf(4)))
+        assertEquals(true, notIndex.accept(persistentListOf(8)))
 
         // Numbers that are only multiples of 3 should be kept
-        assertEquals(true, notIndex.checkNegation(persistentListOf(3)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(9)))
+        assertEquals(true, notIndex.accept(persistentListOf(3)))
+        assertEquals(true, notIndex.accept(persistentListOf(9)))
 
         // Numbers that are neither should be kept
-        assertEquals(true, notIndex.checkNegation(persistentListOf(1)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(5)))
+        assertEquals(true, notIndex.accept(persistentListOf(1)))
+        assertEquals(true, notIndex.accept(persistentListOf(5)))
     }
 
     @Test
@@ -75,11 +75,11 @@ class AVLNotLeapfrogIndexTest {
         val notIndex = AVLNotLeapfrogIndex(listOf(negativeOne, negativeTwo), participationLevel = 0)
 
         // Nothing excluded because no tuple exists in ALL negatives
-        assertEquals(true, notIndex.checkNegation(persistentListOf(1)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(2)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(3)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(4)))
-        assertEquals(true, notIndex.checkNegation(persistentListOf(5)))
+        assertEquals(true, notIndex.accept(persistentListOf(1)))
+        assertEquals(true, notIndex.accept(persistentListOf(2)))
+        assertEquals(true, notIndex.accept(persistentListOf(3)))
+        assertEquals(true, notIndex.accept(persistentListOf(4)))
+        assertEquals(true, notIndex.accept(persistentListOf(5)))
     }
 
     @Test
@@ -97,10 +97,10 @@ class AVLNotLeapfrogIndexTest {
         val notIndex = AVLNotLeapfrogIndex(listOf(negative), participationLevel = 0)
 
         // First call
-        assertEquals(false, notIndex.checkNegation(persistentListOf(2)))
+        assertEquals(false, notIndex.accept(persistentListOf(2)))
         // Second call should still work correctly
-        assertEquals(true, notIndex.checkNegation(persistentListOf(3)))
+        assertEquals(true, notIndex.accept(persistentListOf(3)))
         // Third call
-        assertEquals(false, notIndex.checkNegation(persistentListOf(4)))
+        assertEquals(false, notIndex.accept(persistentListOf(4)))
     }
 }
