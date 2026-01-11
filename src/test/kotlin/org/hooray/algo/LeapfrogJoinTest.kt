@@ -75,7 +75,7 @@ class LeapfrogJoinTest {
                 return currentIndex >= values.size
             }
 
-            override fun openLevel() {
+            override fun openLevel(prefix: List<Any>) {
                 currentLevel++
                 indexPerLevel[currentLevel] = 0
             }
@@ -177,13 +177,13 @@ class LeapfrogJoinTest {
         assertEquals(1, index.key())
 
         // Open to level 1
-        index.openLevel()
+        index.openLevel(emptyList())
         assertEquals(1, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(2, index.key())
 
         // Open to level 2
-        index.openLevel()
+        index.openLevel(emptyList())
         assertEquals(2, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(3, index.key())
@@ -247,7 +247,7 @@ class LeapfrogJoinTest {
         assertEquals(true, index.atEnd())
 
         // Open level - should reset
-        index.openLevel()
+        index.openLevel(emptyList())
         assertEquals(false, index.atEnd())
         assertEquals(2, index.key())
     }
@@ -257,7 +257,7 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        index.openLevel()
+        index.openLevel(emptyList())
         // Advance past value at level 1
         index.next()
         assertEquals(true, index.atEnd())

@@ -38,8 +38,8 @@ class AVLOrLeapfrogIndex(private val children: List<LeapfrogIndex>) : LeapfrogIn
 
     override fun atEnd(): Boolean = children.all { it.atEnd() }
 
-    override fun openLevel() {
-        children.forEach { it.openLevel() }
+    override fun openLevel(prefix: List<Any>) {
+        children.forEach { it.openLevel(prefix) }
     }
 
     override fun closeLevel() {

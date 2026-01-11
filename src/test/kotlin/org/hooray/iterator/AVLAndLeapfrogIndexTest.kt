@@ -165,7 +165,7 @@ class AVLAndLeapfrogIndexTest {
                 return currentIndex >= values.size
             }
 
-            override fun openLevel() {
+            override fun openLevel(prefix: List<Any>) {
                 currentLevel++
                 indexPerLevel[currentLevel] = 0
             }
@@ -258,7 +258,7 @@ class AVLAndLeapfrogIndexTest {
                 return currentIndex >= values.size
             }
 
-            override fun openLevel() {
+            override fun openLevel(prefix: List<Any>) {
                 currentLevel++
                 indexPerLevel[currentLevel] = 0
             }
@@ -301,7 +301,7 @@ class AVLAndLeapfrogIndexTest {
 
         assertEquals(0, andIndex.level())
 
-        andIndex.openLevel()
+        andIndex.openLevel(emptyList())
         assertEquals(1, andIndex.level())
 
         val level1Results = mutableListOf<Any>()

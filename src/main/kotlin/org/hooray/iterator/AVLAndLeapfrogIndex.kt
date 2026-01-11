@@ -85,8 +85,8 @@ class AVLAndLeapfrogIndex(private val children: List<LeapfrogIndex>) : LeapfrogI
 
     override fun atEnd(): Boolean = isAtEnd
 
-    override fun openLevel() {
-        children.forEach { it.openLevel() }
+    override fun openLevel(prefix: List<Any>) {
+        children.forEach { it.openLevel(prefix) }
         isAtEnd = false
         currentKey = null
         findNextMatch()

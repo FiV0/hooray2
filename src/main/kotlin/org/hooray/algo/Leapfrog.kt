@@ -16,7 +16,7 @@ interface LeapfrogIterator {
 }
 
 interface LayeredIndex {
-    fun openLevel()
+    fun openLevel(prefix: List<Any>)
     fun closeLevel()
     fun level() : Int
     fun maxLevel(): Int
@@ -58,7 +58,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                     return currentIndex >= sortedValues.size
                 }
 
-                override fun openLevel() {
+                override fun openLevel(prefix: List<Any>) {
                     currentLevel++
                 }
 
@@ -109,7 +109,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun atEnd(): Boolean = pastValue
 
-                override fun openLevel() {
+                override fun openLevel(prefix: List<Any>) {
                     currentLevel++
                     pastValue = false
                 }
@@ -129,6 +129,65 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 override fun maxLevel(): Int = tuple.size
 
                 override fun participatesInLevel(level: Int): Boolean = level < tuple.size
+            }
+        }
+
+        @JvmStatic
+        fun createAtLevel(values: List<Int>, targetLevel: Int, maxLevels: Int): LeapfrogIndex {
+            require(targetLevel < maxLevels) { "targetLevel must be less than maxLevels" }
+            val sortedValues = values.sortedWith(UniversalComparator)
+            return object : LeapfrogIndex {
+                private var currentIndex = 0
+                private var currentLevel = 0
+
+                override fun seek(key: Any) {
+                    while (currentIndex < sortedValues.size && UniversalComparator.compare(sortedValues[currentIndex], key) < 0) {
+                        currentIndex++
+                    }
+                }
+
+                override fun next(): Any {
+                    if (currentIndex < sortedValues.size) {
+                        currentIndex++
+                    }
+                    return if (atEnd()) Unit else sortedValues[currentIndex]
+                }
+
+                override fun key(): Any {
+                    return if (atEnd()) throw IllegalStateException("At end") else sortedValues[currentIndex]
+                }
+
+                override fun atEnd(): Boolean {
+                    return currentIndex >= sortedValues.size
+                }
+
+                override fun openLevel(prefix: List<Any>) {
+                    currentLevel = prefix.size  // We're opening to level = prefix.size
+                    if (currentLevel == targetLevel) {
+                        currentIndex = 0
+                    }
+                }
+
+                override fun closeLevel() {
+                    currentLevel--
+                }
+
+                override fun reinit() {
+                    currentIndex = 0
+                    currentLevel = 0
+                }
+
+                override fun level(): Int {
+                    return currentLevel
+                }
+
+                override fun maxLevel(): Int {
+                    return maxLevels
+                }
+
+                override fun participatesInLevel(level: Int): Boolean {
+                    return level == targetLevel
+                }
             }
         }
     }
@@ -225,7 +284,7 @@ class LeapfrogJoin @JvmOverloads constructor(
                     candidateTuple.removeLast()
                     currentJoin.next()
                 } else {
-                    participants[level + 1].map { it.openLevel() }
+                    participants[level + 1].map { it.openLevel(candidateTuple.toList()) }
                     singleJoinStack.push(LeapfrogSingleJoin(participants[level + 1]))
                 }
             } else {

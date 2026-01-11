@@ -67,7 +67,7 @@ class BTreeLeapfrogIndex(private val index: BTreeIndex, val variableOrder: List<
 
     override fun atEnd() = iteratorStack.peek().atEnd()
 
-    override fun openLevel() {
+    override fun openLevel(prefix: List<Any>) {
         val maxLevel = maxLevel()
         level++
         check(level < maxLevel) { "Cannot open level beyond max level $maxLevel" }
