@@ -96,12 +96,12 @@ class AVLFnLeapfrogIndexTest {
     @Test
     fun `test LeapfrogJoin with unary function`() {
         // Numbers at level 0 only
-        val numbers = LeapfrogIndex.createAtLevel(listOf(1, 2, 3, 4, 5), targetLevel = 0, maxLevels = 2)
+        val numbers = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3, 4, 5), 0)
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
         val fnIndex = AVLFnLeapfrogIndex(listOf(0), outputLevel = 1, double)
 
         // Another index at level 1 only with some doubled values
-        val doubledValues = LeapfrogIndex.createAtLevel(listOf(2, 4, 6, 8, 10), targetLevel = 1, maxLevels = 2)
+        val doubledValues = LeapfrogIndex.createSingleLevel(listOf(2, 4, 6, 8, 10), 1)
 
         val join = LeapfrogJoin(listOf(numbers, fnIndex, doubledValues), 2)
         val result = join.join()
@@ -121,13 +121,13 @@ class AVLFnLeapfrogIndexTest {
     @Test
     fun `test LeapfrogJoin with binary function`() {
         // First index at level 0, second at level 1
-        val first = LeapfrogIndex.createAtLevel(listOf(1, 2, 3), targetLevel = 0, maxLevels = 3)
-        val second = LeapfrogIndex.createAtLevel(listOf(10, 20), targetLevel = 1, maxLevels = 3)
+        val first = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3), 0)
+        val second = LeapfrogIndex.createSingleLevel(listOf(10, 20), 1)
         val add: Fn2<Any, Any, Any> = { x, y -> (x as Int) + (y as Int) }
         val fnIndex = AVLFnLeapfrogIndex(listOf(0, 1), outputLevel = 2, add)
 
         // Sums at level 2
-        val sums = LeapfrogIndex.createAtLevel(listOf(11, 12, 13, 21, 22, 23), targetLevel = 2, maxLevels = 3)
+        val sums = LeapfrogIndex.createSingleLevel(listOf(11, 12, 13, 21, 22, 23), 2)
 
         val join = LeapfrogJoin(listOf(first, second, fnIndex, sums), 3)
         val result = join.join()
@@ -145,12 +145,12 @@ class AVLFnLeapfrogIndexTest {
 
     @Test
     fun `test function with no matching values`() {
-        val numbers = LeapfrogIndex.createAtLevel(listOf(1, 2, 3), targetLevel = 0, maxLevels = 2)
+        val numbers = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3), 0)
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
         val fnIndex = AVLFnLeapfrogIndex(listOf(0), outputLevel = 1, double)
 
         // No overlap with doubled values at level 1
-        val otherValues = LeapfrogIndex.createAtLevel(listOf(100, 200), targetLevel = 1, maxLevels = 2)
+        val otherValues = LeapfrogIndex.createSingleLevel(listOf(100, 200), 1)
 
         val join = LeapfrogJoin(listOf(numbers, fnIndex, otherValues), 2)
         val result = join.join()

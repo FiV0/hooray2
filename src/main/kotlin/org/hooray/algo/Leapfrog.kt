@@ -30,14 +30,12 @@ interface FilterLeapfrogIndex : LevelParticipation {
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
     companion object {
         @JvmStatic
-        fun createSingleLevel(values: List<Int>, maxLevels: Int = 1): LeapfrogIndex {
+        fun createSingleLevel(values: List<Int>, participatingLevel: Int = 0): LeapfrogIndex {
             val sortedValues = values.sortedWith(UniversalComparator)
             return object : LeapfrogIndex {
                 private var currentIndex = 0
-                private var currentLevel = 0
 
                 override fun seek(key: Any) {
-                    // Find the first value >= key
                     while (currentIndex < sortedValues.size && UniversalComparator.compare(sortedValues[currentIndex], key) < 0) {
                         currentIndex++
                     }
@@ -54,35 +52,23 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                     return if (atEnd()) throw IllegalStateException("At end") else sortedValues[currentIndex]
                 }
 
-                override fun atEnd(): Boolean {
-                    return currentIndex >= sortedValues.size
-                }
+                override fun atEnd(): Boolean = currentIndex >= sortedValues.size
 
                 override fun openLevel(prefix: List<Any>) {
-                    currentLevel++
-                }
-
-                override fun closeLevel() {
-                    currentLevel--
                     currentIndex = 0
                 }
+
+                override fun closeLevel() {}
 
                 override fun reinit() {
                     currentIndex = 0
-                    currentLevel = 0
                 }
 
-                override fun level(): Int {
-                    return currentLevel
-                }
+                override fun level(): Int = 0
 
-                override fun maxLevel(): Int {
-                    return maxLevels
-                }
+                override fun maxLevel(): Int = 1
 
-                override fun participatesInLevel(level: Int): Boolean {
-                    return level < maxLevels
-                }
+                override fun participatesInLevel(level: Int): Boolean = level == participatingLevel
             }
         }
 
@@ -132,64 +118,6 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
             }
         }
 
-        @JvmStatic
-        fun createAtLevel(values: List<Int>, targetLevel: Int, maxLevels: Int): LeapfrogIndex {
-            require(targetLevel < maxLevels) { "targetLevel must be less than maxLevels" }
-            val sortedValues = values.sortedWith(UniversalComparator)
-            return object : LeapfrogIndex {
-                private var currentIndex = 0
-                private var currentLevel = 0
-
-                override fun seek(key: Any) {
-                    while (currentIndex < sortedValues.size && UniversalComparator.compare(sortedValues[currentIndex], key) < 0) {
-                        currentIndex++
-                    }
-                }
-
-                override fun next(): Any {
-                    if (currentIndex < sortedValues.size) {
-                        currentIndex++
-                    }
-                    return if (atEnd()) Unit else sortedValues[currentIndex]
-                }
-
-                override fun key(): Any {
-                    return if (atEnd()) throw IllegalStateException("At end") else sortedValues[currentIndex]
-                }
-
-                override fun atEnd(): Boolean {
-                    return currentIndex >= sortedValues.size
-                }
-
-                override fun openLevel(prefix: List<Any>) {
-                    currentLevel = prefix.size  // We're opening to level = prefix.size
-                    if (currentLevel == targetLevel) {
-                        currentIndex = 0
-                    }
-                }
-
-                override fun closeLevel() {
-                    currentLevel--
-                }
-
-                override fun reinit() {
-                    currentIndex = 0
-                    currentLevel = 0
-                }
-
-                override fun level(): Int {
-                    return currentLevel
-                }
-
-                override fun maxLevel(): Int {
-                    return maxLevels
-                }
-
-                override fun participatesInLevel(level: Int): Boolean {
-                    return level == targetLevel
-                }
-            }
-        }
     }
 }
 

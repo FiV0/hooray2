@@ -1,5 +1,6 @@
 package org.hooray.iterator
 
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.UniversalComparator
 import org.hooray.algo.LeapfrogIndex
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -17,8 +18,8 @@ class AVLOrLeapfrogIndexTest {
 
     @Test
     fun `test children with different maxLevels fails`() {
-        val index1 = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3), maxLevels = 1)
-        val index2 = LeapfrogIndex.createSingleLevel(listOf(4, 5, 6), maxLevels = 2)
+        val index1 = LeapfrogIndex.createFromTuple(persistentListOf(1))  // maxLevel = 1
+        val index2 = LeapfrogIndex.createFromTuple(persistentListOf(1, 2))  // maxLevel = 2
 
         assertThrows<IllegalArgumentException> {
             AVLOrLeapfrogIndex(listOf(index1, index2))
