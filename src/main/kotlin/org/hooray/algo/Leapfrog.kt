@@ -4,6 +4,8 @@ import kotlinx.collections.immutable.toPersistentList
 import org.hooray.UniversalComparator
 import org.hooray.iterator.LevelParticipation
 import java.util.Stack
+import java.util.TreeMap
+import java.util.TreeSet
 
 // leapfrog-trie-join based on
 // https://arxiv.org/abs/1210.0481
@@ -25,6 +27,15 @@ interface LayeredIndex {
 
 interface FilterLeapfrogIndex : LevelParticipation {
     fun accept(tuple: ResultTuple) : Boolean
+}
+
+interface FnLeapfrogIndex : LeapfrogIndex, LayeredIndex, LevelParticipation {
+    fun receive(tuple: Prefix)
+}
+
+private sealed interface IndexLevel {
+    data class MapLevel(val map: TreeMap<Any, IndexLevel>) : IndexLevel
+    data class SetLevel(val set: TreeSet<Any>) : IndexLevel
 }
 
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
@@ -186,6 +197,169 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 override fun level(): Int = currentLevelIndex
 
                 override fun maxLevel(): Int = partialPrefix.size
+
+                override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
+            }
+        }
+
+        @JvmStatic
+        fun createFromPrefixesLeapfrogIndex(participatingLevels: List<Int>, partialPrefixes: List<Prefix>): LeapfrogIndex {
+            require(participatingLevels.isNotEmpty()) { "participatingLevels cannot be empty" }
+            require(partialPrefixes.isNotEmpty()) { "partialPrefixes cannot be empty" }
+            require(partialPrefixes.all { it.size == participatingLevels.size }) {
+                "All partial prefixes must have size equal to participatingLevels.size"
+            }
+
+            val levelSet = participatingLevels.toSet()
+
+            // Build hierarchical structure recursively
+            fun buildStructure(levelIndex: Int, prefixes: List<Prefix>): IndexLevel {
+                if (levelIndex == participatingLevels.size - 1) {
+                    // Leaf level - collect all values at this position
+                    val values = TreeSet<Any>(UniversalComparator)
+                    prefixes.forEach { prefix -> values.add(prefix[levelIndex]) }
+                    return IndexLevel.SetLevel(values)
+                } else {
+                    // Intermediate level - group by current level value
+                    val grouped = TreeMap<Any, MutableList<Prefix>>(UniversalComparator)
+                    prefixes.forEach { prefix ->
+                        grouped.computeIfAbsent(prefix[levelIndex]) { mutableListOf() }.add(prefix)
+                    }
+
+                    val map = TreeMap<Any, IndexLevel>(UniversalComparator)
+                    grouped.forEach { (key, matchingPrefixes) ->
+                        // Build next level structure recursively
+                        map[key] = buildStructure(levelIndex + 1, matchingPrefixes)
+                    }
+                    return IndexLevel.MapLevel(map)
+                }
+            }
+
+            val rootIndex = buildStructure(0, partialPrefixes)
+
+            return object : LeapfrogIndex {
+                private val indexStack = Stack<Triple<IndexLevel, Iterator<Any>, Any>>()
+                private var currentIndex: IndexLevel = rootIndex
+                private var currentIterator: Iterator<Any>? = null
+                private var currentKey: Any? = null
+
+                init {
+                    when (rootIndex) {
+                        is IndexLevel.MapLevel -> {
+                            currentIterator = rootIndex.map.keys.iterator()
+                            if (currentIterator!!.hasNext()) {
+                                currentKey = currentIterator!!.next()
+                            }
+                        }
+                        is IndexLevel.SetLevel -> {
+                            currentIterator = rootIndex.set.iterator()
+                            if (currentIterator!!.hasNext()) {
+                                currentKey = currentIterator!!.next()
+                            }
+                        }
+                    }
+                }
+
+                override fun seek(key: Any) {
+                    when (val index = currentIndex) {
+                        is IndexLevel.MapLevel -> {
+                            val tailMap = index.map.tailMap(key)
+                            currentIterator = tailMap.keys.iterator()
+                            currentKey = if (currentIterator!!.hasNext()) {
+                                currentIterator!!.next()
+                            } else null
+                        }
+                        is IndexLevel.SetLevel -> {
+                            val tailSet = index.set.tailSet(key)
+                            currentIterator = tailSet.iterator()
+                            currentKey = if (currentIterator!!.hasNext()) {
+                                currentIterator!!.next()
+                            } else null
+                        }
+                    }
+                }
+
+                override fun next(): Any {
+                    currentKey = if (currentIterator!!.hasNext()) {
+                        currentIterator!!.next()
+                    } else null
+                    return currentKey ?: Unit
+                }
+
+                override fun key(): Any {
+                    return currentKey ?: throw IllegalStateException("At end")
+                }
+
+                override fun atEnd(): Boolean = currentKey == null
+
+                override fun openLevel(prefix: List<Any>) {
+                    if (currentKey == null) return
+
+                    when (val index = currentIndex) {
+                        is IndexLevel.MapLevel -> {
+                            // Save current state
+                            indexStack.push(Triple(index, currentIterator!!, currentKey!!))
+
+                            // Descend to next level
+                            val nextLevel = index.map[currentKey]
+                            if (nextLevel != null) {
+                                currentIndex = nextLevel
+                                when (nextLevel) {
+                                    is IndexLevel.MapLevel -> {
+                                        currentIterator = nextLevel.map.keys.iterator()
+                                        currentKey = if (currentIterator!!.hasNext()) {
+                                            currentIterator!!.next()
+                                        } else null
+                                    }
+                                    is IndexLevel.SetLevel -> {
+                                        currentIterator = nextLevel.set.iterator()
+                                        currentKey = if (currentIterator!!.hasNext()) {
+                                            currentIterator!!.next()
+                                        } else null
+                                    }
+                                }
+                            } else {
+                                currentKey = null
+                            }
+                        }
+                        is IndexLevel.SetLevel -> {
+                            // Cannot descend from a set (leaf level)
+                            throw IllegalStateException("Cannot openLevel on a SetLevel")
+                        }
+                    }
+                }
+
+                override fun closeLevel() {
+                    if (indexStack.isEmpty()) return
+
+                    val frame = indexStack.pop()
+                    currentIndex = frame.first
+                    currentIterator = frame.second
+                    currentKey = frame.third
+                }
+
+                override fun reinit() {
+                    indexStack.clear()
+                    currentIndex = rootIndex
+                    when (rootIndex) {
+                        is IndexLevel.MapLevel -> {
+                            currentIterator = rootIndex.map.keys.iterator()
+                            currentKey = if (currentIterator!!.hasNext()) {
+                                currentIterator!!.next()
+                            } else null
+                        }
+                        is IndexLevel.SetLevel -> {
+                            currentIterator = rootIndex.set.iterator()
+                            currentKey = if (currentIterator!!.hasNext()) {
+                                currentIterator!!.next()
+                            } else null
+                        }
+                    }
+                }
+
+                override fun level(): Int = indexStack.size
+
+                override fun maxLevel(): Int = participatingLevels.size
 
                 override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
             }
