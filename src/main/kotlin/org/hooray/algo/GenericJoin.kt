@@ -34,23 +34,6 @@ interface PrefixExtender : LevelParticipation {
             }
         }
 
-        fun createTupleExtender(tuple: ResultTuple): PrefixExtender {
-            return object : PrefixExtender {
-                private fun isPrefixMatching(prefix: Prefix): Boolean =
-                    prefix.size <= tuple.size && tuple.take(prefix.size) == prefix
-
-                override fun count(prefix: Prefix): Int = if (isPrefixMatching(prefix)) 1 else 0
-
-                override fun propose(prefix: Prefix): List<Extension> =
-                    if (isPrefixMatching(prefix)) listOf(tuple[prefix.size]) else emptyList()
-
-                override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> =
-                    if (isPrefixMatching(prefix) && extensions.contains(tuple[prefix.size])) listOf(tuple[prefix.size]) else emptyList()
-
-                override fun participatesInLevel(level: Int) = level < tuple.size
-            }
-        }
-
         @JvmStatic
         fun createFromPrefixExtender(participatingLevels: List<Int>, partialPrefix: Prefix): PrefixExtender {
             val levelSet = participatingLevels.toSet()
