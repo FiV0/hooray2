@@ -118,6 +118,79 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
             }
         }
 
+        @JvmStatic
+        fun createFromPrefixLeapfrogIndex(participatingLevels: List<Int>, partialPrefix: Prefix): LeapfrogIndex {
+            require(participatingLevels.size == partialPrefix.size) {
+                "participatingLevels and partialPrefix must have same size"
+            }
+            val levelSet = participatingLevels.toSet()
+
+            return object : LeapfrogIndex {
+                private var currentLevelIndex = 0  // index into participatingLevels/partialPrefix
+                private var pastValue = false
+
+                // Check if prefix matches our partial prefix at participating levels
+                private fun checkPrefixMatch(prefix: Prefix): Boolean {
+                    for (i in 0..currentLevelIndex) {
+                        if (i >= participatingLevels.size) break
+                        val level = participatingLevels[i]
+                        if (level >= prefix.size || partialPrefix[i] != prefix[level]) {
+                            return false
+                        }
+                    }
+                    return true
+                }
+
+                override fun seek(key: Any) {
+                    if (currentLevelIndex >= partialPrefix.size) {
+                        pastValue = true
+                        return
+                    }
+                    val value = partialPrefix[currentLevelIndex]
+                    pastValue = UniversalComparator.compare(key, value) > 0
+                }
+
+                override fun next(): Any {
+                    pastValue = true
+                    return Unit
+                }
+
+                override fun key(): Any {
+                    if (pastValue || currentLevelIndex >= partialPrefix.size) {
+                        throw IllegalStateException("At end")
+                    }
+                    return partialPrefix[currentLevelIndex]
+                }
+
+                override fun atEnd(): Boolean = pastValue || currentLevelIndex >= partialPrefix.size
+
+                override fun openLevel(prefix: List<Any>) {
+                    if (!checkPrefixMatch(prefix)) {
+                        pastValue = true
+                        return
+                    }
+                    currentLevelIndex++
+                    pastValue = false
+                }
+
+                override fun closeLevel() {
+                    currentLevelIndex--
+                    pastValue = false
+                }
+
+                override fun reinit() {
+                    currentLevelIndex = 0
+                    pastValue = false
+                }
+
+                override fun level(): Int = currentLevelIndex
+
+                override fun maxLevel(): Int = partialPrefix.size
+
+                override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
+            }
+        }
+
     }
 }
 

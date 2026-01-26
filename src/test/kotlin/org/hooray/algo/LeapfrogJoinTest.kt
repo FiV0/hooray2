@@ -322,4 +322,173 @@ class LeapfrogJoinTest {
         // All results are excluded
         assertEquals(0, result.size)
     }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex participates in correct levels`() {
+        val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 2, 4),
+            partialPrefix = persistentListOf("a", "b", "c")
+        )
+
+        assertEquals(true, index.participatesInLevel(0))
+        assertEquals(false, index.participatesInLevel(1))
+        assertEquals(true, index.participatesInLevel(2))
+        assertEquals(false, index.participatesInLevel(3))
+        assertEquals(true, index.participatesInLevel(4))
+        assertEquals(false, index.participatesInLevel(5))
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex basic iteration`() {
+        val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 1, 2),
+            partialPrefix = persistentListOf(1, 2, 3)
+        )
+
+        assertEquals(0, index.level())
+        assertEquals(3, index.maxLevel())
+        assertEquals(false, index.atEnd())
+        assertEquals(1, index.key())
+
+        index.next()
+        assertEquals(true, index.atEnd())
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex seek behavior`() {
+        val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0),
+            partialPrefix = persistentListOf(5)
+        )
+
+        // Seek to value less than prefix value - still at the value
+        index.seek(3)
+        assertEquals(false, index.atEnd())
+        assertEquals(5, index.key())
+
+        // Seek to exact value
+        index.seek(5)
+        assertEquals(false, index.atEnd())
+
+        // Seek past the value - at end
+        index.seek(6)
+        assertEquals(true, index.atEnd())
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex multi-level navigation with matching prefix`() {
+        val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 1, 2),
+            partialPrefix = persistentListOf("a", "b", "c")
+        )
+
+        assertEquals(0, index.level())
+        assertEquals("a", index.key())
+
+        // Open level 1 with matching prefix
+        index.openLevel(listOf("a"))
+        assertEquals(1, index.level())
+        assertEquals("b", index.key())
+
+        // Open level 2 with matching prefix
+        index.openLevel(listOf("a", "b"))
+        assertEquals(2, index.level())
+        assertEquals("c", index.key())
+
+        // Close back down
+        index.closeLevel()
+        assertEquals(1, index.level())
+        assertEquals("b", index.key())
+
+        index.closeLevel()
+        assertEquals(0, index.level())
+        assertEquals("a", index.key())
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex with non-matching prefix`() {
+        val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 1),
+            partialPrefix = persistentListOf("x", "y")
+        )
+
+        assertEquals("x", index.key())
+
+        // Open with non-matching prefix
+        index.openLevel(listOf("z"))  // Doesn't match "x"
+        assertEquals(true, index.atEnd())
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex with non-consecutive participating levels`() {
+        // Create indexes for a 3-level join
+        val level0Index = LeapfrogIndex.createSingleLevel(listOf(1, 2), participatingLevel = 0)
+        val level1Index = LeapfrogIndex.createSingleLevel(listOf(10, 20), participatingLevel = 1)
+        val level2Index = LeapfrogIndex.createSingleLevel(listOf(100, 200), participatingLevel = 2)
+
+        // Constraint that participates only at levels 0 and 2 (skips level 1)
+        val constraintIndex = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 2),
+            partialPrefix = persistentListOf<Any>(1, 200)
+        )
+
+        // Verify participation
+        assertEquals(true, constraintIndex.participatesInLevel(0))
+        assertEquals(false, constraintIndex.participatesInLevel(1))
+        assertEquals(true, constraintIndex.participatesInLevel(2))
+
+        val join = LeapfrogJoin(listOf(level0Index, level1Index, level2Index, constraintIndex), 3)
+        val result = join.join()
+
+        // Only (1, *, 200) tuples
+        val expected = listOf(
+            listOf(1, 10, 200),
+            listOf(1, 20, 200)
+        )
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex in LeapfrogJoin`() {
+        // Create a regular index for level 0
+        val level0Index = LeapfrogIndex.createSingleLevel(listOf(1, 2, 3), participatingLevel = 0)
+
+        // Create a regular index for level 1
+        val level1Index = LeapfrogIndex.createSingleLevel(listOf(10, 20), participatingLevel = 1)
+
+        // Create a regular index for level 2
+        val level2Index = LeapfrogIndex.createSingleLevel(listOf(100, 200), participatingLevel = 2)
+
+        // Create a constraint: level 0 must be 2, level 2 must be 100
+        val constraintIndex = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 2),
+            partialPrefix = persistentListOf<Any>(2, 100)
+        )
+
+        val join = LeapfrogJoin(listOf(level0Index, level1Index, level2Index, constraintIndex), 3)
+        val result = join.join()
+
+        // Only tuples where level 0 = 2 and level 2 = 100
+        val expected = listOf(
+            listOf(2, 10, 100),
+            listOf(2, 20, 100)
+        )
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun `test createFromPrefixLeapfrogIndex reinit`() {
+        val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
+            participatingLevels = listOf(0, 1),
+            partialPrefix = persistentListOf("a", "b")
+        )
+
+        index.openLevel(listOf("a"))
+        assertEquals(1, index.level())
+
+        index.reinit()
+        assertEquals(0, index.level())
+        assertEquals("a", index.key())
+        assertEquals(false, index.atEnd())
+    }
 }
