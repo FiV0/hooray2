@@ -294,8 +294,7 @@
                    (GenericPredicatePrefixExtender. (sort (mapv var->idx variable-args))
                                                     (fn+args->function (resolve-fn predicate) args var->idx)))
 
-      :fn (let [_ (prn pattern)
-                [{:keys [fun args]} ret-var] pattern
+      :fn (let [[{:keys [fun args]} ret-var] pattern
                 variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
                                    (map second))]
             (GenericFnPrefixExtender. (sort (mapv var->idx variable-args))
