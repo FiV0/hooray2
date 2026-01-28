@@ -305,19 +305,20 @@
 (defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
   (when (not= (count in) (count args))
     (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
-  (let [create-single-iterator (case algo
-                                 :leapfrog (fn [var args] (LeapfrogIndex/createSingleLevel args (var->idx var)))
-                                 :generic (fn [var args] (PrefixExtender/createSingleLevel args (var->idx var))))
-        create-from-prefix-iterator (case algo
-                                      :leapfrog (throw (err/unsupported-ex "Not yet supported!"))
-                                      :generic (fn [vars args]
-                                                 ;; createFromPrefixExtender wants List<int> for vars
-                                                 (PrefixExtender/createFromPrefixExtender (mapv (comp int var->idx) vars) args)))
-        create-from-prefixes-iterator (case algo
-                                        :leapfrog (throw (err/unsupported-ex "Not yet supported!"))
-                                        :generic (fn [vars args]
-                                                   ;; createFromPrefixesExtender wants List<int> for vars
-                                                   (PrefixExtender/createFromPrefixesExtender (mapv (comp int var->idx) vars) args)))]
+  (let [create-single-iterator (fn [var args]
+                                 (case algo
+                                   :leapfrog (LeapfrogIndex/createSingleLevel args (var->idx var))
+                                   :generic (PrefixExtender/createSingleLevel args (var->idx var))))
+        create-from-prefix-iterator (fn [vars args]
+                                      (case algo
+                                        :leapfrog (LeapfrogIndex/createFromPrefixLeapfrogIndex (mapv (comp int var->idx) vars) args)
+                                        ;; createFromPrefixExtender wants List<int> for vars
+                                        :generic (PrefixExtender/createFromPrefixExtender (mapv (comp int var->idx) vars) args)))
+        create-from-prefixes-iterator (fn [vars args]
+                                        (case algo
+                                          :leapfrog (LeapfrogIndex/createFromPrefixesLeapfrogIndex (mapv (comp int var->idx) vars) args)k
+                                          ;; createFromPrefixesExtender wants List<int> for vars
+                                          :generic (PrefixExtender/createFromPrefixesExtender (mapv (comp int var->idx) vars) args)))]
     (letfn [(in->iterator [[[type var] arg]]
               (case type
                 :scale-binding (create-single-iterator var [arg])
