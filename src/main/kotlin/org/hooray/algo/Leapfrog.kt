@@ -29,10 +29,6 @@ interface FilterLeapfrogIndex : LevelParticipation {
     fun accept(tuple: ResultTuple) : Boolean
 }
 
-interface FnLeapfrogIndex : LeapfrogIndex, LayeredIndex, LevelParticipation {
-    fun receive(tuple: Prefix)
-}
-
 private sealed interface IndexLevel {
     data class MapLevel(val map: TreeMap<Any, IndexLevel>) : IndexLevel
     data class SetLevel(val set: TreeSet<Any>) : IndexLevel
