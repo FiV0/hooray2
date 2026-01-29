@@ -80,10 +80,10 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
                 when(val newIndex = currentIndex.value()) {
                     is AVLMap -> iteratorStack.push(AVLLeapfrogIteratorMap(newIndex))
                     is AVLSet -> iteratorStack.push(AVLLeapfrogIteratorSet(newIndex))
-                    else -> throw IllegalStateException("Unsupported value type in BTreeLeapFrogIteratorMap: ${newIndex.javaClass}")
+                    else -> throw IllegalStateException("Unsupported value type in AVLLeapfrogIteratorMap: ${newIndex.javaClass}")
                 }
             }
-            else -> throw IllegalStateException("Cannot open level on BTreeLeapfrogIteratorSet")
+            else -> throw IllegalStateException("Cannot open level on AVLLeapfrogIteratorSet")
         }
     }
 

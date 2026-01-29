@@ -32,7 +32,7 @@ class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) 
                         null -> null
                         else -> throw IllegalArgumentException("Unsupported value type in AVLMap for key: $key")
                     }
-                else -> throw IllegalArgumentException("Cannot index into a BTreeSet with a key")
+                else -> throw IllegalArgumentException("Cannot index into an AVLSet with a key")
             }
         }
         return currentIndex
