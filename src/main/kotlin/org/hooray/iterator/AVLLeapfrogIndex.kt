@@ -24,20 +24,26 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
     }
 
     internal class AVLLeapfrogIteratorSet(avlSet: AVLSet): LeapfrogIterator {
-        var seq = avlSet.seq() as IAVLSeq
+        var seq: IAVLSeq? = avlSet.seq() as IAVLSeq?
 
         override fun seek(key: Any) {
-            seq = seq.seek(key)
+            seq = seq?.seek(key)
         }
 
         override fun next(): Any {
-            seq = seq.next() as IAVLSeq
-            return key()
+            seq = seq?.next() as IAVLSeq?
+            return if (atEnd()) Unit else seq!!.first()
         }
 
-        override fun key(): Any = seq.first()
+        override fun key(): Any {
+            return seq?.first() ?: throw IllegalStateException("At end")
+        }
 
-        override fun atEnd(): Boolean = seq.isEmpty()
+        override fun atEnd(): Boolean {
+            // Cannot use isEmpty() as it throws NPE when seek goes past the end
+            // This is a bug in clojure.data.avl seek which needs to get addressed
+            return seq == null || seq!!.first() == null
+        }
     }
 
     internal class AVLLeapFrogIteratorMap(avlMap: AVLMap): LeapfrogIterator {
@@ -48,14 +54,14 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
 
         override fun next(): Any {
             seq = seq?.next() as IAVLSeq?
-            return key()
+            return if (atEnd()) Unit else (seq!!.first() as Map.Entry<*, *>).key as Any
         }
 
-        override fun key(): Any = (seq?.first() as MapEntry).key()
+        override fun key(): Any = (seq?.first() as? Map.Entry<*, *>)?.key ?: throw IllegalStateException("At end")
 
-        fun value(): Any = (seq?.first() as MapEntry).`val`()
+        fun value(): Any = (seq?.first() as? Map.Entry<*, *>)?.value ?: throw IllegalStateException("At end")
 
-        override fun atEnd(): Boolean = seq == null
+        override fun atEnd(): Boolean = seq == null || seq!!.first() == null
     }
 
     override fun seek(key: Any) = iteratorStack.peek().seek(key)
