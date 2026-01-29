@@ -1,5 +1,6 @@
 package org.hooray.algo
 
+import clojure.lang.PersistentVector
 import kotlinx.collections.immutable.toPersistentList
 import org.hooray.UniversalComparator
 import org.hooray.iterator.LevelParticipation
@@ -448,7 +449,9 @@ class LeapfrogJoin @JvmOverloads constructor(
             assert(level == candidateTuple.size) { "Level should always match candidate size. Level $level, candidate size ${candidateTuple.size}" }
             if (currentJoin.search(candidateTuple)) {
                 if (level == levels - 1) {
-                    val resultTuple = candidateTuple.toPersistentList()
+                    // TODO similar to generic join, move this to kotlinx immutable list at some point
+                    @Suppress("UNCHECKED_CAST")
+                    val resultTuple : ResultTuple = PersistentVector.create(candidateTuple) as ResultTuple
                     if (filterIndexes.all { it.accept(resultTuple) }) {
                         results.add(resultTuple)
                     }
