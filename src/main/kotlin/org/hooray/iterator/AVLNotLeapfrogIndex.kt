@@ -6,16 +6,22 @@ import org.hooray.algo.FilterLeapfrogIndex
 import org.hooray.algo.ResultTuple
 
 class AVLNotLeapfrogIndex(
-    private val negatives: List<LeapfrogIndex>,
+    private val negatives: List<Any>,  // Can be LeapfrogIndex or FilterLeapfrogIndex
     private val participationLevel: Int
 ) : FilterLeapfrogIndex {
 
     override fun accept(tuple: ResultTuple): Boolean {
         if (negatives.isEmpty()) return true
 
-        negatives.forEach { it.reinit() }
+        // Separate LeapfrogIndex from FilterLeapfrogIndex
+        val indexes = negatives.filterIsInstance<LeapfrogIndex>()
+        val filters = negatives.filterIsInstance<FilterLeapfrogIndex>()
+
+        // Reinit all indexes
+        indexes.forEach { it.reinit() }
+
         val tupleIndex = LeapfrogIndex.createFromTuple(tuple)
-        val join = LeapfrogJoin(negatives + tupleIndex, tuple.size)
+        val join = LeapfrogJoin(indexes + tupleIndex, tuple.size, filters)
         return join.join().isEmpty()
     }
 
