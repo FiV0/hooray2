@@ -41,7 +41,7 @@ dependencies {
 
     // data structures
     implementation("persistent-sorted-set", "persistent-sorted-set", "0.3.0")
-    implementation("com.github.FiV0", "data.avl", "v0.0.26")
+    implementation("com.github.FiV0", "data.avl", "v0.0.27")
     implementation("com.aphyr", "bifurcan-clj","0.1.3")
 
     // dev
