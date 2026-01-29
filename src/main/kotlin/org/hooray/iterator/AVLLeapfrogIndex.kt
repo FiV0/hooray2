@@ -3,7 +3,6 @@ package org.hooray.iterator
 import clojure.data.avl.AVLMap
 import clojure.data.avl.AVLSet
 import clojure.data.avl.IAVLSeq
-import clojure.lang.MapEntry
 import clojure.lang.Symbol
 import org.hooray.algo.LeapfrogIndex
 import org.hooray.algo.LeapfrogIterator
@@ -19,7 +18,7 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
         iteratorStack = Stack<LeapfrogIterator>()
         when(index) {
             is AVLIndex.AVLSetIndex -> iteratorStack.push(AVLLeapfrogIteratorSet(index.set))
-            is AVLIndex.AVLMapIndex -> iteratorStack.push(AVLLeapFrogIteratorMap(index.map))
+            is AVLIndex.AVLMapIndex -> iteratorStack.push(AVLLeapfrogIteratorMap(index.map))
         }
     }
 
@@ -46,7 +45,7 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
         }
     }
 
-    internal class AVLLeapFrogIteratorMap(avlMap: AVLMap): LeapfrogIterator {
+    internal class AVLLeapfrogIteratorMap(avlMap: AVLMap): LeapfrogIterator {
         var seq = avlMap.seq() as IAVLSeq?
         override fun seek(key: Any) {
             seq = seq?.seek(key)
@@ -77,9 +76,9 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
         level++
         check(level < maxLevel) { "Cannot open level beyond max level $maxLevel" }
         when (val currentIndex = iteratorStack.peek() ) {
-            is AVLLeapFrogIteratorMap -> {
+            is AVLLeapfrogIteratorMap -> {
                 when(val newIndex = currentIndex.value()) {
-                    is AVLMap -> iteratorStack.push(AVLLeapFrogIteratorMap(newIndex))
+                    is AVLMap -> iteratorStack.push(AVLLeapfrogIteratorMap(newIndex))
                     is AVLSet -> iteratorStack.push(AVLLeapfrogIteratorSet(newIndex))
                     else -> throw IllegalStateException("Unsupported value type in BTreeLeapFrogIteratorMap: ${newIndex.javaClass}")
                 }
@@ -99,7 +98,7 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
         iteratorStack = Stack<LeapfrogIterator>()
         when(index) {
             is AVLIndex.AVLSetIndex -> iteratorStack.push(AVLLeapfrogIteratorSet(index.set))
-            is AVLIndex.AVLMapIndex -> iteratorStack.push(AVLLeapFrogIteratorMap(index.map))
+            is AVLIndex.AVLMapIndex -> iteratorStack.push(AVLLeapfrogIteratorMap(index.map))
         }
     }
 
