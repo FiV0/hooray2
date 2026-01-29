@@ -38,7 +38,7 @@ private sealed interface IndexLevel {
 interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
     companion object {
         @JvmStatic
-        fun createSingleLevel(values: List<Int>, participatingLevel: Int = 0): LeapfrogIndex {
+        fun createSingleLevel(values: List<Any>, participatingLevel: Int = 0): LeapfrogIndex {
             val sortedValues = values.sortedWith(UniversalComparator)
             return object : LeapfrogIndex {
                 private var currentIndex = 0
