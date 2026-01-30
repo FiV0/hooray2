@@ -4,10 +4,9 @@
             [me.tonsky.persistent-sorted-set :as btree-set]
             [hooray.util.persistent-map :as btree-map])
   (:import (org.hooray.iterator
-            AVLLeapfrogIndex AVLPrefixExtender BTreeLeapfrogIndex BTreePrefixExtender GenericPrefixExtender
+            AVLLeapfrogIndex AVLPrefixExtender GenericPrefixExtender
             GenericOrPrefixExtender AVLOrPrefixExtender
             SealedIndex SealedIndex$MapIndex SealedIndex$SetIndex
-            BTreeIndex
             AVLIndex AVLIndex$AVLMapIndex AVLIndex$AVLSetIndex)))
 
 (deftest generic-prefix-extender-test
