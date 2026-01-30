@@ -42,6 +42,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
             val sortedValues = values.sortedWith(UniversalComparator)
             return object : LeapfrogIndex {
                 private var currentIndex = 0
+                private var opened = false
 
                 override fun seek(key: Any) {
                     while (currentIndex < sortedValues.size && UniversalComparator.compare(sortedValues[currentIndex], key) < 0) {
@@ -63,16 +64,20 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 override fun atEnd(): Boolean = currentIndex >= sortedValues.size
 
                 override fun openLevel(prefix: List<Any>) {
+                    opened = true
                     currentIndex = 0
                 }
 
-                override fun closeLevel() {}
+                override fun closeLevel() {
+                    opened = false
+                }
 
                 override fun reinit() {
                     currentIndex = 0
+                    opened = false
                 }
 
-                override fun level(): Int = 0
+                override fun level(): Int = if (opened) 0 else -1
 
                 override fun maxLevel(): Int = 1
 
@@ -83,7 +88,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
         @JvmStatic
         fun createFromTuple(tuple: ResultTuple): LeapfrogIndex {
             return object : LeapfrogIndex {
-                private var currentLevel = 0
+                private var currentLevel = -1
                 private var pastValue = false
 
                 override fun seek(key: Any) {
@@ -114,7 +119,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 }
 
                 override fun reinit() {
-                    currentLevel = 0
+                    currentLevel = -1
                     pastValue = false
                 }
 
@@ -134,12 +139,12 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
             val levelSet = participatingLevels.toSet()
 
             return object : LeapfrogIndex {
-                private var currentLevelIndex = 0  // index into participatingLevels/partialPrefix
+                private var currentLevelIndex = -1  // index into participatingLevels/partialPrefix
                 private var pastValue = false
 
                 // Check if prefix matches our partial prefix at participating levels
                 private fun checkPrefixMatch(prefix: Prefix): Boolean {
-                    for (i in 0..currentLevelIndex) {
+                    for (i in 0 until currentLevelIndex) {
                         if (i >= participatingLevels.size) break
                         val level = participatingLevels[i]
                         if (level >= prefix.size || partialPrefix[i] != prefix[level]) {
@@ -173,11 +178,11 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 override fun atEnd(): Boolean = pastValue || currentLevelIndex >= partialPrefix.size
 
                 override fun openLevel(prefix: List<Any>) {
+                    currentLevelIndex++
                     if (!checkPrefixMatch(prefix)) {
                         pastValue = true
                         return
                     }
-                    currentLevelIndex++
                     pastValue = false
                 }
 
@@ -187,7 +192,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 }
 
                 override fun reinit() {
-                    currentLevelIndex = 0
+                    currentLevelIndex = -1
                     pastValue = false
                 }
 
@@ -292,6 +297,12 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 override fun openLevel(prefix: List<Any>) {
                     if (currentKey == null) return
 
+                    // First openLevel (-1 -> 0): just push a marker, don't descend
+                    if (indexStack.isEmpty()) {
+                        indexStack.push(Triple(currentIndex, currentIterator!!, currentKey!!))
+                        return
+                    }
+
                     when (val index = currentIndex) {
                         is IndexLevel.MapLevel -> {
                             // Save current state
@@ -354,7 +365,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                     }
                 }
 
-                override fun level(): Int = indexStack.size
+                override fun level(): Int = indexStack.size - 1
 
                 override fun maxLevel(): Int = participatingLevels.size
 
@@ -441,6 +452,7 @@ class LeapfrogJoin @JvmOverloads constructor(
         val results = mutableListOf<ResultTuple>()
 
         val candidateTuple = mutableListOf<Any>()
+        participants[0].forEach { it.openLevel(emptyList()) }
         singleJoinStack.push(LeapfrogSingleJoin(participants[0]))
 
         while (singleJoinStack.isNotEmpty()) {
@@ -462,7 +474,7 @@ class LeapfrogJoin @JvmOverloads constructor(
                     singleJoinStack.push(LeapfrogSingleJoin(participants[level + 1]))
                 }
             } else {
-                participants[level].filter { it.level() > 0 }.map { it.closeLevel() }
+                participants[level].forEach { it.closeLevel() }
                 singleJoinStack.pop()
                 if (singleJoinStack.isNotEmpty()) {
                     singleJoinStack.peek().next()

@@ -44,7 +44,7 @@ class AVLFnLeapfrogIndex(
 
     override fun atEnd(): Boolean = pastValue
 
-    override fun level(): Int = if (opened) 1 else 0
+    override fun level(): Int = if (opened) 0 else -1
 
     override fun maxLevel(): Int = outputLevel + 1
 

@@ -10,11 +10,11 @@ import java.util.Stack
 
 @Suppress("UNCHECKED_CAST")
 class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Symbol>, val variables: Set<Symbol>) : LeapfrogIndex {
-    var level = 0
+    var level = -1
     var iteratorStack: Stack<LeapfrogIterator>
 
     init {
-        level = 0
+        level = -1
         iteratorStack = Stack<LeapfrogIterator>()
         when(index) {
             is AVLIndex.AVLSetIndex -> iteratorStack.push(AVLLeapfrogIteratorSet(index.set))
@@ -75,6 +75,7 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
         val maxLevel = maxLevel()
         level++
         check(level < maxLevel) { "Cannot open level beyond max level $maxLevel" }
+        if (level == 0) return  // First open just increments, no stack push
         when (val currentIndex = iteratorStack.peek() ) {
             is AVLLeapfrogIteratorMap -> {
                 when(val newIndex = currentIndex.value()) {
@@ -88,13 +89,17 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
     }
 
     override fun closeLevel() {
-        check(level > 0) { "Cannot close level below 0" }
+        check(level > -1) { "Cannot close level below -1" }
+        if (level == 0) {
+            level--
+            return
+        }
         iteratorStack.pop()
         level--
     }
 
     override fun reinit() {
-        level = 0
+        level = -1
         iteratorStack = Stack<LeapfrogIterator>()
         when(index) {
             is AVLIndex.AVLSetIndex -> iteratorStack.push(AVLLeapfrogIteratorSet(index.set))

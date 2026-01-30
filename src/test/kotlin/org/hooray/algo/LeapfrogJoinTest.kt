@@ -42,7 +42,7 @@ class LeapfrogJoinTest {
         class MultiLevelIndex(
             private val levelData: List<List<Int>>  // levelData[i] contains values for level i
         ) : LeapfrogIndex {
-            private var currentLevel = 0
+            private var currentLevel = -1
             private val indexPerLevel = MutableList(levelData.size) { 0 }
 
             override fun seek(key: Any) {
@@ -77,7 +77,9 @@ class LeapfrogJoinTest {
 
             override fun openLevel(prefix: List<Any>) {
                 currentLevel++
-                indexPerLevel[currentLevel] = 0
+                if (currentLevel >= 0 && currentLevel < indexPerLevel.size) {
+                    indexPerLevel[currentLevel] = 0
+                }
             }
 
             override fun closeLevel() {
@@ -85,7 +87,7 @@ class LeapfrogJoinTest {
             }
 
             override fun reinit() {
-                currentLevel = 0
+                currentLevel = -1
                 for (i in indexPerLevel.indices) {
                     indexPerLevel[i] = 0
                 }
@@ -138,8 +140,11 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2, 3)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        assertEquals(0, index.level())
+        assertEquals(-1, index.level())
         assertEquals(3, index.maxLevel())
+
+        index.openLevel(emptyList())
+        assertEquals(0, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(1, index.key())
 
@@ -151,6 +156,8 @@ class LeapfrogJoinTest {
     fun `test createFromTuple seek behavior`() {
         val tuple = persistentListOf<Any>(5, 10, 15)
         val index = LeapfrogIndex.createFromTuple(tuple)
+
+        index.openLevel(emptyList())
 
         // Seek to value less than tuple value - should still be at the value
         index.seek(3)
@@ -172,7 +179,10 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2, 3)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        // Level 0
+        assertEquals(-1, index.level())
+
+        // Open to level 0
+        index.openLevel(emptyList())
         assertEquals(0, index.level())
         assertEquals(1, index.key())
 
@@ -242,6 +252,7 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
+        index.openLevel(emptyList())  // Open to level 0
         // Advance past value at level 0
         index.next()
         assertEquals(true, index.atEnd())
@@ -257,13 +268,15 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        index.openLevel(emptyList())
+        index.openLevel(emptyList())  // Level -1 -> 0
+        index.openLevel(emptyList())  // Level 0 -> 1
         // Advance past value at level 1
         index.next()
         assertEquals(true, index.atEnd())
 
-        // Close level - should reset level 0
+        // Close level back to level 0
         index.closeLevel()
+        assertEquals(0, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(1, index.key())
     }
@@ -345,8 +358,11 @@ class LeapfrogJoinTest {
             partialPrefix = persistentListOf(1, 2, 3)
         )
 
-        assertEquals(0, index.level())
+        assertEquals(-1, index.level())
         assertEquals(3, index.maxLevel())
+
+        index.openLevel(emptyList())
+        assertEquals(0, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(1, index.key())
 
@@ -360,6 +376,8 @@ class LeapfrogJoinTest {
             participatingLevels = listOf(0),
             partialPrefix = persistentListOf(5)
         )
+
+        index.openLevel(emptyList())
 
         // Seek to value less than prefix value - still at the value
         index.seek(3)
@@ -382,6 +400,10 @@ class LeapfrogJoinTest {
             partialPrefix = persistentListOf("a", "b", "c")
         )
 
+        assertEquals(-1, index.level())
+
+        // Open to level 0
+        index.openLevel(emptyList())
         assertEquals(0, index.level())
         assertEquals("a", index.key())
 
@@ -412,6 +434,7 @@ class LeapfrogJoinTest {
             partialPrefix = persistentListOf("x", "y")
         )
 
+        index.openLevel(emptyList())
         assertEquals("x", index.key())
 
         // Open with non-matching prefix
@@ -483,10 +506,14 @@ class LeapfrogJoinTest {
             partialPrefix = persistentListOf("a", "b")
         )
 
+        index.openLevel(emptyList())
         index.openLevel(listOf("a"))
         assertEquals(1, index.level())
 
         index.reinit()
+        assertEquals(-1, index.level())
+
+        index.openLevel(emptyList())
         assertEquals(0, index.level())
         assertEquals("a", index.key())
         assertEquals(false, index.atEnd())
@@ -538,7 +565,11 @@ class LeapfrogJoinTest {
             )
         )
 
-        // Level 0: keys [1, 2]
+        assertEquals(-1, index.level())
+
+        // Open to level 0
+        index.openLevel(emptyList())
+        assertEquals(0, index.level())
         assertEquals(1, index.key())
 
         // Open level 1 with prefix [1]
@@ -611,11 +642,15 @@ class LeapfrogJoinTest {
             )
         )
 
+        index.openLevel(emptyList())
         index.next()
         index.next()
         assertEquals(true, index.atEnd())
 
         index.reinit()
+        assertEquals(-1, index.level())
+
+        index.openLevel(emptyList())
         assertEquals(0, index.level())
         assertEquals(1, index.key())
         assertEquals(false, index.atEnd())

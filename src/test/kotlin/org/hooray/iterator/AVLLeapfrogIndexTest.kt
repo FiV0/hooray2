@@ -393,7 +393,11 @@ class AVLLeapfrogIndexTest {
 
         val leapfrogIndex = AVLLeapfrogIndex(index, varOrder, vars)
 
-        // At level 0, should see keys 1, 2
+        // Initially at level -1
+        assertEquals(-1, leapfrogIndex.level())
+
+        // Open to level 0, should see keys 1, 2
+        leapfrogIndex.openLevel(emptyList())
         assertEquals(0, leapfrogIndex.level())
         assertEquals(1, leapfrogIndex.key())
 

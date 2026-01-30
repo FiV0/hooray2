@@ -72,7 +72,7 @@ class AVLFnLeapfrogIndexTest {
         assertEquals(10, fnIndex.key())
 
         fnIndex.closeLevel()
-        assertEquals(0, fnIndex.level())
+        assertEquals(-1, fnIndex.level())
 
         // Can open again with different value
         fnIndex.openLevel(listOf(7))
@@ -89,7 +89,7 @@ class AVLFnLeapfrogIndexTest {
         assertEquals(true, fnIndex.atEnd())
 
         fnIndex.reinit()
-        assertEquals(0, fnIndex.level())
+        assertEquals(-1, fnIndex.level())
         assertEquals(false, fnIndex.atEnd())
     }
 
