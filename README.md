@@ -59,6 +59,11 @@ Some others that might be interesting to add for comparison.
 - Something that combines standard binary joins with WCOJ (see Free Join)
 - TreeTracker Join (very recent)
 
+I have written a couple of blog posts about the GenericJoin algo in this repository:
+- [Graph-Join correspondence](https://finnvolkel.com/wcoj-graph-join-correspondence)
+- [Generic Join](https://finnvolkel.com/wcoj-generic-join)
+- [Datalog and GenericJoin](https://finnvolkel.com/wcoj-datalog-and-genericjoin)
+
 ## DBSP
 
 DBSP is a formal framework for incremental view maintenance for query languages (see https://arxiv.org/abs/2203.16684)
@@ -71,6 +76,11 @@ So a first goal is to make Generic-Join work with DBSP and do so in a WCO way fo
 I am currently using two different paths for standard queries and incremental queries.
 In Theory™ this is not necessary as you can model standard queries also as zsets (the delta is your database state),
 but this will likely have significant overhead and is making initial exploratory programming a lot harder.
+
+I have written two blog posts about combining WCOJ with DBSP:
+- [DBSP, ZSets and Datalog](https://finnvolkel.com/wcoj-dbsp-zsets-and-datalog)
+- [WCOJ meets DBSP](https://finnvolkel.com/wcoj-wcoj-meets-dbsp)
+
 
 ## Roadmap
 
