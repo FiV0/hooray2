@@ -1,13 +1,12 @@
 package org.hooray.iterator
 
-import kotlinx.collections.immutable.persistentListOf
 import org.hooray.algo.LeapfrogIndex
 import org.hooray.algo.LeapfrogJoin
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
-@Disabled("AVLFnLeapfrogIndex needs conversion to FnLeapfrogIndex — openLevel no longer provides prefix")
+@Disabled("Needs update for new openLevel/closeLevel join protocol")
 class AVLFnLeapfrogIndexTest {
 
     @Test
@@ -18,6 +17,7 @@ class AVLFnLeapfrogIndexTest {
         assertEquals(false, fnIndex.participatesInLevel(0))
         assertEquals(true, fnIndex.participatesInLevel(1))
 
+        fnIndex.applyFn(listOf(5))
         fnIndex.openLevel()
         assertEquals(10, fnIndex.key())
         assertEquals(false, fnIndex.atEnd())
@@ -35,6 +35,7 @@ class AVLFnLeapfrogIndexTest {
         assertEquals(false, fnIndex.participatesInLevel(1))
         assertEquals(true, fnIndex.participatesInLevel(2))
 
+        fnIndex.applyFn(listOf(3, 7))
         fnIndex.openLevel()
         assertEquals(10, fnIndex.key())
         assertEquals(false, fnIndex.atEnd())
@@ -48,6 +49,7 @@ class AVLFnLeapfrogIndexTest {
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
         val fnIndex = AVLFnLeapfrogIndex(listOf(0), outputLevel = 1, double)
 
+        fnIndex.applyFn(listOf(5))
         fnIndex.openLevel()
         assertEquals(10, fnIndex.key())
 
@@ -70,6 +72,7 @@ class AVLFnLeapfrogIndexTest {
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
         val fnIndex = AVLFnLeapfrogIndex(listOf(0), outputLevel = 1, double)
 
+        fnIndex.applyFn(listOf(5))
         fnIndex.openLevel()
         assertEquals(10, fnIndex.key())
 
@@ -77,6 +80,7 @@ class AVLFnLeapfrogIndexTest {
         assertEquals(-1, fnIndex.level())
 
         // Can open again with different value
+        fnIndex.applyFn(listOf(7))
         fnIndex.openLevel()
         assertEquals(14, fnIndex.key())
     }
@@ -86,13 +90,14 @@ class AVLFnLeapfrogIndexTest {
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
         val fnIndex = AVLFnLeapfrogIndex(listOf(0), outputLevel = 1, double)
 
+        fnIndex.applyFn(listOf(5))
         fnIndex.openLevel()
         fnIndex.next()
         assertEquals(true, fnIndex.atEnd())
 
         fnIndex.reinit()
         assertEquals(-1, fnIndex.level())
-        assertEquals(false, fnIndex.atEnd())
+        assertEquals(true, fnIndex.atEnd())
     }
 
     @Test
