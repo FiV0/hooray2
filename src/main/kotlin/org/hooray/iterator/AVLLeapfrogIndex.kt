@@ -71,7 +71,7 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
 
     override fun atEnd() = iteratorStack.peek().atEnd()
 
-    override fun openLevel(prefix: List<Any>) {
+    override fun openLevel() {
         val maxLevel = maxLevel()
         level++
         check(level < maxLevel) { "Cannot open level beyond max level $maxLevel" }

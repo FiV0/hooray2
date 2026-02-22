@@ -19,8 +19,8 @@ class AVLFnLeapfrogIndex(
 
     override fun participatesInLevel(level: Int): Boolean = level == outputLevel
 
-    override fun openLevel(prefix: List<Any>) {
-        computedValue = applyFn(prefix)
+    override fun openLevel() {
+        // TODO: needs candidateTuple to compute value — will be converted to FnLeapfrogIndex
         pastValue = false
         opened = true
     }

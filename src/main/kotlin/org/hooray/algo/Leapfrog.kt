@@ -19,7 +19,7 @@ interface LeapfrogIterator {
 }
 
 interface LayeredIndex {
-    fun openLevel(prefix: List<Any>)
+    fun openLevel()
     fun closeLevel()
     fun level() : Int
     fun maxLevel(): Int
@@ -63,7 +63,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun atEnd(): Boolean = currentIndex >= sortedValues.size
 
-                override fun openLevel(prefix: List<Any>) {
+                override fun openLevel() {
                     opened = true
                     currentIndex = 0
                 }
@@ -108,7 +108,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun atEnd(): Boolean = pastValue
 
-                override fun openLevel(prefix: List<Any>) {
+                override fun openLevel() {
                     currentLevel++
                     pastValue = false
                 }
@@ -142,18 +142,6 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
                 private var currentLevelIndex = -1  // index into participatingLevels/partialPrefix
                 private var pastValue = false
 
-                // Check if prefix matches our partial prefix at participating levels
-                private fun checkPrefixMatch(prefix: Prefix): Boolean {
-                    for (i in 0 until currentLevelIndex) {
-                        if (i >= participatingLevels.size) break
-                        val level = participatingLevels[i]
-                        if (level >= prefix.size || partialPrefix[i] != prefix[level]) {
-                            return false
-                        }
-                    }
-                    return true
-                }
-
                 override fun seek(key: Any) {
                     if (currentLevelIndex >= partialPrefix.size) {
                         pastValue = true
@@ -177,12 +165,8 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun atEnd(): Boolean = pastValue || currentLevelIndex >= partialPrefix.size
 
-                override fun openLevel(prefix: List<Any>) {
+                override fun openLevel() {
                     currentLevelIndex++
-                    if (!checkPrefixMatch(prefix)) {
-                        pastValue = true
-                        return
-                    }
                     pastValue = false
                 }
 
@@ -294,7 +278,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun atEnd(): Boolean = currentKey == null
 
-                override fun openLevel(prefix: List<Any>) {
+                override fun openLevel() {
                     if (currentKey == null) return
 
                     // First openLevel (-1 -> 0): just push a marker, don't descend
@@ -452,7 +436,7 @@ class LeapfrogJoin @JvmOverloads constructor(
         val results = mutableListOf<ResultTuple>()
 
         val candidateTuple = mutableListOf<Any>()
-        participants[0].forEach { it.openLevel(emptyList()) }
+        participants[0].forEach { it.openLevel() }
         singleJoinStack.push(LeapfrogSingleJoin(participants[0]))
 
         while (singleJoinStack.isNotEmpty()) {
@@ -470,7 +454,7 @@ class LeapfrogJoin @JvmOverloads constructor(
                     candidateTuple.removeLast()
                     currentJoin.next()
                 } else {
-                    participants[level + 1].map { it.openLevel(candidateTuple.toList()) }
+                    participants[level + 1].map { it.openLevel() }
                     singleJoinStack.push(LeapfrogSingleJoin(participants[level + 1]))
                 }
             } else {

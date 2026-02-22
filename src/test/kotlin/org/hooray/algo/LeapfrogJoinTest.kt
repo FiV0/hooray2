@@ -75,7 +75,7 @@ class LeapfrogJoinTest {
                 return currentIndex >= values.size
             }
 
-            override fun openLevel(prefix: List<Any>) {
+            override fun openLevel() {
                 currentLevel++
                 if (currentLevel >= 0 && currentLevel < indexPerLevel.size) {
                     indexPerLevel[currentLevel] = 0
@@ -143,7 +143,7 @@ class LeapfrogJoinTest {
         assertEquals(-1, index.level())
         assertEquals(3, index.maxLevel())
 
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(1, index.key())
@@ -157,7 +157,7 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(5, 10, 15)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        index.openLevel(emptyList())
+        index.openLevel()
 
         // Seek to value less than tuple value - should still be at the value
         index.seek(3)
@@ -182,18 +182,18 @@ class LeapfrogJoinTest {
         assertEquals(-1, index.level())
 
         // Open to level 0
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals(1, index.key())
 
         // Open to level 1
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(1, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(2, index.key())
 
         // Open to level 2
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(2, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(3, index.key())
@@ -252,13 +252,13 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        index.openLevel(emptyList())  // Open to level 0
+        index.openLevel()  // Open to level 0
         // Advance past value at level 0
         index.next()
         assertEquals(true, index.atEnd())
 
         // Open level - should reset
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(false, index.atEnd())
         assertEquals(2, index.key())
     }
@@ -268,8 +268,8 @@ class LeapfrogJoinTest {
         val tuple = persistentListOf<Any>(1, 2)
         val index = LeapfrogIndex.createFromTuple(tuple)
 
-        index.openLevel(emptyList())  // Level -1 -> 0
-        index.openLevel(emptyList())  // Level 0 -> 1
+        index.openLevel()  // Level -1 -> 0
+        index.openLevel()  // Level 0 -> 1
         // Advance past value at level 1
         index.next()
         assertEquals(true, index.atEnd())
@@ -361,7 +361,7 @@ class LeapfrogJoinTest {
         assertEquals(-1, index.level())
         assertEquals(3, index.maxLevel())
 
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals(false, index.atEnd())
         assertEquals(1, index.key())
@@ -377,7 +377,7 @@ class LeapfrogJoinTest {
             partialPrefix = persistentListOf(5)
         )
 
-        index.openLevel(emptyList())
+        index.openLevel()
 
         // Seek to value less than prefix value - still at the value
         index.seek(3)
@@ -403,17 +403,17 @@ class LeapfrogJoinTest {
         assertEquals(-1, index.level())
 
         // Open to level 0
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals("a", index.key())
 
         // Open level 1 with matching prefix
-        index.openLevel(listOf("a"))
+        index.openLevel()
         assertEquals(1, index.level())
         assertEquals("b", index.key())
 
         // Open level 2 with matching prefix
-        index.openLevel(listOf("a", "b"))
+        index.openLevel()
         assertEquals(2, index.level())
         assertEquals("c", index.key())
 
@@ -428,18 +428,19 @@ class LeapfrogJoinTest {
     }
 
     @Test
-    fun `test createFromPrefixLeapfrogIndex with non-matching prefix`() {
+    fun `test createFromPrefixLeapfrogIndex multi-level advances without prefix check`() {
         val index = LeapfrogIndex.createFromPrefixLeapfrogIndex(
             participatingLevels = listOf(0, 1),
             partialPrefix = persistentListOf("x", "y")
         )
 
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals("x", index.key())
 
-        // Open with non-matching prefix
-        index.openLevel(listOf("z"))  // Doesn't match "x"
-        assertEquals(true, index.atEnd())
+        // openLevel just advances to next level value
+        index.openLevel()
+        assertEquals(false, index.atEnd())
+        assertEquals("y", index.key())
     }
 
     @Test
@@ -506,14 +507,14 @@ class LeapfrogJoinTest {
             partialPrefix = persistentListOf("a", "b")
         )
 
-        index.openLevel(emptyList())
-        index.openLevel(listOf("a"))
+        index.openLevel()
+        index.openLevel()
         assertEquals(1, index.level())
 
         index.reinit()
         assertEquals(-1, index.level())
 
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals("a", index.key())
         assertEquals(false, index.atEnd())
@@ -568,12 +569,12 @@ class LeapfrogJoinTest {
         assertEquals(-1, index.level())
 
         // Open to level 0
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals(1, index.key())
 
         // Open level 1 with prefix [1]
-        index.openLevel(listOf(1))
+        index.openLevel()
         assertEquals(1, index.level())
 
         // At level 1 with prefix [1], should see [10, 20]
@@ -642,7 +643,7 @@ class LeapfrogJoinTest {
             )
         )
 
-        index.openLevel(emptyList())
+        index.openLevel()
         index.next()
         index.next()
         assertEquals(true, index.atEnd())
@@ -650,7 +651,7 @@ class LeapfrogJoinTest {
         index.reinit()
         assertEquals(-1, index.level())
 
-        index.openLevel(emptyList())
+        index.openLevel()
         assertEquals(0, index.level())
         assertEquals(1, index.key())
         assertEquals(false, index.atEnd())

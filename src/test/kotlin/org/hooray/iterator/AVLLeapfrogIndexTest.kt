@@ -397,12 +397,12 @@ class AVLLeapfrogIndexTest {
         assertEquals(-1, leapfrogIndex.level())
 
         // Open to level 0, should see keys 1, 2
-        leapfrogIndex.openLevel(emptyList())
+        leapfrogIndex.openLevel()
         assertEquals(0, leapfrogIndex.level())
         assertEquals(1, leapfrogIndex.key())
 
         // Open level to see nested set
-        leapfrogIndex.openLevel(listOf(1))
+        leapfrogIndex.openLevel()
         assertEquals(1, leapfrogIndex.level())
 
         // Should now iterate through nested set {a, b, c}
