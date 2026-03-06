@@ -959,6 +959,20 @@
                                 [(> half-age 20)]]}
                       (h/db fix/*node*))))))))
 
+(deftest datomic-style-addtion
+  (h/transact fix/*node* [{:db/id :alice :name "Alice"}])
+
+  (t/is (= #{["Alice"]} (h/q '{:find [name]
+                               :where [[p :name name]]}
+                             (h/db fix/*node*))))
+
+  (h/transact fix/*node* [{:db/id :alice :city "NYC"}])
+
+  (t/is (= #{["Alice" "NYC"]} (h/q '{:find [name city]
+                                     :where [[p :name name]
+                                             [p :city city]]}
+                                   (h/db fix/*node*)))))
+
 #_
 (deftest test-not-join
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
