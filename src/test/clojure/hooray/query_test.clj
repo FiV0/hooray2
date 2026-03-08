@@ -973,6 +973,15 @@
                                              [p :city city]]}
                                    (h/db fix/*node*)))))
 
+(deftest heterogenous-types
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 23}])
+
+  (t/is (= #{[:alice 23] [:alice "Alice"]}
+           (h/q '{:find [p v]
+                  :where [(or [p :name v]
+                              [p :age v])]}
+                (h/db fix/*node*)))))
+
 #_
 (deftest test-not-join
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
