@@ -1,5 +1,6 @@
 (ns datomic
   (:require [datomic.client.api :as d]
+            [datomic.]
             [hooray.graph-gen :as g]))
 
 (def client (d/client {:server-type :datomic-local
@@ -18,9 +19,9 @@
   ;;     "dilithium-crystals"]
   )
 
-(def conn (d/connect client {:db-name "mbrainz-subset"}))
+#_(def conn (d/connect client {:db-name "mbrainz-subset"}))
 
-(def db (d/db conn))
+#_(def db (d/db conn))
 
 
 (comment
@@ -47,23 +48,63 @@
   (def not-unbound-conn (d/connect client {:db-name "not-unbound"}))
 
   (def person-schema
-    [{:db/ident :name
+    [{:db/ident :person/name
       :db/valueType :db.type/string
       :db/cardinality :db.cardinality/one
       :db/doc "First name of a person"}
-     {:db/ident :last-name
+     {:db/ident :person/last-name
       :db/valueType :db.type/string
       :db/cardinality :db.cardinality/one
-      :db/doc "Last name of a person"}])
+      :db/doc "Last name of a person"}
+     {:db/ident :person/sex
+      :db/valueType :db.type/keyword
+      :db/cardinality :db.cardinality/one
+      :db/doc "The sex of the person"}])
 
   (d/transact not-unbound-conn {:tx-data person-schema})
 
-  (def tx-data
-    [{:db/id "ivan-ivanov-1" :name "Ivan" :last-name "Ivanov"}
-     {:db/id "ivan-ivanov-2" :name "Ivan" :last-name "Ivanov"}
-     {:db/id "ivan-ivanovtov-1" :name "Ivan" :last-name "Ivannotov"}])
+  (d/db-stats db)
 
-  (d/transact not-unbound-conn {:tx-data tx-data})
+  (def tx-data
+    [{:db/id "ivan-ivanov-1" :person/name "Ivan" :person/last-name "Ivanov" :person/sex :male}
+     {:db/id "ivan-ivanov-2" :person/name "Ivan" :person/last-name "Ivanov" :person/sex :male}
+     #_{:db/id "ivan-ivanovtov-1" :person/name "Ivan" :person/last-name "Ivannotov" :person/sex :female}
+     #_{:db/id "igor-1" :person/name "Igor" :person/last-name "Igorotov" :person/sex :male}])
+
+  (def tx-data2
+    [{:db/id 13194139533600 :person/name "Ivan" :person/last-name "Ivanov" :person/sex :male}
+     #_{:db/id "ivan-ivanov-2" :person/name "Ivan" :person/last-name "Ivanov" :person/sex :male}
+     #_{:db/id "ivan-ivanovtov-1" :person/name "Ivan" :person/last-name "Ivannotov" :person/sex :female}
+     #_{:db/id "igor-1" :person/name "Igor" :person/last-name "Igorotov" :person/sex :male}])
+
+  (d/en)
+
+  (def res (d/transact not-unbound-conn {:tx-data tx-data2}))
+
+  (d/q '{:find [(pull ?e [*])]
+         :where [[?e :db/ident :db/ident]]}
+       (d/db not-unbound-conn))
+
+  (d/pull (d/db not-unbound-conn) '[*] 13194139533333)
+
+  res
+
+  (->> (d/q '{:find [(count ?sex)]
+              :where [[?e :person/sex ?sex]]}
+            (d/db not-unbound-conn)))
+  ;; => [[1]]
+
+  (->> (d/q '{:find [(count ?e) (count ?sex)]
+              :where [[?e :person/sex ?sex]]}
+            (d/db not-unbound-conn)))
+  ;; => [[2 2]]
+
+  (->> (d/q '{:find [(count ?e)]
+              :where [[?e :person/name]
+                      (or [?e :person/sex :male]
+                          [?e :person/name "Ivan"])]}
+            (d/db not-unbound-conn)))
+  ;; => [[1]]
 
   (d/q '{:find [?e]
          :where [[?e :name ?name]
