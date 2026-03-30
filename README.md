@@ -91,9 +91,9 @@ I have written two blog posts about combining WCOJ with DBSP:
 	- [x] Not
 	- [ ] Or-join
 	- [ ] Not-join
-	- [ ] predicates
-	- [ ] functions
-	- [ ] aggregates
+	- [x] predicates
+	- [x] functions
+	- [x] aggregates
 	- [ ] pull
 - Incremental
     - [x] Standard data pattern
