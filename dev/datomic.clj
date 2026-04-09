@@ -1,6 +1,5 @@
 (ns datomic
   (:require [datomic.client.api :as d]
-            [datomic.]
             [hooray.graph-gen :as g]))
 
 (def client (d/client {:server-type :datomic-local
