@@ -9,7 +9,3 @@
 
 # Binary files should be left untouched
 *.jar           binary
-
-
-# Use bd merge for beads JSONL files
-.beads/issues.jsonl merge=beads
