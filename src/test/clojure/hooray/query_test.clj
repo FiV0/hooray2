@@ -98,6 +98,46 @@
                                        [p1 :last-name name]
                                        [p1 :name "Smith"]]} (h/db fix/*node*))))))
 
+(deftest projection-semantics-with-bags
+  (h/transact fix/*node*
+              [{:db/id :db/person-department
+                :db/ident :person/department
+                :db/valueType :db.type/long
+                :db/cardinality :db.cardinality/one}
+               {:db/id :db/department-name-db
+                :db/ident :department/name
+                :db/valueType :db.type/string
+                :db/cardinality :db.cardinality/one}
+               {:db/id :db/person-salary
+                :db/ident :person/salary
+                :db/valueType :db.type/double
+                :db/cardinality :db.cardinality/one}
+               {:db/id :db/deparment-domain
+                :db/ident :department/domain
+                :db/valueType :db.type/string
+                :db/cardinality :db.cardinality/many}])
+
+  (h/transact fix/*node*
+              [{:db/id :person-1
+                :person/department 1111
+                :person/salary 100.0}
+               {:db/id :person-2
+                :person/department 1111
+                :person/salary 100.0}
+               [:db/add 1111 :department/name   "IT deparment"]
+               [:db/add 1111 :department/domain "programming"]
+               [:db/add 1111 :department/domain "architecture design"]])
+
+  (let [db (h/db fix/*node*)]
+    ;; with bag semantics this seems something you can shoot yourself in the foot with
+    (t/is (= #{["IT deparment" 400.0]}
+             (h/q '{:find [?dept (sum ?salary)]
+                    :where [[?e :person/department ?d]
+                            [?e :person/salary     ?salary]
+                            [?d :department/name   ?dept]
+                            [?d :department/domain ?domain]]}
+                  db)))))
+
 (deftest test-returning-maps
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
