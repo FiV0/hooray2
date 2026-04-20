@@ -47,53 +47,53 @@
 
 (deftest test-sanity-check
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
-  (t/is (= #{[1]} (h/q '{:find [e]
-                         :where [[e :name "Ivan"]]}
-                       (h/db fix/*node*)))))
+  (t/is (= [[1]] (h/q '{:find [e]
+                        :where [[e :name "Ivan"]]}
+                      (h/db fix/*node*)))))
 
 (deftest test-basic-query
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
   (t/testing "Can query value by single field"
-    (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                :where [[e :name "Ivan"]
-                                        [e :name name]]} (h/db fix/*node*))))
-    (t/is (= #{["Petr"]} (h/q '{:find [name]
-                                :where [[e :name "Petr"]
-                                        [e :name name]]} (h/db fix/*node*)))))
+    (t/is (= [["Ivan"]] (h/q '{:find [name]
+                               :where [[e :name "Ivan"]
+                                       [e :name name]]} (h/db fix/*node*))))
+    (t/is (= [["Petr"]] (h/q '{:find [name]
+                               :where [[e :name "Petr"]
+                                       [e :name name]]} (h/db fix/*node*)))))
 
   (t/testing "Can query entity by single field"
-    (t/is (= #{[:ivan]} (h/q '{:find [e]
-                               :where [[e :name "Ivan"]]} (h/db fix/*node*))))
-    (t/is (= #{[:petr]} (h/q '{:find [e]
-                               :where [[e :name "Petr"]]} (h/db fix/*node*)))))
+    (t/is (= [[:ivan]] (h/q '{:find [e]
+                              :where [[e :name "Ivan"]]} (h/db fix/*node*))))
+    (t/is (= [[:petr]] (h/q '{:find [e]
+                              :where [[e :name "Petr"]]} (h/db fix/*node*)))))
 
   (t/testing "Can query using multiple terms"
-    (t/is (= #{["Ivan" "Ivanov"]} (h/q '{:find [name last-name]
-                                         :where [[e :name name]
-                                                 [e :last-name last-name]
-                                                 [e :name "Ivan"]
-                                                 [e :last-name "Ivanov"]]} (h/db fix/*node*)))))
+    (t/is (= [["Ivan" "Ivanov"]] (h/q '{:find [name last-name]
+                                        :where [[e :name name]
+                                                [e :last-name last-name]
+                                                [e :name "Ivan"]
+                                                [e :last-name "Ivanov"]]} (h/db fix/*node*)))))
 
   (t/testing "Negate query based on subsequent non-matching clause"
-    (t/is (= #{} (h/q '{:find [e]
-                        :where [[e :name "Ivan"]
-                                [e :last-name "Ivanov-does-not-match"]]} (h/db fix/*node*)))))
+    (t/is (= [] (h/q '{:find [e]
+                       :where [[e :name "Ivan"]
+                               [e :last-name "Ivanov-does-not-match"]]} (h/db fix/*node*)))))
 
   (t/testing "Can query for multiple results"
-    (t/is (= #{["Ivan"] ["Petr"]}
+    (t/is (= [["Ivan"] ["Petr"]]
              (h/q '{:find [name] :where [[e :name name]]} (h/db fix/*node*)))))
 
   (h/transact fix/*node* [{:db/id :smith :name "Smith" :last-name "Smith"}])
 
   (t/testing "Can query across fields for same value"
-    (t/is (= #{[:smith]}
+    (t/is (= [[:smith]]
              (h/q '{:find [p1] :where [[p1 :name name]
                                        [p1 :last-name name]]} (h/db fix/*node*)))))
 
   (t/testing "Can query across fields for same value when value is passed in"
-    (t/is (= #{[:smith]}
+    (t/is (= [[:smith]]
              (h/q '{:find [p1] :where [[p1 :name name]
                                        [p1 :last-name name]
                                        [p1 :name "Smith"]]} (h/db fix/*node*))))))
@@ -130,7 +130,7 @@
 
   (let [db (h/db fix/*node*)]
     ;; with bag semantics this seems something you can shoot yourself in the foot with
-    (t/is (= #{["IT deparment" 400.0]}
+    (t/is (= [["IT deparment" 400.0]]
              (h/q '{:find [?dept (sum ?salary)]
                     :where [[?e :person/department ?d]
                             [?e :person/salary     ?salary]
@@ -143,22 +143,22 @@
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
   (let [db (h/db fix/*node*)]
-    (t/is (= #{{:user/name "Ivan", :user/last-name "Ivanov"}
-               {:user/name "Petr", :user/last-name "Petrov"}}
+    (t/is (= [{:user/name "Ivan", :user/last-name "Ivanov"}
+              {:user/name "Petr", :user/last-name "Petrov"}]
              (h/q '{:find [?name ?last-name]
                     :keys [user/name user/last-name]
                     :where [[e :name ?name]
                             [e :last-name ?last-name]]} db)))
 
-    (t/is (= #{{'user/name "Ivan", 'user/last-name "Ivanov"}
-               {'user/name "Petr", 'user/last-name "Petrov"}}
+    (t/is (= [{'user/name "Ivan", 'user/last-name "Ivanov"}
+              {'user/name "Petr", 'user/last-name "Petrov"}]
              (h/q '{:find [?name ?last-name]
                     :syms [user/name user/last-name]
                     :where [[e :name ?name]
                             [e :last-name ?last-name]]} (h/db fix/*node*))))
 
-    (t/is (= #{{"name" "Ivan", "last-name" "Ivanov"}
-               {"name" "Petr", "last-name" "Petrov"}}
+    (t/is (= [{"name" "Ivan", "last-name" "Ivanov"}
+              {"name" "Petr", "last-name" "Petrov"}]
              (h/q '{:find [?name ?last-name]
                     :strs [name last-name]
                     :where [[e :name ?name]
@@ -184,7 +184,7 @@
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
-  (t/is (= #{["Ivan" "Ivanov"]}
+  (t/is (= [["Ivan" "Ivanov"]]
            (h/q '{:find [name last-name]
                   :in [[name last-name]]
                   :where [[e :name name]
@@ -193,8 +193,8 @@
                 ["Ivan" "Ivanov"])))
 
 
-  (t/is (= #{["Ivan" "Ivanov"]
-             ["Petr" "Petrov"]}
+  (t/is (= [["Ivan" "Ivanov"]
+            ["Petr" "Petrov"]]
            (h/q '{:find [name last-name]
                   :in [[[name last-name]]]
                   ;; TODO allow no where
@@ -205,7 +205,7 @@
                  ["Petr" "Petrov"]]))))
 
 (deftest test-order-of-vars-in-predicate
-  (t/is (= #{[10 11]}
+  (t/is (= [[10 11]]
            (h/q '{:find [in1 in2]
                   :in [in1 in2]
                   :where [[(<= in1 in2)]]}
@@ -222,51 +222,51 @@
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
   (t/testing "Can query entity by single field"
-    (t/is (= #{[:ivan]} (h/q '{:find [e]
-                               :in [name]
-                               :where [[e :name name]]}
-                             (h/db fix/*node*)
-                             "Ivan")))
+    (t/is (= [[:ivan]] (h/q '{:find [e]
+                              :in [name]
+                              :where [[e :name name]]}
+                            (h/db fix/*node*)
+                            "Ivan")))
 
-    (t/is (= #{[:petr]} (h/q '{:find [e]
-                               :in [name]
-                               :where [[e :name name]]}
-                             (h/db fix/*node*)
-                             "Petr"))))
+    (t/is (= [[:petr]] (h/q '{:find [e]
+                              :in [name]
+                              :where [[e :name name]]}
+                            (h/db fix/*node*)
+                            "Petr"))))
 
   (t/testing "Can query entity by entity position"
-    (t/is (= #{["Ivan"]
-               ["Petr"]} (h/q '{:find [name]
-                                :in [[e ...]]
-                                :where [[e :name name]]}
-                              (h/db fix/*node*)
-                              [:ivan :petr])))
+    (t/is (= [["Ivan"]
+              ["Petr"]] (h/q '{:find [name]
+                               :in [[e ...]]
+                               :where [[e :name name]]}
+                             (h/db fix/*node*)
+                             [:ivan :petr])))
 
-    (t/is (= #{["Ivan" "Ivanov"]
-               ["Petr" "Petrov"]} (h/q '{:find [name last-name]
-                                         :in [[e ...]]
-                                         :where [[e :name name]
-                                                 [e :last-name last-name]]}
-                                       (h/db fix/*node*)
-                                       [:ivan :petr]))))
+    (t/is (= [["Ivan" "Ivanov"]
+              ["Petr" "Petrov"]] (h/q '{:find [name last-name]
+                                        :in [[e ...]]
+                                        :where [[e :name name]
+                                                [e :last-name last-name]]}
+                                      (h/db fix/*node*)
+                                      [:ivan :petr]))))
 
   (t/testing "Can match on both entity and value position"
-    (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                :in [e name]
-                                :where [[e :name name]]}
-                              (h/db fix/*node*)
-                              :ivan "Ivan")))
+    (t/is (= [["Ivan"]] (h/q '{:find [name]
+                               :in [e name]
+                               :where [[e :name name]]}
+                             (h/db fix/*node*)
+                             :ivan "Ivan")))
 
-    (t/is (= #{} (h/q '{:find [name]
-                        :in [e name]
-                        :where [[e :name name]]
-                        :args [{:e :ivan
-                                :name "Petr"}]}
-                      (h/db fix/*node*)
-                      :ivan "Petr"))))
+    (t/is (= [] (h/q '{:find [name]
+                       :in [e name]
+                       :where [[e :name name]]
+                       :args [{:e :ivan
+                               :name "Petr"}]}
+                     (h/db fix/*node*)
+                     :ivan "Petr"))))
 
   (t/testing "Can query entity by single field with several arguments"
-    (t/is (= #{[:ivan] [:petr]}
+    (t/is (= [[:ivan] [:petr]]
              (h/q '{:find [e]
                     :in [[name ...]]
                     :where [[e :name name]]}
@@ -274,74 +274,74 @@
                   ["Ivan" "Petr"]))))
 
   (t/testing "Can query entity by single field with literals"
-    (t/is (= #{[:ivan]} (h/q '{:find [e]
-                               :in [[name ...]]
+    (t/is (= [[:ivan]] (h/q '{:find [e]
+                              :in [[name ...]]
+                              :where [[e :name name]
+                                      [e :last-name "Ivanov"]]}
+                            (h/db fix/*node*)
+                            ["Ivan" "Petr"])))
+
+    (t/is (= [["Ivan"]] (h/q '{:find [name]
+                               :in [[e ...]]
                                :where [[e :name name]
                                        [e :last-name "Ivanov"]]}
                              (h/db fix/*node*)
-                             ["Ivan" "Petr"])))
-
-    (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                :in [[e ...]]
-                                :where [[e :name name]
-                                        [e :last-name "Ivanov"]]}
-                              (h/db fix/*node*)
-                              [:ivan :petr]))))
+                             [:ivan :petr]))))
 
   (t/testing "Can query entity by non existent argument"
-    (t/is (= #{} (h/q '{:find [e]
-                        :in [name]
-                        :where [[e :name name]]}
-                      (h/db fix/*node*)
-                      "Bob"))))
+    (t/is (= [] (h/q '{:find [e]
+                       :in [name]
+                       :where [[e :name name]]}
+                     (h/db fix/*node*)
+                     "Bob"))))
 
   (t/testing "Can query entity with empty arguments"
-    (t/is (= #{[:ivan] [:petr]}
+    (t/is (= [[:ivan] [:petr]]
              (h/q '{:find [e]
                     :in []
                     :where [[e :name name]]}
                   (h/db fix/*node*)))))
 
   (t/testing "Can query entity with tuple arguments"
-    (t/is (= #{[:ivan]} (h/q '{:find [e]
-                               :in [[name last-name]]
-                               :where [[e :name name]
-                                       [e :last-name last-name]]}
-                             (h/db fix/*node*)
-                             ["Ivan" "Ivanov"]))))
+    (t/is (= [[:ivan]] (h/q '{:find [e]
+                              :in [[name last-name]]
+                              :where [[e :name name]
+                                      [e :last-name last-name]]}
+                            (h/db fix/*node*)
+                            ["Ivan" "Ivanov"]))))
 
   (t/testing "Can query entity with collection arguments"
-    (t/is (= #{[:ivan]
-               [:petr]} (h/q '{:find [e]
-                               :in [[[name last-name]]]
-                               :where [[e :name name]
-                                       [e :last-name last-name]]}
-                             (h/db fix/*node*)
-                             [["Ivan" "Ivanov"] ["Petr" "Petrov"]]))))
+    (t/is (= [[:ivan]
+              [:petr]] (h/q '{:find [e]
+                              :in [[[name last-name]]]
+                              :where [[e :name name]
+                                      [e :last-name last-name]]}
+                            (h/db fix/*node*)
+                            [["Ivan" "Ivanov"] ["Petr" "Petrov"]]))))
 
 
   (t/testing "Can query predicates based on arguments alone"
     #_
-    (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                :where [[(re-find #"I" name)]]
-                                :args [{:name "Ivan"}
-                                       {:name "Petr"}]} (h/db fix/*node*))))
+    (t/is (= [["Ivan"]] (h/q '{:find [name]
+                               :where [[(re-find #"I" name)]]
+                               :args [{:name "Ivan"}
+                                      {:name "Petr"}]} (h/db fix/*node*))))
     #_
-    (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                :where [[(re-find #"I" name)]
-                                        [(= last-name "Ivanov")]]
-                                :args [{:name "Ivan" :last-name "Ivanov"}
-                                       {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
+    (t/is (= [["Ivan"]] (h/q '{:find [name]
+                               :where [[(re-find #"I" name)]
+                                       [(= last-name "Ivanov")]]
+                               :args [{:name "Ivan" :last-name "Ivanov"}
+                                      {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
 
-    (t/is (= #{["Ivan"]
-               ["Petr"]} (h/q '{:find [name]
-                                :in [[name ...]]
-                                :where [[(string? name)]]}
-                              (h/db fix/*node*)
-                              ["Ivan" "Petr"])))
+    (t/is (= [["Ivan"]
+              ["Petr"]] (h/q '{:find [name]
+                               :in [[name ...]]
+                               :where [[(string? name)]]}
+                             (h/db fix/*node*)
+                             ["Ivan" "Petr"])))
 
-    (t/is (= #{["Ivan" "Ivanov"]
-               ["Petr" "Petrov"]}
+    (t/is (= [["Ivan" "Ivanov"]
+              ["Petr" "Petrov"]]
              (h/q '{:find [name last-name]
                     :in [[[name last-name]]]
                     :where [[(not= last-name name)]]}
@@ -351,35 +351,35 @@
                    ["Bob" "Bob"]])))
 
     #_
-    (t/is (= #{["Ivan"]} (h/q '{:find [name]
-                                :where [[(string? name)]
-                                        [(re-find #"I" name)]]
-                                :args [{:name "Ivan"}
-                                       {:name "Petr"}]} (h/db fix/*node*))))
+    (t/is (= [["Ivan"]] (h/q '{:find [name]
+                               :where [[(string? name)]
+                                       [(re-find #"I" name)]]
+                               :args [{:name "Ivan"}
+                                      {:name "Petr"}]} (h/db fix/*node*))))
 
-    (t/is (= #{} (h/q '{:find [name]
-                        :in [[name ...]]
-                        :where [[(number? name)]]}
-                      (h/db fix/*node*)
-                      ["Ivan" "Petr"])))
+    (t/is (= [] (h/q '{:find [name]
+                       :in [[name ...]]
+                       :where [[(number? name)]]}
+                     (h/db fix/*node*)
+                     ["Ivan" "Petr"])))
 
     ;; TODO validate-patterns should incorporate :in
     #_
-    (t/is (= #{} (h/q '{:find [name]
-                        :in [[name ...]]
-                        :where [(not [(string? name)])]}
-                      (h/db fix/*node*)
-                      ["Ivan" "Petr"])))
+    (t/is (= [] (h/q '{:find [name]
+                       :in [[name ...]]
+                       :where [(not [(string? name)])]}
+                     (h/db fix/*node*)
+                     ["Ivan" "Petr"])))
 
     (t/testing "Can use range constraints on arguments"
-      (t/is (= #{}
+      (t/is (= []
                (h/q '{:find [age]
                       :in [age]
                       :where [[(>= age 21)]]}
                     (h/db fix/*node*)
                     20)))
 
-      (t/is (= #{[22]}
+      (t/is (= [[22]]
                (h/q '{:find [age]
                       :in [age]
                       :where [[(>= age 21)]]}
@@ -390,40 +390,40 @@
     (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
                                                         {:name "Petr" :last-name "Petrov"}]))]
 
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                        '{:find [e]
-                                          :in [$ name]
-                                          :where [[e :name name]]}
-                                        "Ivan")))
+      (t/is (= [[(:xt/id ivan)]] (xt/q (xt/db *api*)
+                                       '{:find [e]
+                                         :in [$ name]
+                                         :where [[e :name name]]}
+                                       "Ivan")))
 
       (t/testing "the db var is optional"
-        (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                          '{:find [e]
-                                            :in [name]
-                                            :where [[e :name name]]}
-                                          "Ivan"))))
+        (t/is (= [[(:xt/id ivan)]] (xt/q (xt/db *api*)
+                                         '{:find [e]
+                                           :in [name]
+                                           :where [[e :name name]]}
+                                         "Ivan"))))
 
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                        '{:find [e]
-                                          :in [$ name last-name]
-                                          :where [[e :name name]
-                                                  [e :last-name last-name]]}
-                                        "Ivan" "Ivanov")))
+      (t/is (= [[(:xt/id ivan)]] (xt/q (xt/db *api*)
+                                       '{:find [e]
+                                         :in [$ name last-name]
+                                         :where [[e :name name]
+                                                 [e :last-name last-name]]}
+                                       "Ivan" "Ivanov")))
 
-      (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*)
-                                        '{:find [e]
-                                          :in [$ [name]]
-                                          :where [[e :name name]]}
-                                        ["Ivan"])))
+      (t/is (= [[(:xt/id ivan)]] (xt/q (xt/db *api*)
+                                       '{:find [e]
+                                         :in [$ [name]]
+                                         :where [[e :name name]]}
+                                       ["Ivan"])))
 
-      (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
+      (t/is (= [[(:xt/id ivan)] [(:xt/id petr)]]
                (xt/q (xt/db *api*)
                      '{:find [e]
                        :in [$ [[name]]]
                        :where [[e :name name]]}
                      [["Ivan"] ["Petr"]])))
 
-      (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
+      (t/is (= [[(:xt/id ivan)] [(:xt/id petr)]]
                (xt/q (xt/db *api*)
                      '{:find [e]
                        :in [$ [name ...]]
@@ -431,23 +431,23 @@
                      ["Ivan" "Petr"])))
 
       (t/testing "can access the db"
-        (t/is (= #{["class xtdb.query.QueryDatasource"]} (xt/q (xt/db *api*) '{:find [ts]
-                                                                               :in [$]
-                                                                               :where [[(str t) ts]
-                                                                                       [(type $) t]]}))))
+        (t/is (= [["class xtdb.query.QueryDatasource"]] (xt/q (xt/db *api*) '{:find [ts]
+                                                                              :in [$]
+                                                                              :where [[(str t) ts]
+                                                                                      [(type $) t]]}))))
       (t/testing "where clause is optional"
-        (t/is (= #{[1]} (xt/q (xt/db *api*)
-                              '{:find [x]
-                                :in [$ x]}
-                              1))))
+        (t/is (= [[1]] (xt/q (xt/db *api*)
+                             '{:find [x]
+                               :in [$ x]}
+                             1))))
 
       (t/testing "can use both args and in"
-        (t/is (= #{[2]} (xt/q (xt/db *api*)
-                              '{:find [x]
-                                :in [$ [x ...]]
-                                :args [{:x 1}
-                                       {:x 2}]}
-                              [2 3]))))
+        (t/is (= [[2]] (xt/q (xt/db *api*)
+                             '{:find [x]
+                               :in [$ [x ...]]
+                               :args [{:x 1}
+                                      {:x 2}]}
+                             [2 3]))))
 
       (t/testing "var bindings need to be distinct"
         (t/is (thrown-with-msg?
@@ -471,14 +471,14 @@
                           {:db/id :jane :name "Jane" :sex :female}])
 
   (t/testing "Can query by single field"
-    (t/is (= #{["Ivan"] ["Petr"]} (h/q '{:find [name]
+    (t/is (= [["Ivan"] ["Petr"]] (h/q '{:find [name]
+                                        :where [[e :name name]
+                                                [e :sex :male]]}
+                                      (h/db fix/*node*))))
+    (t/is (= [["Jane"] ["Doris"]] (h/q '{:find [name]
                                          :where [[e :name name]
-                                                 [e :sex :male]]}
-                                       (h/db fix/*node*))))
-    (t/is (= #{["Doris"] ["Jane"]} (h/q '{:find [name]
-                                          :where [[e :name name]
-                                                  [e :sex :female]]}
-                                        (h/db fix/*node*))))))
+                                                 [e :sex :female]]}
+                                       (h/db fix/*node*))))))
 
 (t/deftest test-query-across-entities-using-join
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :age 30 :salary 50000}
@@ -506,17 +506,17 @@
                                            [p2 :name]]}
                                  (h/db fix/*node*))))))
 
-      (t/testing "A single first result, with no subsequent results in next term"
-        (t/is (= 0 (count (h/q '{:find [p1]
-                                 :where [[p1 :name "Ivan"]
-                                         [p2 :name "does-not-match"]]}
-                               (h/db fix/*node*))))))
+  (t/testing "A single first result, with no subsequent results in next term"
+    (t/is (= 0 (count (h/q '{:find [p1]
+                             :where [[p1 :name "Ivan"]
+                                     [p2 :name "does-not-match"]]}
+                           (h/db fix/*node*))))))
 
-    (t/testing "Every person joins once, plus 2 more matches"
-      (t/is (= 7 (count (h/q '{:find [p1 p2]
-                               :where [[p1 :name name]
-                                       [p2 :name name]]}
-                             (h/db fix/*node*)))))))
+  (t/testing "Every person joins once, plus 2 more matches"
+    (t/is (= 7 (count (h/q '{:find [p1 p2]
+                             :where [[p1 :name name]
+                                     [p2 :name name]]}
+                           (h/db fix/*node*)))))))
 
 (t/deftest test-or-query
   (h/transact fix/*node* [{:db/id :ivan1 :name "Ivan" :last-name "Ivanov"}
@@ -580,8 +580,8 @@
                                      [e :name "Ivan"]
                                      (or [e :last-name "Ivanov"])]}
                            (h/db fix/*node*))))))
-  #_(t/is (= #{["Ivan" "Ivanov"]
-               ["Ivan" :optional]}
+  #_(t/is (= [["Ivan" "Ivanov"]
+              ["Ivan" :optional]]
              (h/q '{:find [name l]
                     :where [[e :name name]
                             [e :name "Ivan"]
@@ -606,8 +606,8 @@
                                             (or [e :sex :female]
                                                 (and [e :sex :male]
                                                      [e :name "Ivan"]))])))
-  (t/is (= #{["Ivan"]
-             ["Ivana"]}
+  (t/is (= [["Ivana"]
+            ["Ivan"]]
            (h/q '{:find [name]
                   :where [[e :name name]
                           (or [e :sex :female]
@@ -615,12 +615,12 @@
                                    [e :name "Ivan"]))]}
                 (h/db fix/*node*))))
 
-  (t/is (= #{[:ivan]}
+  (t/is (= [[:ivan]]
            (h/q '{:find [e]
                   :where [(or [e :name "Ivan"])]}
                 (h/db fix/*node*))))
 
-  (t/is (= #{}
+  (t/is (= []
            (h/q '{:find [name]
                   :where [[e :name name]
                           (or (and [e :sex :female]
@@ -787,7 +787,7 @@
                                  [e1 :last-name "Ivanov"])]}
               (h/db fix/*node*))))
 
-  (t/is (= #{[1] [3]}
+  (t/is (= [[1] [3]]
            (h/q '{:find [?e]
                   :where [[?e :type ?type]
                           (or-join [?e ?type]
@@ -796,7 +796,7 @@
                 (h/db fix/*node*)))
         "don't need to mention all bound or vars though")
 
-  (t/is (= #{[1] [3]}
+  (t/is (= [[1] [3]]
            (h/q '{:find [?e]
                   :where [[?e :type ?type]
                           (or-join [?e ?type]
@@ -812,25 +812,25 @@
                           {:db/id :alan, :name "Alan" :last-name "Turing" :sex :male :age 22}
                           {:db/id :adam, :name "Adam" :last-name "Smith" :sex :male :age 23}])
 
-  (t/is (= #{[1]} (h/q '{:find [(count p)]
-                         :where [[p :last-name "Lovelace"]
-                                 (or [p :name "Ada"]
-                                     [p :sex :male])]}
-                       (h/db fix/*node*))))
+  (t/is (= [[1]] (h/q '{:find [(count p)]
+                        :where [[p :last-name "Lovelace"]
+                                (or [p :name "Ada"]
+                                    [p :sex :male])]}
+                      (h/db fix/*node*))))
 
-  (t/is (= #{[1]} (h/q '{:find [(count p)]
-                         :where [[p :last-name "Lovelace"]
-                                 (or [p :name "Ada"]
-                                     [p :sex :female])]}
-                       (h/db fix/*node*))))
+  (t/is (= [[1]] (h/q '{:find [(count p)]
+                        :where [[p :last-name "Lovelace"]
+                                (or [p :name "Ada"]
+                                    [p :sex :female])]}
+                      (h/db fix/*node*))))
 
-  (t/is (= #{[3]} (h/q '{:find [(count p)]
-                         :where [(or [p :last-name "Lovelace"]
-                                     [p :sex :male])]}
-                       (h/db fix/*node*))))
+  (t/is (= [[3]] (h/q '{:find [(count p)]
+                        :where [(or [p :last-name "Lovelace"]
+                                    [p :sex :male])]}
+                      (h/db fix/*node*))))
 
 
-  (t/is (= #{[:male 2 45] [:female 1 21]}
+  (t/is (= [[:female 1 21] [:male 2 45]]
            (h/q '{:find [gender (count p) (sum age)]
                   :where [[p :sex gender]
                           [p :age age]]}
@@ -843,9 +843,9 @@
                           {:db/id :carol :name "Carol" :city "LA"}])
 
   ;; TODO do we want Datomic or XTDB semantics here?
-  (t/is (= #{[3]} (h/q '{:find [(count city)]
-                         :where [[p :city city]]}
-                       (h/db fix/*node*)))))
+  (t/is (= [[3]] (h/q '{:find [(count city)]
+                        :where [[p :city city]]}
+                      (h/db fix/*node*)))))
 
 (t/deftest datascript-test-aggregates
   (h/transact fix/*node* [{:db/id :db/head-attribute
@@ -858,7 +858,7 @@
                           {:db/id :chimera :heads 1}])
 
   (t/testing "Multiple aggregates, correct grouping"
-    (t/is (= #{[6 1 3 4 2]}
+    (t/is (= [[6 1 3 4 2]]
              (h/q '{:find [(sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)]
                     :where [[?monster :heads ?heads]]}
                   (h/db fix/*node*))))))
@@ -869,26 +869,26 @@
                           {:db/id :dominic :name "Dominic" :last-name "Monroe" :age 50}])
 
   (t/testing "range expressions"
-    (t/is (= #{["Ivan"] ["Bob"]}
+    (t/is (= [["Ivan"] ["Bob"]]
              (h/q '{:find [name]
                     :where [[e :name name]
                             [e :age age]
                             [(< age 50)]]}
                   (h/db fix/*node*))))
 
-    (t/is (= #{["Dominic"]}
+    (t/is (= [["Dominic"]]
              (h/q '{:find [name]
                     :where [[e :name name]
                             [e :age age]
                             [(>= age 50)]]} (h/db fix/*node*))))
 
     (t/testing "fallback to built in predicate for vars"
-      (t/is (= #{["Ivan" 30 "Ivan" 30]
-                 ["Ivan" 30 "Bob" 40]
-                 ["Ivan" 30 "Dominic" 50]
-                 ["Bob" 40 "Bob" 40]
-                 ["Bob" 40 "Dominic" 50]
-                 ["Dominic" 50 "Dominic" 50]}
+      (t/is (= [["Ivan" 30 "Ivan" 30]
+                ["Ivan" 30 "Bob" 40]
+                ["Ivan" 30 "Dominic" 50]
+                ["Bob" 40 "Bob" 40]
+                ["Bob" 40 "Dominic" 50]
+                ["Dominic" 50 "Dominic" 50]]
                (h/q '{:find [name age1 name2 age2]
                       :where [[e :name name]
                               [e :age age1]
@@ -897,7 +897,7 @@
                               [(<= age1 age2)]]} (h/db fix/*node*))))))
 
   (t/testing "clojure.core predicate"
-    (t/is (= #{["Bob"] ["Dominic"]}
+    (t/is (= [["Bob"] ["Dominic"]]
              (h/q '{:find [name]
                     :where [[e :name name]
                             [(re-find #"o" name)]]}
@@ -910,27 +910,27 @@
                          (h/db fix/*node*)))))
 
     (t/testing "Not predicate"
-      (t/is (= #{["Ivan"]}
+      (t/is (= [["Ivan"]]
                (h/q '{:find [name]
                       :where [[e :name name]
                               (not [(re-find #"o" name)])]}
                     (h/db fix/*node*)))))
 
     (t/testing "Entity variable"
-      (t/is (= #{["Ivan"]}
+      (t/is (= [["Ivan"]]
                (h/q '{:find [name]
                       :where [[e :name name]
                               [(= :ivan e)]]}
                     (h/db fix/*node*))))
 
       (t/testing "Filtered by value"
-        (t/is (= #{[:bob] [:ivan]}
+        (t/is (= [[:ivan] [:bob]]
                  (h/q '{:find [e]
                         :where [[e :last-name last-name]
                                 [(= "Ivanov" last-name)]]}
                       (h/db fix/*node*))))
 
-        (t/is (= #{[:ivan]}
+        (t/is (= [[:ivan]]
                  (h/q '{:find [e]
                         :where [[e :last-name last-name]
                                 [e :age age]
@@ -939,7 +939,7 @@
                       (h/db fix/*node*))))))
 
     (t/testing "Several variables"
-      (t/is (= #{["Bob"]}
+      (t/is (= [["Bob"]]
                (h/q '{:find [name]
                       :where [[e :name name]
                               [e :age age]
@@ -948,7 +948,7 @@
                               [(not= age name)]]}
                     (h/db fix/*node*))))
 
-      (t/is (= #{[:bob "Ivanov"]}
+      (t/is (= [[:bob "Ivanov"]]
                (h/q '{:find [e last-name]
                       :where [[e :last-name last-name]
                               [e :age age]
@@ -957,7 +957,7 @@
                     (h/db fix/*node*))))
 
       (t/testing "No results"
-        (t/is (= #{}
+        (t/is (= []
                  (h/q '{:find [name]
                         :where [[e :name name]
                                 [e :age age]
@@ -965,7 +965,7 @@
                                 [(= age name)]]} (h/db fix/*node*))))))
 
     (t/testing "Bind result to var"
-      (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
+      (t/is (= [["Ivan" 15] ["Bob" 20] ["Dominic" 25]]
                (h/q '{:find [name half-age]
                       :where [[e :name name]
                               [e :age age]
@@ -974,7 +974,7 @@
 
 
       (t/testing "Order of joins is rearranged to ensure arguments are bound"
-        (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
+        (t/is (= [["Ivan" 15] ["Bob" 20] ["Dominic" 25]]
                  (h/q '{:find [name half-age]
                         :where [[e :name name]
                                 [e :age real-age]
@@ -982,7 +982,7 @@
                       (h/db fix/*node*)))))
 
       (t/testing "Binding more than once intersects result"
-        (t/is (= #{["Ivan" 15]}
+        (t/is (= [["Ivan" 15]]
                  (h/q '{:find [name half-age]
                         :where [[e :name name]
                                 [e :age real-age]
@@ -991,7 +991,7 @@
                       (h/db fix/*node*)))))
 
       (t/testing "Binding can use range predicates"
-        (t/is (= #{["Dominic" 25]}
+        (t/is (= [["Dominic" 25]]
                  (h/q '{:find [name half-age]
                         :where [[e :name name]
                                 [e :age real-age]
@@ -1002,21 +1002,21 @@
 (deftest datomic-style-addtion
   (h/transact fix/*node* [{:db/id :alice :name "Alice"}])
 
-  (t/is (= #{["Alice"]} (h/q '{:find [name]
-                               :where [[p :name name]]}
-                             (h/db fix/*node*))))
+  (t/is (= [["Alice"]] (h/q '{:find [name]
+                              :where [[p :name name]]}
+                            (h/db fix/*node*))))
 
   (h/transact fix/*node* [{:db/id :alice :city "NYC"}])
 
-  (t/is (= #{["Alice" "NYC"]} (h/q '{:find [name city]
-                                     :where [[p :name name]
-                                             [p :city city]]}
-                                   (h/db fix/*node*)))))
+  (t/is (= [["Alice" "NYC"]] (h/q '{:find [name city]
+                                    :where [[p :name name]
+                                            [p :city city]]}
+                                  (h/db fix/*node*)))))
 
 (deftest heterogenous-types
   (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 23}])
 
-  (t/is (= #{[:alice 23] [:alice "Alice"]}
+  (t/is (= [[:alice "Alice"] [:alice 23]]
            (h/q '{:find [p v]
                   :where [(or [p :name v]
                               [p :age v])]}
@@ -1193,7 +1193,7 @@
              (xt/q (xt/db *api*) '{:find [bah]
                                    :where [[e :name]]})))
 
-    ;; #1729
+      ;; #1729
       (t/is (thrown-with-msg?
              IllegalArgumentException
              #"Find refers to unknown variables: #\{bah\}"
@@ -2367,8 +2367,8 @@
                                       {:xt/id :oleg :name "Oleg" :extra #inst "1980" :age 30}
                                       {:xt/id :petr :name "Petr" :age 40}]))
 
-  ;; This wasn't the bug, but a useful test, lead to fixes in SPARQL
-  ;; translator, and an example on how to use this.
+    ;; This wasn't the bug, but a useful test, lead to fixes in SPARQL
+    ;; translator, and an example on how to use this.
     (t/testing "Or with non existing attribute in one leg and different types "
       (t/is (= #{["Ivan" "Petr" 20 :ivan]
                  ["Oleg" #inst "1980" 30 :oleg]
@@ -2408,7 +2408,7 @@
                          (->> (xt/await-tx *api*)))])
 
     (let [db (xt/db *api*)
-        ;; Much higher than needed, but catches the bug without flakiness.
+          ;; Much higher than needed, but catches the bug without flakiness.
           range-slowdown-factor 100
           entity-time (let [start-time (System/nanoTime)]
                         (t/testing "entity id lookup"
@@ -2566,7 +2566,7 @@
 ;; t2 p2 SFO, t5 p3 LA, t9 p4 NY, t10 p4 NY (?)
 
 #_(t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
-  ;; Day 0, represented as #inst "2018-12-31"
+    ;; Day 0, represented as #inst "2018-12-31"
     (xt/submit-tx *api* [[::xt/put
                           {:xt/id :p2
                            :entry-pt :SFO
@@ -2579,29 +2579,29 @@
                            :arrival-time #inst "2018-12-31"
                            :departure-time :na}
                           #inst "2018-12-31"]])
-  ;; Day 1, nothing happens.
+    ;; Day 1, nothing happens.
     (xt/submit-tx *api* [])
-  ;; Day 2
+    ;; Day 2
     (xt/submit-tx *api* [[::xt/put
                           {:xt/id :p4
                            :entry-pt :NY
                            :arrival-time #inst "2019-01-02"
                            :departure-time :na}
                           #inst "2019-01-02"]])
-  ;; Day 3
+    ;; Day 3
     (let [third-day-submitted-tx (xt/submit-tx *api* [[::xt/put
                                                        {:xt/id :p4
                                                         :entry-pt :NY
                                                         :arrival-time #inst "2019-01-02"
                                                         :departure-time #inst "2019-01-03"}
                                                        #inst "2019-01-03"]])]
-    ;; this introduces enough delay s.t. tx3 and tx4 don't happen in the same millisecond
-    ;; (see test further down)
-    ;; because we only ask for the DB at the tx-time, currently, not the tx-id
-    ;; see #421
+      ;; this introduces enough delay s.t. tx3 and tx4 don't happen in the same millisecond
+      ;; (see test further down)
+      ;; because we only ask for the DB at the tx-time, currently, not the tx-id
+      ;; see #421
       (Thread/sleep 10)
 
-    ;; Day 4, correction, adding missing trip on new arrival.
+      ;; Day 4, correction, adding missing trip on new arrival.
       (xt/submit-tx *api* [[::xt/put
                             {:xt/id :p1
                              :entry-pt :NY
@@ -2626,17 +2626,17 @@
                              :arrival-time #inst "2018-12-31"
                              :departure-time #inst "2019-01-04"}
                             #inst "2019-01-04"]])
-    ;; Day 5
+      ;; Day 5
       (xt/submit-tx *api* [[::xt/put
                             {:xt/id :p2
                              :entry-pt :SFO
                              :arrival-time #inst "2018-12-31"
                              :departure-time #inst "2018-12-31"}
                             #inst "2019-01-05"]])
-    ;; Day 6, nothing happens.
+      ;; Day 6, nothing happens.
       (xt/submit-tx *api* [])
-    ;; Day 7-12, correction of deletion/departure on day 4. Shows
-    ;; how valid time cannot be the same as arrival time.
+      ;; Day 7-12, correction of deletion/departure on day 4. Shows
+      ;; how valid time cannot be the same as arrival time.
       (xt/submit-tx *api* [[::xt/put
                             {:xt/id :p3
                              :entry-pt :LA
@@ -2728,23 +2728,23 @@
          (not [?e :age 10])]
         #{4}
 
-      ;; full exclude
+        ;; full exclude
         [[?e :name]
          (not [?e :age])]
         #{}
 
-      ;; not-intersecting rels
+        ;; not-intersecting rels
         [[?e :name "Ivan"]
          (not [?e :name "Oleg"])]
         #{1 2 5 6}
 
-      ;; exclude empty set
+        ;; exclude empty set
         [[?e :name]
          (not [?e :name "Ivan"]
               [?e :name "Oleg"])]
         #{1 2 3 4 5 6}
 
-      ;; nested excludes
+        ;; nested excludes
         [[?e :name]
          (not [?e :name "Ivan"]
               (not [?e :age 10]))]
@@ -2778,24 +2778,24 @@
     (let [db (xt/db *api*)]
       (t/are [q res] (= (xt/q db {:find '[?e] :where (quote q)})
                         (into #{} (map vector) res))
-      ;; const \ empty
+        ;; const \ empty
         [[?e :name "Oleg"]
          [?e :age 10]
          (not [?e :age 20])]
         #{3}
 
-      ;; const \ const
+        ;; const \ const
         [[?e :name "Oleg"]
          [?e :age 10]
          (not [?e :age 10])]
         #{}
 
-      ;; rel \ const
+        ;; rel \ const
         [[?e :name "Oleg"]
          (not [?e :age 10])]
         #{4})
 
-    ;; 2 rels \ 2 rels
+      ;; 2 rels \ 2 rels
       (t/is (= (xt/q db
                      '{:find [?e ?e2]
                        :where [[?e :name "Ivan"]
@@ -2804,7 +2804,7 @@
                                     [?e2 :age 20])]})
                #{[2 1] [6 5] [1 1] [2 2] [5 5] [6 6] [2 5] [1 5] [2 6] [6 1] [5 1] [6 2]}))
 
-    ;; 2 rels \ rel + const
+      ;; 2 rels \ rel + const
       (t/is (= (xt/q db
                      '{:find [?e ?e2]
                        :where [[?e :name "Ivan"]
@@ -2813,7 +2813,7 @@
                                     [?e2 :age 20])]})
                #{[2 3] [1 3] [2 4] [6 3] [5 3] [6 4]}))
 
-    ;; 2 rels \ 2 consts
+      ;; 2 rels \ 2 consts
       (t/is (= (xt/q db
                      '{:find [?e ?e2]
                        :where [[?e :name "Oleg"]
@@ -2828,28 +2828,28 @@
       (t/are [q res] (= (xt/q db {:find '[?e] :where (quote q)})
                         (into #{} (map vector) res))
 
-      ;; intersecting results
+        ;; intersecting results
         [(or [?e :name "Oleg"]
              [?e :age 10])]
         #{1 3 4 5}
 
-      ;; one branch empty
+        ;; one branch empty
         [(or [?e :name "Oleg"]
              [?e :age 30])]
         #{3 4}
 
-      ;; both empty
+        ;; both empty
         [(or [?e :name "Petr"]
              [?e :age 30])]
         #{}
 
-      ;; join with 1 var
+        ;; join with 1 var
         [[?e :name "Ivan"]
          (or [?e :name "Oleg"]
              [?e :age 10])]
         #{1 5}
 
-      ;; join with 2 vars
+        ;; join with 2 vars
         [[?e :age ?a]
          (or (and [?e :name "Ivan"]
                   [1 :age ?a])
@@ -2902,8 +2902,8 @@
                                 [?x :follow ?y]]]})
                #{[1 2] [2 3] [3 4] [2 4] [5 3] [4 6]}))
 
-    ;; NOTE: XTDB does not support vars in attribute position, so
-    ;; :follow is explicit.
+      ;; NOTE: XTDB does not support vars in attribute position, so
+      ;; :follow is explicit.
       (t/testing "Joining regular clauses with rule"
         (t/is (= (xt/q db
                        '{:find [?y ?x]
@@ -2914,7 +2914,7 @@
                                   [?a :follow ?b]]]})
                  #{[3 2] [6 4] [4 2]})))
 
-    ;; NOTE: XTDB does not support vars in attribute position.
+      ;; NOTE: XTDB does not support vars in attribute position.
       #_(t/testing "Rule context is isolated from outer context"
           (t/is (= (xt/q db
                          '{:find [?x]
@@ -3069,7 +3069,7 @@
                          :where [[(> 2 1)]]})
                  #{[:a] [:b] [:c]})))
 
-    ;; NOTE: XTDB does not support these functions.
+      ;; NOTE: XTDB does not support these functions.
       #_(t/testing "ground"
           (t/is (= (d/q '[:find ?vowel
                           :where [(ground [:a :e :i :o :u]) [?vowel ...]]])
@@ -3217,7 +3217,7 @@
                                  [1 :age 35]]})
                  #{})))
 
-    ;; XTDB supports nil and false results.
+      ;; XTDB supports nil and false results.
       #_(t/testing "Returning nil from function filters out tuple from result"
           (t/is (= (xt/q db
                          {:find '[?x]
@@ -3257,48 +3257,48 @@
                           {:xt/id 4 :name "Oleg" :age 20}])
     (let [db (xt/db *api*)]
       (t/are [q res] (= (xt/q db (quote q)) res)
-      ;; plain predicate
+        ;; plain predicate
         {:find [?e ?a]
          :where [[?e :age ?a]
                  [(> ?a 10)]]}
         #{[2 20] [4 20]}
 
-      ;; join in predicate
+        ;; join in predicate
         {:find [?e ?e2]
          :where [[?e :name]
                  [?e2 :name]
                  [(< ?e ?e2)]]}
         #{[1 2] [1 3] [1 4] [2 3] [2 4] [3 4]}
 
-      ;; join with extra symbols
+        ;; join with extra symbols
         {:find [?e ?e2]
          :where [[?e :age ?a]
                  [?e2 :age ?a2]
                  [(< ?e ?e2)]]}
         #{[1 2] [1 3] [1 4] [2 3] [2 4] [3 4]}
 
-      ;; empty result
+        ;; empty result
         {:find [?e ?e2]
          :where [[?e :name "Ivan"]
                  [?e2 :name "Oleg"]
                  [(= ?e ?e2)]]}
         #{}
 
-      ;; pred over const, true
+        ;; pred over const, true
         {:find [?e]
          :where [[?e :name "Ivan"]
                  [?e :age 20]
                  [(= ?e 2)]]}
         #{[2]}
 
-      ;; pred over const, false
+        ;; pred over const, false
         {:find [?e]
          :where [[?e :name "Ivan"]
                  [?e :age 20]
                  [(= ?e 1)]]}
         #{})
 
-    ;; NOTE: XTDB does not support source vars.
+      ;; NOTE: XTDB does not support source vars.
       #_(let [pred (fn [db e a]
                      (= a (:age (d/entity db e))))]
           (t/is (= (xt/q '[:find ?e
@@ -3423,8 +3423,8 @@
             "groups by x and y in this case")))
 
 #_(t/deftest test-can-bind-function-returns-to-falsy
-  ;; Datomic does allow binding falsy values, DataScript doesn't
-  ;; see "Returning nil from function filters out tuple from result"
+    ;; Datomic does allow binding falsy values, DataScript doesn't
+    ;; see "Returning nil from function filters out tuple from result"
     (t/is (= #{[false]}
              (xt/q (xt/db *api*)
                    '{:find [b]
@@ -3482,28 +3482,28 @@
 ;; https://github.com/racket/datalog/tree/master/tests/examples
 
 #_(t/deftest test-racket-datalog-tutorial
-  ;; parent(john,douglas).
+    ;; parent(john,douglas).
     (fix/transact! *api* [{:xt/id :john :parent :douglas}])
-  ;; parent(john,douglas)?
+    ;; parent(john,douglas)?
     (t/is (= #{[true]}
              (xt/q (xt/db *api*)
                    '{:find [found]
                      :where [[:john :parent :douglas]
                              [(identity true) found]]})))
 
-  ;; parent(john,ebbon)?
+    ;; parent(john,ebbon)?
     (t/is (= #{}
              (xt/q (xt/db *api*)
                    '{:find [found]
                      :where [[:john :parent :ebbon]
                              [(identity true) found]]})))
 
-  ;; parent(bob,john).
-  ;; parent(ebbon,bob).
+    ;; parent(bob,john).
+    ;; parent(ebbon,bob).
     (fix/transact! *api* [{:xt/id :bob :parent :john}
                           {:xt/id :ebbon :parent :bob}])
 
-  ;; parent(A,B)?
+    ;; parent(A,B)?
     (t/is (= #{[:john :douglas]
                [:bob :john]
                [:ebbon :bob]}
@@ -3511,21 +3511,21 @@
                    '{:find [a b]
                      :where [[a :parent b]]})))
 
-  ;; parent(john,B)?
+    ;; parent(john,B)?
     (t/is (= #{[:douglas]}
              (xt/q (xt/db *api*)
                    '{:find [b]
                      :where [[:john :parent b]]})))
 
-  ;; parent(A,A)?
+    ;; parent(A,A)?
     (t/is (= #{}
              (xt/q (xt/db *api*)
                    '{:find [a]
                      :where [[a :parent a]]})))
 
-  ;; ancestor(A,B) :- parent(A,B).
-  ;; ancestor(A,B) :- parent(A,C), ancestor(C, B).
-  ;; ancestor(A, B)?
+    ;; ancestor(A,B) :- parent(A,B).
+    ;; ancestor(A,B) :- parent(A,C), ancestor(C, B).
+    ;; ancestor(A, B)?
     (t/is (= #{[:ebbon :bob]
                [:bob :john]
                [:john :douglas]
@@ -3541,7 +3541,7 @@
                               [a :parent c]
                               (ancestor c b)]]})))
 
-  ;; ancestor(X,john)?
+    ;; ancestor(X,john)?
     (t/is (= #{[:bob]
                [:ebbon]}
              (xt/q (xt/db *api*)
@@ -3554,16 +3554,16 @@
                               (ancestor c b)]]})))
 
     (let [db-before (xt/db *api*)]
-    ;; parent(bob, john)-
+      ;; parent(bob, john)-
       (fix/submit+await-tx [[::xt/delete :bob]])
-    ;; parent(A,B)?
+      ;; parent(A,B)?
       (t/is (= #{[:john :douglas]
                  [:ebbon :bob]}
                (xt/q (xt/db *api*)
                      '{:find [a b]
                        :where [[a :parent b]]})))
 
-    ;; ancestor(A,B)?
+      ;; ancestor(A,B)?
       (t/is (= #{[:ebbon :bob]
                  [:john :douglas]}
                (xt/q (xt/db *api*)
@@ -3592,15 +3592,15 @@
                                   (ancestor c b)]]}))))))
 
 #_(t/deftest test-racket-datalog-path
-  ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
+    ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
     (fix/transact! *api* [{:xt/id :a :edge :b}
                           {:xt/id :b :edge :c}
                           {:xt/id :c :edge :d}
                           {:xt/id :d :edge :a}])
 
-  ;; path(X, Y) :- edge(X, Y).
-  ;; path(X, Y) :- edge(X, Z), path(Z, Y).
-  ;; path(X, Y)?
+    ;; path(X, Y) :- edge(X, Y).
+    ;; path(X, Y) :- edge(X, Z), path(Z, Y).
+    ;; path(X, Y)?
     (t/is (= #{[:a :a]
                [:a :d]
                [:a :c]
@@ -3627,14 +3627,14 @@
                               (path z y)]]}))))
 
 #_(t/deftest test-racket-datalog-revpath
-  ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
+    ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
     (fix/transact! *api* [{:xt/id :a :edge :b}
                           {:xt/id :b :edge :c}
                           {:xt/id :c :edge :d}
                           {:xt/id :d :edge :a}])
-  ;; path(X, Y) :- edge(X, Y).
-  ;; path(X, Y) :- path(X, Z), edge(Z, Y).
-  ;; path(X, Y)?
+    ;; path(X, Y) :- edge(X, Y).
+    ;; path(X, Y) :- path(X, Z), edge(Z, Y).
+    ;; path(X, Y)?
     (t/is (= #{[:a :a]
                [:a :d]
                [:a :c]
@@ -3661,16 +3661,16 @@
                               [z :edge y]]]}))))
 
 #_(t/deftest test-racket-datalog-bidipath
-  ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
+    ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
     (fix/transact! *api* [{:xt/id :a :edge :b}
                           {:xt/id :b :edge :c}
                           {:xt/id :c :edge :d}
                           {:xt/id :d :edge :a}])
 
-  ;; path(X, Y) :- edge(X, Y).
-  ;; path(X, Y) :- edge(X, Z), path(Z, Y).
-  ;; path(X, Y) :- path(X, Z), edge(Z, Y).
-  ;; path(X, Y)?
+    ;; path(X, Y) :- edge(X, Y).
+    ;; path(X, Y) :- edge(X, Z), path(Z, Y).
+    ;; path(X, Y) :- path(X, Z), edge(Z, Y).
+    ;; path(X, Y)?
     (t/is (= #{[:a :a]
                [:a :d]
                [:a :c]
@@ -3700,15 +3700,15 @@
                               [z :edge y]]]}))))
 
 #_(t/deftest test-racket-datalog-sym
-  ;; sym(a).
-  ;; sym(b).
-  ;; sym(c).
+    ;; sym(a).
+    ;; sym(b).
+    ;; sym(c).
     (fix/transact! *api* [{:xt/id :a}
                           {:xt/id :b}
                           {:xt/id :c}])
 
-  ;; perm(X,Y) :- sym(X), sym(Y), X != Y.
-  ;; perm(X, Y)?
+    ;; perm(X,Y) :- sym(X), sym(Y), X != Y.
+    ;; perm(X, Y)?
     (t/is (= #{[:a :c]
                [:a :b]
                [:c :a]
@@ -3739,7 +3739,7 @@
 
 #_(t/deftest test-literal-rule-arguments-bug-507
     (t/testing "range clause in rule"
-    ;; supplying 4 as the rule arg here is a necessary condition
+      ;; supplying 4 as the rule arg here is a necessary condition
       (t/is (= #{}
                (xt/q (xt/db *api*)
                      '{:find [f]
@@ -3760,18 +3760,18 @@
 ;; Test from Racket Datalog documentation:
 ;; https://docs.racket-lang.org/datalog/datalog.html
 #_(t/deftest test-racket-datalog-fib
-  ;; fib(0, 0).
-  ;; fib(1, 1).
+    ;; fib(0, 0).
+    ;; fib(1, 1).
 
-  ;;  fib(N, F) :- N != 1,
-  ;;               N != 0,
-  ;;               N1 :- -(N, 1),
-  ;;               N2 :- -(N, 2),
-  ;;               fib(N1, F1),
-  ;;               fib(N2, F2),
-  ;;               F :- +(F1, F2).
+    ;;  fib(N, F) :- N != 1,
+    ;;               N != 0,
+    ;;               N1 :- -(N, 1),
+    ;;               N2 :- -(N, 2),
+    ;;               fib(N1, F1),
+    ;;               fib(N2, F2),
+    ;;               F :- +(F1, F2).
 
-  ;;  fib(10, F)?
+    ;;  fib(10, F)?
     (let [fib-rules '[[(fib n f)
                        [(<= n 1)]
                        [(identity n) f]]
@@ -3808,8 +3808,8 @@
                           {:xt/id :george}
                           {:xt/id :hilary}])
 
-  ;; rl: sgc(X, X) :- person(X).
-  ;; r2: sgc(X, Y) :- par(X, X1), sgc(X1, Y1), par(Y, Y1).
+    ;; rl: sgc(X, X) :- person(X).
+    ;; r2: sgc(X, Y) :- par(X, X1), sgc(X1, Y1), par(Y, Y1).
     (t/is (= #{[:ann :ann]
                [:bertrand :bertrand]
                [:charles :charles]
@@ -3837,16 +3837,16 @@
                               [y :parent y1]]]}))))
 
 #_(t/deftest test-datalog-paper-stratified-datalog
-  ;; d(a, b), d(b, c) d(e, e)
+    ;; d(a, b), d(b, c) d(e, e)
     (fix/transact! *api* [{:xt/id :a :d :b}
                           {:xt/id :b :d :c}
                           {:xt/id :e :d :e}])
 
-  ;; rl: p(X, Y) :- not q(X, Y), s(X, Y).
-  ;; r2: q(K, Y) :- q(X, Z), q(Z, Y).
-  ;; r3: q(X, Y) :- d(X, Y), not r(X, Y).
-  ;; r4: r(X, Y) :- d(Y, X).
-  ;; r5: s(X, Y) :- q(X, Z), q(Y, T), X != Y
+    ;; rl: p(X, Y) :- not q(X, Y), s(X, Y).
+    ;; r2: q(K, Y) :- q(X, Z), q(Z, Y).
+    ;; r3: q(X, Y) :- d(X, Y), not r(X, Y).
+    ;; r4: r(X, Y) :- d(Y, X).
+    ;; r5: s(X, Y) :- q(X, Z), q(Y, T), X != Y
     (let [rules '[[(p x y)
                    (not (q x y))
                    (s x y)]
@@ -4268,8 +4268,8 @@
                                             [e2 :my-number n]]}))))))
 
 #_(comment
-  ;; repro for https://github.com/xtdb/xtdb/issues/443, don't have a solution yet though
-  ;; replacing x with 0..50 and y with 0..100 takes a long time.
+    ;; repro for https://github.com/xtdb/xtdb/issues/443, don't have a solution yet though
+    ;; replacing x with 0..50 and y with 0..100 takes a long time.
 
     (t/deftest multiple-joins-bug-443
       (doseq [x (range 5)]
@@ -4309,7 +4309,7 @@
                      :where [[?e :a-list (1 2 3)]]}))))
 
 #_(t/deftest falsey-values-bind-with-rules
-  ;; resolved in 20.05-1.8.4-alpha
+    ;; resolved in 20.05-1.8.4-alpha
     (fix/submit+await-tx [[::xt/put {:xt/id :a :att nil}]
                           [::xt/put {:xt/id :b :att :foo}]
                           [::xt/put {:xt/id :c :att false}]
@@ -4532,7 +4532,7 @@
     (fix/submit+await-tx [[::xt/put {:xt/id :ivan :name "Ivan", :foo :foo}]
                           [::xt/put {:xt/id :foo, :bar :bar}]])
 
-  ;; failed with 'circular dependency between ?foo and ?a'
+    ;; failed with 'circular dependency between ?foo and ?a'
     (with-open [db (xt/open-db *api*)]
       (t/is (= #{["Ivan" :bar]}
                (xt/q db '{:find [?a-name ?bar]
@@ -4554,16 +4554,16 @@
                           [::xt/put {:xt/id :b-5, :next :b-1}]])
 
     #_; FIXME this returns all the B's too
-      (t/is (= #{[:a-3] [:a-2] [:a-1] [:a-4]}
-               (xt/q (xt/db *api*)
-                     '{:find [node]
-                       :where [[end :xt/id :a-1]
-                               (pointsTo node end)]
-                       :rules [[(pointsTo start end)
-                                [start :next end]]
-                               [(pointsTo start end)
-                                [start :next intermediate]
-                                (pointsTo end intermediate)]]}))))
+    (t/is (= #{[:a-3] [:a-2] [:a-1] [:a-4]}
+             (xt/q (xt/db *api*)
+                   '{:find [node]
+                     :where [[end :xt/id :a-1]
+                             (pointsTo node end)]
+                     :rules [[(pointsTo start end)
+                              [start :next end]]
+                             [(pointsTo start end)
+                              [start :next intermediate]
+                              (pointsTo end intermediate)]]}))))
 
 ;; these aren't necessarily the best join orders, but just to give you a heads-up if something changes
 ;; only does the top-level queries, but again, hopefully enough to spot an unexpected change.
@@ -4602,7 +4602,7 @@
 #_(t/deftest test-watdiv-join-orders
     (letfn [(sanitise-join-order-var [v]
               (cond-> v
-              ;; assuming only one self-join per variable in each query
+                ;; assuming only one self-join per variable in each query
                 (and (symbol? v) (re-find #"^self-join_" (str v)))
                 (-> str (str/replace #"_\d+$" "_<gensym>") symbol)))]
 
@@ -4632,12 +4632,12 @@
                              [y :value #{:v1 :v2 :v3}]]})))
 
     #_; FIXME
-      (t/is (= #{[:x :y]}
-               (xt/q (xt/db *api*)
-                     '{:find [x y]
-                       :where [[x :y y]
-                               [x :value #{:v1 :v2}]
-                               [y :value #{:v1 :v2}]]}))))
+    (t/is (= #{[:x :y]}
+             (xt/q (xt/db *api*)
+                   '{:find [x y]
+                     :where [[x :y y]
+                             [x :value #{:v1 :v2}]
+                             [y :value #{:v1 :v2}]]}))))
 
 #_(t/deftest test-pred-variable-resolution-error-1731
     (fix/submit+await-tx [[::xt/put {:xt/id :foo, :type :some-value}]])

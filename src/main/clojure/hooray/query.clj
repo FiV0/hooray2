@@ -514,8 +514,7 @@
       true (compiled-find)
       (seq keys) (map (zipmap-fn find keys var->idx keyword))
       (seq strs) (map (zipmap-fn find strs var->idx str))
-      (seq syms) (map (zipmap-fn find syms var->idx symbol))
-      true set)))
+      (seq syms) (map (zipmap-fn find syms var->idx symbol)))))
 
 (comment
   (def q '{:find [x y (count z)]
