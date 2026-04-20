@@ -13,9 +13,9 @@
              [:db.attr/preds]
              [:db/valueType]
              [:db/doc]}
-           (h/q '{:find [?ident]
-                  :where [[?e :db/ident ?ident]]}
-                (h/db *node*)))))
+           (set (h/q '{:find [?ident]
+                       :where [[?e :db/ident ?ident]]}
+                     (h/db *node*))))))
 
 #_:clj-kondo/ignore
 (def marital-attr #{:single :married :unknown})
