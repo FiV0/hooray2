@@ -127,7 +127,7 @@
 (defn compile-query ^IncrementalPipeline [conformed-find var->idx compiled-patterns levels]
   (IncrementalPipeline.
    (IncrementalJoinOperator. compiled-patterns levels)
-   [(compile-find conformed-find var->idx) (IncrementalDistinct.)]))
+   [(compile-find conformed-find var->idx) #_(IncrementalDistinct.)]))
 
 ;; TODO unify this somehow with query/query
 (defn compile-incremental-q ^IncrementalJoin [db query]

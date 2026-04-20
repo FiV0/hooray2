@@ -167,6 +167,6 @@
       '{:find [city]
         :where [[e :city city]]}
 
-    (t/is (= [] (h/consume-delta! *inc-q*)))
+    (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))
     (h/transact fix/*node* [[:db/retractEntity :alice]])
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))))
