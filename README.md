@@ -85,7 +85,7 @@ I have written two blog posts about combining WCOJ with DBSP:
 ## Roadmap
 
 - Standard queries
-    - [x] Standard data pattern
+    - [x] Standard triple pattern
 	- [x] Or
 	- [x] And
 	- [x] Not
@@ -96,7 +96,7 @@ I have written two blog posts about combining WCOJ with DBSP:
 	- [x] aggregates
 	- [ ] pull
 - Incremental
-    - [x] Standard data pattern
+    - [x] Standard tirple pattern
 	- [ ] Or
 	- [ ] And
 	- [ ] Not
