@@ -42,6 +42,49 @@
        db))
 
 (comment
+  (d/create-database client {:db-name "set-semantics-vs-bag-semantics"})
+
+  (def conn (d/connect client {:db-name "set-semantics-vs-bag-semantics"}))
+
+  (def schema [{:db/ident :person/department
+                :db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/one}
+               {:db/ident :department/name
+                :db/valueType :db.type/string
+                :db/cardinality :db.cardinality/one}
+               {:db/ident :person/salary
+                :db/valueType :db.type/double
+                :db/cardinality :db.cardinality/one}
+               {:db/ident :department/domain
+                :db/valueType :db.type/string
+                :db/cardinality :db.cardinality/many}])
+
+  (d/transact conn {:tx-data schema})
+
+  (def data [{:person/department "it-department"
+              :person/salary 100.0}
+             {:person/department "it-department"
+              :person/salary 100.0}
+             [:db/add "it-department" :department/name   "IT deparment"]
+             [:db/add "it-department" :department/domain "programming"]
+             [:db/add "it-department" :department/domain "architecture design"]])
+
+  (d/transact conn {:tx-data data})
+
+
+  (d/q '{:find [?dept (sum ?salary)]
+         :with [?e]
+         :where [[?e :person/department ?d]
+                 [?e :person/salary     ?salary]
+                 [?d :department/name   ?dept]
+                 [?d :department/domain ?domain]]}
+       (d/db conn))
+
+  (d/delete-database client {:db-name "set-semantics-vs-bag-semantics"})
+
+  )
+
+(comment
   (d/create-database client {:db-name "not-unbound"})
 
   (def not-unbound-conn (d/connect client {:db-name "not-unbound"}))
