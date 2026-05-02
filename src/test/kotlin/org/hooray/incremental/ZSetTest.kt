@@ -210,6 +210,47 @@ class ZSetTest {
     }
 
     @Test
+    fun `test prefix extender difference emits extension set changes`() {
+        val oldExtender = ZSetPrefixExtender.fromZSet(
+            ZSet.fromMap(
+                mapOf(
+                    "removed" to IntegerWeight.ONE,
+                    "kept" to IntegerWeight.ONE
+                )
+            )
+        )
+        val newExtender = ZSetPrefixExtender.fromZSet(
+            ZSet.fromMap(
+                mapOf(
+                    "kept" to IntegerWeight.ONE,
+                    "added" to IntegerWeight.ONE
+                )
+            )
+        )
+
+        val diff = ZSetPrefixExtender.difference(newExtender, oldExtender)
+        val proposed = diff.propose(emptyList())
+
+        assertEquals(IntegerWeight(-1), proposed.weight("removed"))
+        assertEquals(IntegerWeight.ZERO, proposed.weight("kept"))
+        assertEquals(IntegerWeight.ONE, proposed.weight("added"))
+    }
+
+    @Test
+    fun `test prefix extender difference intersects candidate changes`() {
+        val oldExtender = ZSetPrefixExtender.fromZSet(ZSet.fromCollection<Any>(listOf("removed", "kept")))
+        val newExtender = ZSetPrefixExtender.fromZSet(ZSet.fromCollection<Any>(listOf("kept", "added")))
+        val candidates = ZSet.fromCollection<Any>(listOf("removed", "added"))
+
+        val diff = ZSetPrefixExtender.difference(newExtender, oldExtender)
+        val intersected = diff.intersect(emptyList(), candidates)
+
+        assertEquals(IntegerWeight(-1), intersected.weight("removed"))
+        assertEquals(IntegerWeight.ZERO, intersected.weight("kept"))
+        assertEquals(IntegerWeight.ONE, intersected.weight("added"))
+    }
+
+    @Test
     fun `test IntegerWeight add with overflow detection`() {
         val weight1 = IntegerWeight(Integer.MAX_VALUE)
         val weight2 = IntegerWeight(1)

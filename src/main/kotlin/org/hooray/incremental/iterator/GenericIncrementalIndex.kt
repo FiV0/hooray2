@@ -34,16 +34,21 @@ class GenericIncrementalIndex(val indexType: IndexType,
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun commit() {
-        when (accumulatedZSet) {
-            is IndexedZSet<*, IntegerWeight> -> {
-                accumulatedZSet = (accumulatedZSet as IndexedZSet<Any, IntegerWeight>).add(deltaZSet as IndexedZSet<Any, IntegerWeight>)
-            }
-            is ZSet<*, IntegerWeight> -> {
-                accumulatedZSet = (accumulatedZSet as ZSet<Any, IntegerWeight>).add(deltaZSet as ZSet<Any, IntegerWeight>)
-            }
+    private fun addZSets(left: IZSet<*, IntegerWeight, *>, right: IZSet<*, IntegerWeight, *>): IZSet<*, IntegerWeight, *> {
+        if (left.isEmpty()) return right
+        if (right.isEmpty()) return left
+        return when {
+            left is IndexedZSet<*, *> && right is IndexedZSet<*, *> ->
+                (left as IndexedZSet<Any, IntegerWeight>).add(right as IndexedZSet<Any, IntegerWeight>)
+            left is ZSet<*, *> && right is ZSet<*, *> ->
+                (left as ZSet<Any, IntegerWeight>).add(right as ZSet<Any, IntegerWeight>)
+            else -> throw IllegalStateException("Cannot add ${left::class} and ${right::class}")
         }
+    }
 
+    @Suppress("UNCHECKED_CAST")
+    override fun commit() {
+        accumulatedZSet = addZSets(accumulatedZSet, deltaZSet)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -67,6 +72,9 @@ class GenericIncrementalIndex(val indexType: IndexType,
 
     override val accumulated: ZSetPrefixExtender
         get() = indexToPrefixExtender(accumulatedZSet)
+
+    override val current: ZSetPrefixExtender
+        get() = indexToPrefixExtender(addZSets(accumulatedZSet, deltaZSet))
 
     override fun participatesInLevel(level: Int): Boolean = participatesInLevel.contains(level)
 }

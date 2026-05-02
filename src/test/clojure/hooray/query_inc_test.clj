@@ -177,7 +177,33 @@
    {:db/id :db/relation-s :db/ident :s/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
    {:db/id :db/relation-t :db/ident :t/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}])
 
-#_
+(deftest test-prefix-stable-extension-addition
+  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node*
+              [[:db/add 1 :r/to 2]
+               [:db/add 2 :s/to 4]])
+
+  (with-inc-q '{:find  [a b c]
+                :where [[a :r/to b]
+                        [b :s/to c]]}
+    (h/transact fix/*node* [[:db/add 2 :s/to 5]])
+    (t/is (= #{[[1 2 5] 1]}
+             (set (h/consume-delta! *inc-q*))))))
+
+(deftest test-prefix-stable-extension-retraction
+  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node*
+              [[:db/add 1 :r/to 2]
+               [:db/add 2 :s/to 4]
+               [:db/add 2 :s/to 5]])
+
+  (with-inc-q '{:find  [a b c]
+                :where [[a :r/to b]
+                        [b :s/to c]]}
+    (h/transact fix/*node* [[:db/retract 2 :s/to 5]])
+    (t/is (= #{[[1 2 5] -1]}
+             (set (h/consume-delta! *inc-q*))))))
+
 (deftest test-triangle-edge-deletion
   (h/transact fix/*node* triangle-schema)
   (h/transact fix/*node*

@@ -41,5 +41,8 @@ class GenericOrIncrementalIndex(val children: List<IncrementalIndex>) : Incremen
     override val accumulated: ZSetPrefixExtender
         get() = fromChildrenZSetPrefixExtenders(children.map { it.accumulated })
 
+    override val current: ZSetPrefixExtender
+        get() = fromChildrenZSetPrefixExtenders(children.map { it.current })
+
     override fun participatesInLevel(level: Int) = children.first().participatesInLevel(level)
 }
