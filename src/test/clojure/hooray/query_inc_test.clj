@@ -1,7 +1,8 @@
 (ns hooray.query-inc-test
   (:require [clojure.test :as t :refer [deftest is testing]]
             [hooray.fixtures :as fix]
-            [hooray.core :as h])
+            [hooray.core :as h]
+            [hooray.graph-gen :as g])
   (:import (clojure.lang ExceptionInfo)))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
@@ -171,32 +172,51 @@
     (h/transact fix/*node* [[:db/retractEntity :alice]])
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))))
 
+(def triangle-schema
+  [{:db/id :db/relation-r :db/ident :r/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
+   {:db/id :db/relation-s :db/ident :s/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
+   {:db/id :db/relation-t :db/ident :t/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}])
+
 #_
-(deftest only-change-in-later-join-variable
+(deftest test-triangle-edge-deletion
+  (h/transact fix/*node* triangle-schema)
   (h/transact fix/*node*
-              [{:db/id :db/relation-r :db/ident :r/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
-               {:db/id :db/relation-s :db/ident :s/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
-               {:db/id :db/relation-t :db/ident :t/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}])
-
-  ;; the triangle
-  (h/transact fix/*node*
-              [{:db/id 1 :r/to 2}
-               {:db/id 2 :s/to 3}
-               {:db/id 3 :t/to 1}])
-
-  (t/is (= [[1 2 3]]
-           (h/q '{:find  [a b c]
-                  :where [[a :r/to b]
-                          [b :s/to c]
-                          [c :t/to a]]}
-                (h/db fix/*node*))))
+              [[:db/add 1 :r/to 2]
+               [:db/add 2 :s/to 3]
+               [:db/add 3 :t/to 1]])
 
   (with-transaction-and-inc-q
-      [[:db/retract 2 :s/to 3]]
+      [[:db/retract 1 :r/to 2]]
 
       '{:find  [a b c]
         :where [[a :r/to b]
                 [b :s/to c]
                 [c :t/to a]]}
 
-    (t/is (= [[1 2 3]] (h/consume-delta! *inc-q*)))))
+    (t/is (= [[[1 2 3] -1]] (h/consume-delta! *inc-q*)))))
+
+(deftest test-triangle-wcoj-bad-case
+  ;; Blog example 2: even though R and S each have O(n) tuples on the
+  ;; join variable y, they share no value (R's y is odd, S's y is even),
+  ;; so inserting T(1,1) produces no triangles and the delta is empty.
+  ;; R = {(1,1) (1,3) (1,5)}
+  ;; S = {(2,1) (4,1) (6,1)}
+  ;; T = {} -> {(1,1)}
+  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node*
+              [[:db/add 1 :r/to 1]
+               [:db/add 1 :r/to 3]
+               [:db/add 1 :r/to 5]
+               [:db/add 2 :s/to 1]
+               [:db/add 4 :s/to 1]
+               [:db/add 6 :s/to 1]])
+
+  (with-transaction-and-inc-q
+      [[:db/add 1 :t/to 1]]
+
+      '{:find  [a b c]
+        :where [[a :r/to b]
+                [b :s/to c]
+                [c :t/to a]]}
+
+    (t/is (= [] (h/consume-delta! *inc-q*)))))
