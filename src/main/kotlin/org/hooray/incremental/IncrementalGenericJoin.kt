@@ -295,13 +295,3 @@ internal class IncrementalGenericJoinEngine(
     }
 }
 
-
-class IncrementalGenericJoin(private val relations: List<IncrementalIndex>, levels: Int) : IncrementalJoin<ResultTuple> {
-    private val engine = IncrementalGenericJoinEngine(relations, levels)
-
-    override fun join(deltas: ZSetIndices): ZSet<ResultTuple, IntegerWeight> {
-        val result = engine.eval(deltas)
-        engine.commit()
-        return result
-    }
-}

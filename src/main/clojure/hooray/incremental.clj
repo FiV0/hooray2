@@ -6,10 +6,10 @@
    [hooray.transact :as t]
    [hooray.util :as util]
    [hooray.zset :as zset]
-   [hooray.db :as db]
-   [hooray.error :as err])
+  [hooray.db :as db]
+  [hooray.error :as err])
   (:import
-   (org.hooray.incremental IntegerWeight IncrementalJoin IncrementalGenericJoin ZSetIndices IndexType
+   (org.hooray.incremental IntegerWeight ZSetIndices IndexType
                            IncrementalOperator IncrementalDistinct IncrementalJoinOperator IncrementalPipeline
                            TransformOperator)
    (org.hooray.incremental.iterator GenericIncrementalIndex)))
@@ -130,7 +130,7 @@
    [(compile-find conformed-find var->idx) #_(IncrementalDistinct.)]))
 
 ;; TODO unify this somehow with query/query
-(defn compile-incremental-q ^IncrementalJoin [db query]
+(defn compile-incremental-q ^IncrementalPipeline [db query]
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query/query query)
         var-order (query/variable-order* where)
