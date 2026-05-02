@@ -170,3 +170,33 @@
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))
     (h/transact fix/*node* [[:db/retractEntity :alice]])
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))))
+
+#_
+(deftest only-change-in-later-join-variable
+  (h/transact fix/*node*
+              [{:db/id :db/relation-r :db/ident :r/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
+               {:db/id :db/relation-s :db/ident :s/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
+               {:db/id :db/relation-t :db/ident :t/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}])
+
+  ;; the triangle
+  (h/transact fix/*node*
+              [{:db/id 1 :r/to 2}
+               {:db/id 2 :s/to 3}
+               {:db/id 3 :t/to 1}])
+
+  (t/is (= [[1 2 3]]
+           (h/q '{:find  [a b c]
+                  :where [[a :r/to b]
+                          [b :s/to c]
+                          [c :t/to a]]}
+                (h/db fix/*node*))))
+
+  (with-transaction-and-inc-q
+      [[:db/retract 2 :s/to 3]]
+
+      '{:find  [a b c]
+        :where [[a :r/to b]
+                [b :s/to c]
+                [c :t/to a]]}
+
+    (t/is (= [[1 2 3]] (h/consume-delta! *inc-q*)))))
