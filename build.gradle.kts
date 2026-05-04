@@ -24,6 +24,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.9.0")
 
+
     // kotlin
     implementation(kotlin("stdlib-jdk8"))
     implementation("org.jetbrains.kotlinx","kotlinx-collections-immutable","0.4.0")
@@ -44,14 +45,17 @@ dependencies {
     implementation("com.github.FiV0", "data.avl", "v0.0.27")
     implementation("com.aphyr", "bifurcan-clj","0.1.3")
 
+    // Datomic testing
+    devImplementation("com.datomic:peer:1.0.7622")
+
     // dev
-    devImplementation( "com.datomic", "local", "1.0.291")
+    devImplementation("com.datomic", "local", "1.0.291")
     devImplementation("datascript", "datascript", "1.7.8")
     devImplementation("com.xtdb", "xtdb-core", "1.24.3")
     devImplementation("vvvvalvalval", "scope-capture", "0.3.3")
 
     testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
-    nrepl("cider", "cider-nrepl", "0.58.0")
+    nrepl("cider", "cider-nrepl", "0.59.0")
 }
 
 tasks.test {
