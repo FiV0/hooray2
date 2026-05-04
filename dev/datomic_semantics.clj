@@ -44,3 +44,18 @@
                         [:db/add     "u" :user/primary-friend "f"]
                         [:db/add     "f" :user/handle         "bob"]
                         [:db/retract (get tempids "carol") :user/primary-friend (get tempids "bob")]]))))))
+
+(deftest tempid-only-in-value-pos
+  (with-conn
+    (fn []
+      (transact! [{:db/ident       :user/name
+                   :db/valueType   :db.type/string
+                   :db/cardinality :db.cardinality/one
+                   :db/unique      :db.unique/identity}
+                  {:db/ident       :user/follows
+                   :db/valueType   :db.type/ref
+                   :db/cardinality :db.cardinality/many}])
+
+      (is (thrown? Exception
+                   (transact! [[:db/add "alice" :user/name "alice"]
+                               [:db/add "alice" :user/follows "bob"]]))))))
