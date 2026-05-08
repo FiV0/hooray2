@@ -41,7 +41,7 @@ class IncrementalWcojJoinTest {
     }
 
     @Test
-    fun `two variable compiled pattern switches between AEV and AVE by term order`() {
+    fun `two variable compiled pattern switches between AEV and AVE by variable order`() {
         val pattern = CompiledTriplePattern(null, "attr", null, 0, 1)
         val indices = triple("e1", "attr", "v1")
 

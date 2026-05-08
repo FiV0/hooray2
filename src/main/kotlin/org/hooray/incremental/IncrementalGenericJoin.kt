@@ -26,6 +26,7 @@ interface ZSetPrefixExtender : LevelParticipation {
             }
 
             return object : ZSetPrefixExtender {
+
                 private fun candidates(prefix: Prefix): ZSet<Extension, IntegerWeight> {
                     val localPrefix = prefixExtractor(prefix)
                     return when (indexedZSet) {
@@ -41,10 +42,7 @@ interface ZSetPrefixExtender : LevelParticipation {
 
                 override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = candidates(prefix)
 
-                override fun intersect(
-                    prefix: Prefix,
-                    extensions: ZSet<Extension, IntegerWeight>
-                ): ZSet<Extension, IntegerWeight> =
+                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight> ): ZSet<Extension, IntegerWeight> =
                     candidates(prefix).equiJoin(extensions)
 
                 override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
@@ -63,30 +61,30 @@ data class CompiledTriplePattern(
     val entityConstant: Any?,
     val attribute: Any,
     val valueConstant: Any?,
-    val entityVarIndex: Int,
-    val valueVarIndex: Int
+    val entityVarCanonicalIndex: Int,
+    val valueVarCanonicalIndex: Int
 ) {
     fun variableIndexes(): List<Int> =
-        listOf(entityVarIndex, valueVarIndex).filter { it >= 0 }.distinct()
+        listOf(entityVarCanonicalIndex, valueVarCanonicalIndex).filter { it >= 0 }.distinct()
 
     fun participatesInCanonicalLevel(level: Int): Boolean =
-        entityVarIndex == level || valueVarIndex == level
+        entityVarCanonicalIndex == level || valueVarCanonicalIndex == level
 
-    fun extender(indices: ZSetIndices, termOrder: List<Int>): ZSetPrefixExtender {
-        val entityLevel = if (entityVarIndex >= 0) termOrder.indexOf(entityVarIndex) else -1
-        val valueLevel = if (valueVarIndex >= 0) termOrder.indexOf(valueVarIndex) else -1
+    fun extender(indices: ZSetIndices, variableOrder: List<Int>): ZSetPrefixExtender {
+        val entityLevel = if (entityVarCanonicalIndex >= 0) variableOrder.indexOf(entityVarCanonicalIndex) else -1
+        val valueLevel = if (valueVarCanonicalIndex >= 0) variableOrder.indexOf(valueVarCanonicalIndex) else -1
 
         val (indexedZSet, fixedPrefix, participatingLevels) = when {
-            entityConstant != null && valueVarIndex >= 0 -> {
+            entityConstant != null && valueVarCanonicalIndex >= 0 -> {
                 TripleIndex(indices.aev, listOf(attribute, entityConstant), listOf(valueLevel))
             }
-            valueConstant != null && entityVarIndex >= 0 -> {
+            valueConstant != null && entityVarCanonicalIndex >= 0 -> {
                 TripleIndex(indices.ave, listOf(attribute, valueConstant), listOf(entityLevel))
             }
-            entityVarIndex >= 0 && valueVarIndex >= 0 && entityLevel < valueLevel -> {
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 && entityLevel < valueLevel -> {
                 TripleIndex(indices.aev, listOf(attribute), listOf(entityLevel, valueLevel))
             }
-            entityVarIndex >= 0 && valueVarIndex >= 0 -> {
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 -> {
                 TripleIndex(indices.ave, listOf(attribute), listOf(valueLevel, entityLevel))
             }
             else -> throw IllegalArgumentException("Unsupported compiled triple pattern $this")
@@ -135,7 +133,7 @@ internal class IncrementalWcojJoinEngine(
     private var oldState: ZSetIndices = emptyZSetIndices()
     private var pendingDelta: ZSetIndices? = null
 
-    private fun termOrder(deltaPattern: CompiledTriplePattern): List<Int> {
+    private fun variableOrderForDeltaTerm(deltaPattern: CompiledTriplePattern): List<Int> {
         val deltaVariables = deltaPattern.variableIndexes()
         val remaining = (0 until levels).filterNot { deltaVariables.contains(it) }
         return deltaVariables + remaining
@@ -172,14 +170,14 @@ internal class IncrementalWcojJoinEngine(
         return prefixes
     }
 
-    private fun permuteToCanonical(termResult: ResultZSet, order: List<Int>): ResultZSet {
-        if (order == (0 until levels).toList()) return termResult
+    private fun permuteToCanonical(termResult: ResultZSet, variableOrder: List<Int>): ResultZSet {
+        if (variableOrder == (0 until levels).toList()) return termResult
 
         val result = mutableMapOf<ResultTuple, IntegerWeight>()
         for ((tuple, weight) in termResult.entries()) {
             val canonical = MutableList<Any?>(levels) { null }
-            for ((termIndex, canonicalIndex) in order.withIndex()) {
-                canonical[canonicalIndex] = tuple[termIndex]
+            for ((variableOrderIndex, canonicalIndex) in variableOrder.withIndex()) {
+                canonical[canonicalIndex] = tuple[variableOrderIndex]
             }
             @Suppress("UNCHECKED_CAST")
             val resultTuple = canonical as ResultTuple
@@ -196,17 +194,17 @@ internal class IncrementalWcojJoinEngine(
         var result = ZSet.empty<ResultTuple>()
 
         for (deltaIndex in patterns.indices.reversed()) {
-            val order = termOrder(patterns[deltaIndex])
+            val variableOrder = variableOrderForDeltaTerm(patterns[deltaIndex])
             val extenders = patterns.mapIndexed { patternIndex, pattern ->
                 val state = when {
                     patternIndex < deltaIndex -> oldState
                     patternIndex == deltaIndex -> input
                     else -> newState
                 }
-                pattern.extender(state, order)
+                pattern.extender(state, variableOrder)
             }
 
-            val term = permuteToCanonical(runWeightedWcoj(extenders), order)
+            val term = permuteToCanonical(runWeightedWcoj(extenders), variableOrder)
             result = result.add(term)
         }
 
