@@ -9,10 +9,10 @@
   [hooray.db :as db]
   [hooray.error :as err])
   (:import
-   (org.hooray.incremental IntegerWeight ZSetIndices IndexType
+   (org.hooray.incremental IntegerWeight ZSetIndices
+                           CompiledTriplePattern
                            IncrementalOperator IncrementalDistinct IncrementalJoinOperator IncrementalPipeline
-                           TransformOperator)
-   (org.hooray.incremental.iterator GenericIncrementalIndex)))
+                           TransformOperator)))
 
 (set! *warn-on-reflection* true)
 
@@ -91,18 +91,17 @@
                   (err/unsupported-ex)
 
                   [[:constant e-const] [:constant a-const] [:variable v-var]]
-                  (GenericIncrementalIndex. IndexType/EAV [e-const a-const] [(get var-to-index v-var)])
+                  (CompiledTriplePattern. e-const a-const nil -1 (int (get var-to-index v-var)))
 
                   [[:variable e-var] [:constant a-const] [:constant v-const]]
-                  (GenericIncrementalIndex. IndexType/AVE [a-const v-const] [(get var-to-index e-var)])
+                  (CompiledTriplePattern. nil a-const v-const (int (get var-to-index e-var)) -1)
 
                   [[:variable e-var] [:constant a-const] [:variable v-var]]
-                  (let [e-index (var-to-index e-var)
-                        v-index (var-to-index v-var)
-                        [index-type participates-in-level] (if (< e-index v-index)
-                                                             [IndexType/AEV [e-index v-index]]
-                                                             [IndexType/AVE [v-index e-index]])]
-                    (GenericIncrementalIndex. index-type [a-const] participates-in-level))
+                  (CompiledTriplePattern. nil
+                                          a-const
+                                          nil
+                                          (int (get var-to-index e-var))
+                                          (int (get var-to-index v-var)))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       (throw (ex-info "Unknown or not yet supported where clause type" {:where-clause where-clause})))))

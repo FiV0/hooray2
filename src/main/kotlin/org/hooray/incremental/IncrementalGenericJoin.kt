@@ -1,297 +1,229 @@
 package org.hooray.incremental
 
+import kotlinx.collections.immutable.persistentListOf
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.ResultTuple
 import org.hooray.iterator.LevelParticipation
-import kotlinx.collections.immutable.persistentListOf
 
 /**
- * A prefix extender over a ZSet - mirrors the non-incremental interface.
+ * A weighted prefix extender used by the WCOJ term evaluator.
  */
-interface ZSetPrefixExtender {
+interface ZSetPrefixExtender : LevelParticipation {
     fun count(prefix: Prefix): Int
     fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight>
     fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight>
 
     companion object {
-        fun fromZSet(zset: ZSet<Extension, IntegerWeight>): ZSetPrefixExtender {
-            return object : ZSetPrefixExtender {
-                override fun count(prefix: Prefix): Int = zset.size
-
-                // Here we assume that if we get a simple ZSet the prefix is not relevant for constraining the index.
-                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = zset
-
-                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    zset.equiJoin(extensions)
-            }
-        }
-
         @Suppress("UNCHECKED_CAST")
-        // The prefix might contain more variables than the index participates in, so we need a way to extract the relevant part.
-        // TODO This constant prefix extraction will definitely cost us here.
-        fun fromIndexedZSet(indexedZSet: IndexedZSet<*, IntegerWeight>, prefixExtracter: (Prefix) -> Prefix): ZSetPrefixExtender {
-            return object : ZSetPrefixExtender {
-                override fun count(prefix: Prefix): Int = indexedZSet.getByPrefix(prefixExtracter(prefix))?.size ?: 0
-
-                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> =
-                    (indexedZSet.getByPrefix(prefixExtracter(prefix))?.asZSetView() ?: ZSet.empty()) as ZSet<Extension, IntegerWeight>
-
-                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    ((indexedZSet.getByPrefix(prefixExtracter(prefix))?.asZSetView() ?: ZSet.empty()) as ZSet<Extension, IntegerWeight>).equiJoin(extensions)
+        fun fromIndexedZSet(
+            indexedZSet: IZSet<*, IntegerWeight, *>,
+            participatingLevels: List<Int>
+        ): ZSetPrefixExtender {
+            val levelSet = participatingLevels.toSet()
+            val prefixExtractor: (Prefix) -> Prefix = { prefix ->
+                prefix.filterIndexed { index, _ -> levelSet.contains(index) }
             }
-        }
 
-        fun difference(newExtender: ZSetPrefixExtender, oldExtender: ZSetPrefixExtender): ZSetPrefixExtender {
             return object : ZSetPrefixExtender {
-                override fun count(prefix: Prefix): Int =
-                    maxOf(newExtender.count(prefix), oldExtender.count(prefix))
+                private fun candidates(prefix: Prefix): ZSet<Extension, IntegerWeight> {
+                    val localPrefix = prefixExtractor(prefix)
+                    return when (indexedZSet) {
+                        is IndexedZSet<*, IntegerWeight> ->
+                            (indexedZSet.getByPrefix(localPrefix)?.asZSetView() ?: ZSet.empty()) as ZSet<Extension, IntegerWeight>
+                        is ZSet<*, IntegerWeight> ->
+                            if (localPrefix.isEmpty()) indexedZSet as ZSet<Extension, IntegerWeight> else ZSet.empty()
+                        else -> throw IllegalArgumentException("Unsupported IZSet type ${indexedZSet::class}")
+                    }
+                }
 
-                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> =
-                    oldExtender.propose(prefix).negate().add(newExtender.propose(prefix))
+                override fun count(prefix: Prefix): Int = candidates(prefix).size
 
-                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                    oldExtender.intersect(prefix, extensions).negate().add(newExtender.intersect(prefix, extensions))
+                override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = candidates(prefix)
+
+                override fun intersect(
+                    prefix: Prefix,
+                    extensions: ZSet<Extension, IntegerWeight>
+                ): ZSet<Extension, IntegerWeight> =
+                    candidates(prefix).equiJoin(extensions)
+
+                override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
             }
         }
     }
 }
 
 /**
- * Manages the incremental state for a single indexed relation.
- * Provides separate extenders for delta and accumulated state.
+ * Compiled metadata for one supported incremental triple pattern.
+ *
+ * Missing variable positions are represented as -1 so Clojure can call this
+ * constructor without nullable integer interop surprises.
  */
-interface IncrementalIndex : LevelParticipation {
-    /** Receive the delta for this transaction */
-    fun receiveDelta(delta: ZSetIndices)
+data class CompiledTriplePattern(
+    val entityConstant: Any?,
+    val attribute: Any,
+    val valueConstant: Any?,
+    val entityVarIndex: Int,
+    val valueVarIndex: Int
+) {
+    fun variableIndexes(): List<Int> =
+        listOf(entityVarIndex, valueVarIndex).filter { it >= 0 }.distinct()
 
-    /** Merge current delta into accumulated state (call after join completes) */
-    fun commit()
+    fun participatesInCanonicalLevel(level: Int): Boolean =
+        entityVarIndex == level || valueVarIndex == level
 
-    /** Extender over the current delta */
-    val delta: ZSetPrefixExtender
+    fun extender(indices: ZSetIndices, termOrder: List<Int>): ZSetPrefixExtender {
+        val entityLevel = if (entityVarIndex >= 0) termOrder.indexOf(entityVarIndex) else -1
+        val valueLevel = if (valueVarIndex >= 0) termOrder.indexOf(valueVarIndex) else -1
 
-    /** Extender over z⁻¹ (accumulated previous state) */
-    val accumulated: ZSetPrefixExtender
+        val (indexedZSet, fixedPrefix, participatingLevels) = when {
+            entityConstant != null && valueVarIndex >= 0 -> {
+                TripleIndex(indices.aev, listOf(attribute, entityConstant), listOf(valueLevel))
+            }
+            valueConstant != null && entityVarIndex >= 0 -> {
+                TripleIndex(indices.ave, listOf(attribute, valueConstant), listOf(entityLevel))
+            }
+            entityVarIndex >= 0 && valueVarIndex >= 0 && entityLevel < valueLevel -> {
+                TripleIndex(indices.aev, listOf(attribute), listOf(entityLevel, valueLevel))
+            }
+            entityVarIndex >= 0 && valueVarIndex >= 0 -> {
+                TripleIndex(indices.ave, listOf(attribute), listOf(valueLevel, entityLevel))
+            }
+            else -> throw IllegalArgumentException("Unsupported compiled triple pattern $this")
+        }
 
-    /** Extender over z⁻¹ + Δz (the relation state after the current transaction) */
-    val current: ZSetPrefixExtender
+        val localIndex = indexedZSet.getByPrefix(fixedPrefix) ?: emptyIndexFor(participatingLevels.size)
+        return ZSetPrefixExtender.fromIndexedZSet(localIndex, participatingLevels)
+    }
+
+    private data class TripleIndex(
+        val indexedZSet: IndexedZSet<Any, IntegerWeight>,
+        val fixedPrefix: Prefix,
+        val participatingLevels: List<Int>
+    )
 }
 
-/**
- * Shared implementation of the corrected level-wise incremental GenericJoin algorithm.
- *
- * In the math, P_i is the materialized Z-set of prefixes after binding i
- * variables, with P_0 being the singleton empty prefix. In this zero-based
- * implementation, oldPrefixStates[level] stores P_{level + 1}.
- *
- * ΔP_i is the Z-set of changed prefixes for the current transaction.
- *
- * For every level i we compute:
- *
- * ΔP_i = Extend_i(ΔP_{i-1}, E_i_new)
- *      + Extend_i(P_{i-1_old}, ΔE_i)
- *
- * The first term carries prefixes that changed at the previous level through the
- * new extension relation. The second term is the important corrected part: it
- * handles old prefixes whose valid next extensions changed even though the
- * prefix itself did not appear in ΔP_{i-1}.
- */
-internal class IncrementalGenericJoinEngine(
-    private val relations: List<IncrementalIndex>,
+private fun emptyIndexFor(levels: Int): IZSet<Any, IntegerWeight, *> =
+    when (levels) {
+        1 -> ZSet.empty<Any>()
+        2 -> IndexedZSet.empty<Any, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
+        else -> throw IllegalArgumentException("Unsupported triple variable count $levels")
+    }
+
+private fun addIndexedZSets(
+    left: IndexedZSet<Any, IntegerWeight>,
+    right: IndexedZSet<Any, IntegerWeight>
+): IndexedZSet<Any, IntegerWeight> =
+    when {
+        left.isEmpty() -> right
+        right.isEmpty() -> left
+        else -> left.add(right)
+    }
+
+fun ZSetIndices.add(other: ZSetIndices): ZSetIndices =
+    ZSetIndices(
+        addIndexedZSets(eav, other.eav),
+        addIndexedZSets(aev, other.aev),
+        addIndexedZSets(ave, other.ave),
+        addIndexedZSets(vae, other.vae)
+    )
+
+internal class IncrementalWcojJoinEngine(
+    private val patterns: List<CompiledTriplePattern>,
     private val levels: Int
 ) {
-    private val relationSets: List<List<IncrementalIndex>> = List(levels) { level ->
-        relations.filter { it.participatesInLevel(level) }
+    private var oldState: ZSetIndices = emptyZSetIndices()
+    private var pendingDelta: ZSetIndices? = null
+
+    private fun termOrder(deltaPattern: CompiledTriplePattern): List<Int> {
+        val deltaVariables = deltaPattern.variableIndexes()
+        val remaining = (0 until levels).filterNot { deltaVariables.contains(it) }
+        return deltaVariables + remaining
     }
 
-    private var oldPrefixStates: List<IZSet<Any, IntegerWeight, *>> = List(levels) { level ->
-        emptyPrefixState(level)
-    }
+    private fun runWeightedWcoj(extenders: List<ZSetPrefixExtender>): ResultZSet {
+        var prefixes = ZSet.singleton<ResultTuple>(persistentListOf())
 
-    private var pendingPrefixStates: List<IZSet<Any, IntegerWeight, *>>? = null
+        for (level in 0 until levels) {
+            val participating = extenders.filter { it.participatesInLevel(level) }
+            if (participating.isEmpty()) continue
 
-    private fun emptyPrefixState(level: Int): IZSet<Any, IntegerWeight, *> =
-        if (level == 0) ZSet.empty<Any>() else IndexedZSet.empty<Any, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE)
+            var nextPrefixes = ZSet.empty<ResultTuple>()
+            for ((prefix, prefixWeight) in prefixes.entries()) {
+                val minIndex = participating.indices.minBy { participating[it].count(prefix) }
+                var extensions = participating[minIndex].propose(prefix)
 
-    @Suppress("UNCHECKED_CAST")
-    private fun addPrefixStates(
-        left: IZSet<Any, IntegerWeight, *>,
-        right: IZSet<Any, IntegerWeight, *>
-    ): IZSet<Any, IntegerWeight, *> {
-        if (left.isEmpty()) return right
-        if (right.isEmpty()) return left
-        return when {
-            left is ZSet<*, *> && right is ZSet<*, *> ->
-                (left as ZSet<Any, IntegerWeight>).add(right as ZSet<Any, IntegerWeight>)
-            left is IndexedZSet<*, *> && right is IndexedZSet<*, *> ->
-                (left as IndexedZSet<Any, IntegerWeight>).add(right as IndexedZSet<Any, IntegerWeight>)
-            else -> throw IllegalStateException("Cannot add prefix states ${left::class} and ${right::class}")
+                for (i in participating.indices) {
+                    if (i != minIndex) {
+                        extensions = participating[i].intersect(prefix, extensions)
+                    }
+                }
+
+                for ((extension, extensionWeight) in extensions.entries()) {
+                    val nextPrefix = (prefix + extension) as ResultTuple
+                    val weight = prefixWeight.multiply(extensionWeight)
+                    nextPrefixes = nextPrefixes.add(ZSet.singleton(nextPrefix, weight))
+                }
+            }
+            prefixes = nextPrefixes
+            if (prefixes.isEmpty()) break
         }
+
+        return prefixes
     }
 
-    private fun currentExtensions(prefix: Prefix, relations: List<IncrementalIndex>): ZSet<Extension, IntegerWeight> =
-        intersectExtensions(prefix, relations.map { it.current })
+    private fun permuteToCanonical(termResult: ResultZSet, order: List<Int>): ResultZSet {
+        if (order == (0 until levels).toList()) return termResult
 
-    /**
-     * Intersect a fixed list of extenders for one prefix.
-     *
-     * This is the standard GenericJoin level step: start with the smallest
-     * candidate set and intersect all other participating relations into it.
-     */
-    private fun intersectExtensions(prefix: Prefix, extenders: List<ZSetPrefixExtender>): ZSet<Extension, IntegerWeight> {
-        if (extenders.isEmpty()) return ZSet.empty()
-
-        // Start with the smallest candidate set, preserving the WCOJ selection heuristic.
-        val minIndex = extenders.indices.minBy { extenders[it].count(prefix) }
-        var extensions = extenders[minIndex].propose(prefix)
-
-        // Intersect the proposed candidates with every other relation at this level.
-        for (i in extenders.indices) {
-            if (i != minIndex) {
-                extensions = extenders[i].intersect(prefix, extensions)
+        val result = mutableMapOf<ResultTuple, IntegerWeight>()
+        for ((tuple, weight) in termResult.entries()) {
+            val canonical = MutableList<Any?>(levels) { null }
+            for ((termIndex, canonicalIndex) in order.withIndex()) {
+                canonical[canonicalIndex] = tuple[termIndex]
+            }
+            @Suppress("UNCHECKED_CAST")
+            val resultTuple = canonical as ResultTuple
+            result.merge(resultTuple, weight) { left, right ->
+                val sum = left.add(right)
+                if (sum.isZero()) null else sum
             }
         }
-
-        return extensions
-    }
-
-    /**
-     * Compute ΔE_i for one prefix using the telescoping expansion:
-     *
-     * ΔE_i = Σ_t old_1 ⋈ ... ⋈ old_{t-1} ⋈ Δ_t ⋈ new_{t+1} ⋈ ... ⋈ new_n
-     *
-     * Δ_t is not the raw relation delta. It is the change in that relation's
-     * extension set for this level: E_t_new - E_t_old. This distinction matters
-     * for non-leaf prefixes, where adding or removing a tuple under an existing
-     * prefix may leave the projected extension set unchanged.
-     */
-    private fun changedExtensions(prefix: Prefix, relations: List<IncrementalIndex>): ZSet<Extension, IntegerWeight> {
-        if (relations.isEmpty()) return ZSet.empty()
-
-        // Any deterministic order is correct for the telescoping sum. Use the
-        // current candidate count so small extension sets tend to appear early.
-        val orderedRelations = relations.sortedBy { it.current.count(prefix) }
-        var result = ZSet.empty<Extension>()
-
-        for (deltaIndex in orderedRelations.indices) {
-            val deltaExtender = ZSetPrefixExtender.difference(
-                orderedRelations[deltaIndex].current,
-                orderedRelations[deltaIndex].accumulated
-            )
-
-            // Start the term at Δ_t: the changed extension set of one relation.
-            var term = deltaExtender.propose(prefix)
-
-            // Intersect old relations before Δ_t.
-            for (oldIndex in 0 until deltaIndex) {
-                term = orderedRelations[oldIndex].accumulated.intersect(prefix, term)
-            }
-
-            // Intersect new relations after Δ_t.
-            for (newIndex in (deltaIndex + 1) until orderedRelations.size) {
-                term = orderedRelations[newIndex].current.intersect(prefix, term)
-            }
-
-            // Add this telescoping term into ΔE_i.
-            result = result.add(term)
-        }
-
-        return result
-    }
-
-    private fun extensionDeltaExtender(relations: List<IncrementalIndex>): ZSetPrefixExtender {
-        return object : ZSetPrefixExtender {
-            override fun count(prefix: Prefix): Int = changedExtensions(prefix, relations).size
-
-            override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> =
-                changedExtensions(prefix, relations)
-
-            override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                changedExtensions(prefix, relations).equiJoin(extensions)
-        }
-    }
-
-    private fun currentExtender(relations: List<IncrementalIndex>): ZSetPrefixExtender {
-        return object : ZSetPrefixExtender {
-            override fun count(prefix: Prefix): Int = currentExtensions(prefix, relations).size
-
-            override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> =
-                currentExtensions(prefix, relations)
-
-            override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
-                currentExtensions(prefix, relations).equiJoin(extensions)
-        }
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun extendRoot(extensions: ZSet<Extension, IntegerWeight>): IZSet<Any, IntegerWeight, *> =
-        extensions as ZSet<Any, IntegerWeight>
-
-    @Suppress("UNCHECKED_CAST")
-    private fun extendPrefixes(
-        prefixes: IZSet<Any, IntegerWeight, *>,
-        prefixSize: Int,
-        extender: ZSetPrefixExtender
-    ): IZSet<Any, IntegerWeight, *> {
-        if (prefixes.isEmpty()) return emptyPrefixState(prefixSize)
-
-        return prefixes.extendLeaves { prefix, weight ->
-            require(prefix.size == prefixSize) { "Prefix size ${prefix.size} does not match current level $prefixSize" }
-            extender.propose(prefix).multiply(weight)
-        } as IZSet<Any, IntegerWeight, *>
+        return ZSet.fromMap(result)
     }
 
     fun eval(input: ZSetIndices): ResultZSet {
-        // 1. Distribute relation deltas. Relations now expose both E_old and E_new.
-        relations.forEach { rel -> rel.receiveDelta(input) }
+        val newState = oldState.add(input)
+        var result = ZSet.empty<ResultTuple>()
 
-        val newPrefixStates = MutableList(levels) { level -> emptyPrefixState(level) }
-        var previousDelta: IZSet<Any, IntegerWeight, *> = ZSet.empty<Any>()
+        for (deltaIndex in patterns.indices.reversed()) {
+            val order = termOrder(patterns[deltaIndex])
+            val extenders = patterns.mapIndexed { patternIndex, pattern ->
+                val state = when {
+                    patternIndex < deltaIndex -> oldState
+                    patternIndex == deltaIndex -> input
+                    else -> newState
+                }
+                pattern.extender(state, order)
+            }
 
-        for (level in 0 until levels) {
-            // The code-level `level` computes the math-level ΔP_{level + 1}.
-            val participating = relationSets[level]
-
-            // 2. Build changed extensions ΔE_i for this level.
-            val deltaExtensions = extensionDeltaExtender(participating)
-
-            // 3. Extend changed prefixes through the new extension relation:
-            //    Extend_i(ΔP_{i-1}, E_i_new).
-            val changedPrefixTerm =
-                if (level == 0)
-                    emptyPrefixState(level)
-                else
-                    extendPrefixes(previousDelta, level, currentExtender(participating))
-
-            // 4. Extend old prefixes through changed extensions:
-            //    Extend_i(P_{i-1_old}, ΔE_i).
-            val oldPrefixTerm =
-                if (level == 0)
-                    extendRoot(deltaExtensions.propose(persistentListOf()))
-                else
-                    extendPrefixes(oldPrefixStates[level - 1], level, deltaExtensions)
-
-            // 5. Add both terms to obtain ΔP_i.
-            val levelDelta = addPrefixStates(changedPrefixTerm, oldPrefixTerm)
-
-            // 6. Materialize pending P_new_i = P_old_i + ΔP_i.
-            newPrefixStates[level] = addPrefixStates(oldPrefixStates[level], levelDelta)
-
-            previousDelta = levelDelta
+            val term = permuteToCanonical(runWeightedWcoj(extenders), order)
+            result = result.add(term)
         }
 
-        pendingPrefixStates = newPrefixStates
-        return previousDelta.flatZSet()
+        pendingDelta = input
+        return result
     }
 
     fun commit() {
-        // Commit relation states first, so their z⁻¹ matches the prefix states below.
-        relations.forEach { it.commit() }
-
-        // Advance the materialized prefix states from P_old to P_new.
-        pendingPrefixStates?.let { oldPrefixStates = it }
-        pendingPrefixStates = null
+        pendingDelta?.let { oldState = oldState.add(it) }
+        pendingDelta = null
     }
 }
 
+fun emptyZSetIndices(): ZSetIndices =
+    ZSetIndices(
+        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
+        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
+        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
+        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE)
+    )
