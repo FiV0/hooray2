@@ -33,7 +33,8 @@ class IncrementalWcojJoinTest {
     fun `compiled pattern with fixed entity reads AEV`() {
         val pattern = CompiledTriplePattern("e1", "attr", null, -1, 0)
         val indices = triple("e1", "attr", "v1", IntegerWeight(3))
-        val extender = pattern.extender(indices, listOf(0))
+        pattern.receiveDelta(indices)
+        val extender = pattern.view(listOf(0), ArrangementState.DELTA).toExtender()
 
         val proposed = extender.propose(emptyList())
 
@@ -44,12 +45,33 @@ class IncrementalWcojJoinTest {
     fun `two variable compiled pattern switches between AEV and AVE by variable order`() {
         val pattern = CompiledTriplePattern(null, "attr", null, 0, 1)
         val indices = triple("e1", "attr", "v1")
+        pattern.receiveDelta(indices)
 
-        val entityFirst = pattern.extender(indices, listOf(0, 1)).propose(emptyList())
-        val valueFirst = pattern.extender(indices, listOf(1, 0)).propose(emptyList())
+        val entityFirst = pattern.view(listOf(0, 1), ArrangementState.DELTA).toExtender().propose(emptyList())
+        val valueFirst = pattern.view(listOf(1, 0), ArrangementState.DELTA).toExtender().propose(emptyList())
 
         assertEquals(IntegerWeight.ONE, entityFirst.weight("e1"))
         assertEquals(IntegerWeight.ONE, valueFirst.weight("v1"))
+    }
+
+    @Test
+    fun `compiled pattern exposes old delta and current arranged views`() {
+        val pattern = CompiledTriplePattern(null, "attr", null, 0, 1)
+        pattern.receiveDelta(triple("old-e", "attr", "old-v"))
+        pattern.commit()
+
+        pattern.receiveDelta(triple("new-e", "attr", "new-v"))
+
+        val oldView = pattern.view(listOf(0, 1), ArrangementState.OLD).toExtender()
+        val deltaView = pattern.view(listOf(0, 1), ArrangementState.DELTA).toExtender()
+        val currentView = pattern.view(listOf(0, 1), ArrangementState.CURRENT).toExtender()
+
+        assertEquals(IntegerWeight.ONE, oldView.propose(emptyList()).weight("old-e"))
+        assertEquals(IntegerWeight.ZERO, oldView.propose(emptyList()).weight("new-e"))
+        assertEquals(IntegerWeight.ZERO, deltaView.propose(emptyList()).weight("old-e"))
+        assertEquals(IntegerWeight.ONE, deltaView.propose(emptyList()).weight("new-e"))
+        assertEquals(IntegerWeight.ONE, currentView.propose(emptyList()).weight("old-e"))
+        assertEquals(IntegerWeight.ONE, currentView.propose(emptyList()).weight("new-e"))
     }
 
     @Test

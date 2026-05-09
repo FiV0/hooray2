@@ -26,7 +26,6 @@ interface ZSetPrefixExtender : LevelParticipation {
             }
 
             return object : ZSetPrefixExtender {
-
                 private fun candidates(prefix: Prefix): ZSet<Extension, IntegerWeight> {
                     val localPrefix = prefixExtractor(prefix)
                     return when (indexedZSet) {
@@ -42,13 +41,32 @@ interface ZSetPrefixExtender : LevelParticipation {
 
                 override fun propose(prefix: Prefix): ZSet<Extension, IntegerWeight> = candidates(prefix)
 
-                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight> ): ZSet<Extension, IntegerWeight> =
+                override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
                     candidates(prefix).equiJoin(extensions)
 
                 override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
             }
         }
     }
+}
+
+enum class ArrangementState {
+    OLD,
+    DELTA,
+    CURRENT
+}
+
+data class ArrangedView(
+    val index: IZSet<Any, IntegerWeight, *>,
+    val participatingLevels: List<Int>
+) {
+    fun toExtender(): ZSetPrefixExtender =
+        ZSetPrefixExtender.fromIndexedZSet(index, participatingLevels)
+}
+
+private enum class ArrangementKind {
+    AEV,
+    AVE
 }
 
 /**
@@ -64,41 +82,102 @@ data class CompiledTriplePattern(
     val entityVarCanonicalIndex: Int,
     val valueVarCanonicalIndex: Int
 ) {
+    private var oldAev: IZSet<Any, IntegerWeight, *>? = null
+    private var oldAve: IZSet<Any, IntegerWeight, *>? = null
+    private var pendingDeltaAev: IZSet<Any, IntegerWeight, *>? = null
+    private var pendingDeltaAve: IZSet<Any, IntegerWeight, *>? = null
+
     fun variableIndexes(): List<Int> =
         listOf(entityVarCanonicalIndex, valueVarCanonicalIndex).filter { it >= 0 }.distinct()
 
     fun participatesInCanonicalLevel(level: Int): Boolean =
         entityVarCanonicalIndex == level || valueVarCanonicalIndex == level
 
-    fun extender(indices: ZSetIndices, variableOrder: List<Int>): ZSetPrefixExtender {
+    fun receiveDelta(indices: ZSetIndices) {
+        pendingDeltaAev = extractArrangement(indices, ArrangementKind.AEV)
+        pendingDeltaAve = extractArrangement(indices, ArrangementKind.AVE)
+    }
+
+    fun view(variableOrder: List<Int>, state: ArrangementState): ArrangedView {
         val entityLevel = if (entityVarCanonicalIndex >= 0) variableOrder.indexOf(entityVarCanonicalIndex) else -1
         val valueLevel = if (valueVarCanonicalIndex >= 0) variableOrder.indexOf(valueVarCanonicalIndex) else -1
 
-        val (indexedZSet, fixedPrefix, participatingLevels) = when {
-            entityConstant != null && valueVarCanonicalIndex >= 0 -> {
-                TripleIndex(indices.aev, listOf(attribute, entityConstant), listOf(valueLevel))
-            }
-            valueConstant != null && entityVarCanonicalIndex >= 0 -> {
-                TripleIndex(indices.ave, listOf(attribute, valueConstant), listOf(entityLevel))
-            }
-            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 && entityLevel < valueLevel -> {
-                TripleIndex(indices.aev, listOf(attribute), listOf(entityLevel, valueLevel))
-            }
-            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 -> {
-                TripleIndex(indices.ave, listOf(attribute), listOf(valueLevel, entityLevel))
-            }
+        val (arrangementKind, participatingLevels) = when {
+            entityConstant != null && valueVarCanonicalIndex >= 0 ->
+                ArrangementKind.AEV to listOf(valueLevel)
+            valueConstant != null && entityVarCanonicalIndex >= 0 ->
+                ArrangementKind.AVE to listOf(entityLevel)
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 && entityLevel < valueLevel ->
+                ArrangementKind.AEV to listOf(entityLevel, valueLevel)
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 ->
+                ArrangementKind.AVE to listOf(valueLevel, entityLevel)
             else -> throw IllegalArgumentException("Unsupported compiled triple pattern $this")
         }
 
-        val localIndex = indexedZSet.getByPrefix(fixedPrefix) ?: emptyIndexFor(participatingLevels.size)
-        return ZSetPrefixExtender.fromIndexedZSet(localIndex, participatingLevels)
+        return ArrangedView(arrangement(arrangementKind, state), participatingLevels)
     }
 
-    private data class TripleIndex(
-        val indexedZSet: IndexedZSet<Any, IntegerWeight>,
-        val fixedPrefix: Prefix,
-        val participatingLevels: List<Int>
-    )
+    fun commit() {
+        pendingDeltaAev?.let { oldAev = addArrangements(oldAev, it) }
+        pendingDeltaAve?.let { oldAve = addArrangements(oldAve, it) }
+        pendingDeltaAev = null
+        pendingDeltaAve = null
+    }
+
+    private fun arrangement(kind: ArrangementKind, state: ArrangementState): IZSet<Any, IntegerWeight, *> {
+        val old = oldArrangement(kind)
+        val delta = deltaArrangement(kind)
+        return when (state) {
+            ArrangementState.OLD -> old
+            ArrangementState.DELTA -> delta
+            ArrangementState.CURRENT -> addArrangements(old, delta)
+        }
+    }
+
+    private fun oldArrangement(kind: ArrangementKind): IZSet<Any, IntegerWeight, *> =
+        when (kind) {
+            ArrangementKind.AEV -> oldAev
+            ArrangementKind.AVE -> oldAve
+        } ?: emptyArrangement(kind)
+
+    private fun deltaArrangement(kind: ArrangementKind): IZSet<Any, IntegerWeight, *> =
+        when (kind) {
+            ArrangementKind.AEV -> pendingDeltaAev
+            ArrangementKind.AVE -> pendingDeltaAve
+        } ?: emptyArrangement(kind)
+
+    private fun extractArrangement(indices: ZSetIndices, kind: ArrangementKind): IZSet<Any, IntegerWeight, *>? {
+        val (indexedZSet, fixedPrefix) = when (kind) {
+            ArrangementKind.AEV -> indices.aev to aevFixedPrefix()
+            ArrangementKind.AVE -> indices.ave to aveFixedPrefix()
+        }
+        if (fixedPrefix == null) return null
+        @Suppress("UNCHECKED_CAST")
+        return indexedZSet.getByPrefix(fixedPrefix) as IZSet<Any, IntegerWeight, *>?
+    }
+
+    private fun aevFixedPrefix(): Prefix? =
+        when {
+            entityConstant != null && valueVarCanonicalIndex >= 0 -> listOf(attribute, entityConstant)
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 -> listOf(attribute)
+            else -> null
+        }
+
+    private fun aveFixedPrefix(): Prefix? =
+        when {
+            valueConstant != null && entityVarCanonicalIndex >= 0 -> listOf(attribute, valueConstant)
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 -> listOf(attribute)
+            else -> null
+        }
+
+    private fun emptyArrangement(kind: ArrangementKind): IZSet<Any, IntegerWeight, *> =
+        emptyIndexFor(variableCount(kind))
+
+    private fun variableCount(kind: ArrangementKind): Int =
+        when (kind) {
+            ArrangementKind.AEV -> aevFixedPrefix()?.let { 3 - it.size } ?: 0
+            ArrangementKind.AVE -> aveFixedPrefix()?.let { 3 - it.size } ?: 0
+        }
 }
 
 private fun emptyIndexFor(levels: Int): IZSet<Any, IntegerWeight, *> =
@@ -118,6 +197,22 @@ private fun addIndexedZSets(
         else -> left.add(right)
     }
 
+@Suppress("UNCHECKED_CAST")
+private fun addArrangements(
+    left: IZSet<Any, IntegerWeight, *>?,
+    right: IZSet<Any, IntegerWeight, *>?
+): IZSet<Any, IntegerWeight, *> {
+    if (left == null || left.isEmpty()) return right ?: ZSet.empty<Any>()
+    if (right == null || right.isEmpty()) return left
+    return when {
+        left is ZSet<*, *> && right is ZSet<*, *> ->
+            (left as ZSet<Any, IntegerWeight>).add(right as ZSet<Any, IntegerWeight>)
+        left is IndexedZSet<*, *> && right is IndexedZSet<*, *> ->
+            (left as IndexedZSet<Any, IntegerWeight>).add(right as IndexedZSet<Any, IntegerWeight>)
+        else -> throw IllegalStateException("Cannot add arrangements ${left::class} and ${right::class}")
+    }
+}
+
 fun ZSetIndices.add(other: ZSetIndices): ZSetIndices =
     ZSetIndices(
         addIndexedZSets(eav, other.eav),
@@ -130,9 +225,6 @@ internal class IncrementalWcojJoinEngine(
     private val patterns: List<CompiledTriplePattern>,
     private val levels: Int
 ) {
-    private var oldState: ZSetIndices = emptyZSetIndices()
-    private var pendingDelta: ZSetIndices? = null
-
     private fun variableOrderForDeltaTerm(deltaPattern: CompiledTriplePattern): List<Int> {
         val deltaVariables = deltaPattern.variableIndexes()
         val remaining = (0 until levels).filterNot { deltaVariables.contains(it) }
@@ -190,31 +282,29 @@ internal class IncrementalWcojJoinEngine(
     }
 
     fun eval(input: ZSetIndices): ResultZSet {
-        val newState = oldState.add(input)
+        patterns.forEach { it.receiveDelta(input) }
         var result = ZSet.empty<ResultTuple>()
 
         for (deltaIndex in patterns.indices.reversed()) {
             val variableOrder = variableOrderForDeltaTerm(patterns[deltaIndex])
             val extenders = patterns.mapIndexed { patternIndex, pattern ->
-                val state = when {
-                    patternIndex < deltaIndex -> oldState
-                    patternIndex == deltaIndex -> input
-                    else -> newState
+                val arrangementState = when {
+                    patternIndex < deltaIndex -> ArrangementState.OLD
+                    patternIndex == deltaIndex -> ArrangementState.DELTA
+                    else -> ArrangementState.CURRENT
                 }
-                pattern.extender(state, variableOrder)
+                pattern.view(variableOrder, arrangementState).toExtender()
             }
 
             val term = permuteToCanonical(runWeightedWcoj(extenders), variableOrder)
             result = result.add(term)
         }
 
-        pendingDelta = input
         return result
     }
 
     fun commit() {
-        pendingDelta?.let { oldState = oldState.add(it) }
-        pendingDelta = null
+        patterns.forEach { it.commit() }
     }
 }
 
