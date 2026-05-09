@@ -2,8 +2,7 @@
   (:require [clojure.test :as t :refer [deftest is testing]]
             [hooray.fixtures :as fix]
             [hooray.core :as h]
-            [hooray.graph-gen :as g])
-  (:import (clojure.lang ExceptionInfo)))
+            [hooray.graph-gen :as g]))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -163,53 +162,69 @@
                           {:db/id :carol :name "Carol" :city "LA"}])
 
   (with-transaction-and-inc-q
-      [[:db/retractEntity :bob]]
+    [[:db/retractEntity :bob]]
 
-      '{:find [city]
-        :where [[e :city city]]}
+    '{:find [city]
+      :where [[e :city city]]}
 
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))
     (h/transact fix/*node* [[:db/retractEntity :alice]])
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))))
 
-(def triangle-schema
-  [{:db/id :db/relation-r :db/ident :r/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
-   {:db/id :db/relation-s :db/ident :s/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}
-   {:db/id :db/relation-t :db/ident :t/to :db/valueType :db.type/long :db/cardinality :db.cardinality/many}])
+(deftest test-prefix-stable-extension-addition
+  (h/transact fix/*node* g/triangle-relation-schema)
+  (h/transact fix/*node*
+              [[:db/add 1 :r/to 2]
+               [:db/add 2 :s/to 4]])
 
-#_
+  (with-inc-q '{:find  [a b c]
+                :where [[a :r/to b]
+                        [b :s/to c]]}
+    (h/transact fix/*node* [[:db/add 2 :s/to 5]])
+    (t/is (= #{[[1 2 5] 1]}
+             (set (h/consume-delta! *inc-q*))))))
+
+(deftest test-prefix-stable-extension-retraction
+  (h/transact fix/*node* g/triangle-relation-schema)
+  (h/transact fix/*node*
+              [[:db/add 1 :r/to 2]
+               [:db/add 2 :s/to 4]
+               [:db/add 2 :s/to 5]])
+
+  (with-inc-q '{:find  [a b c]
+                :where [[a :r/to b]
+                        [b :s/to c]]}
+    (h/transact fix/*node* [[:db/retract 2 :s/to 5]])
+    (t/is (= #{[[1 2 5] -1]}
+             (set (h/consume-delta! *inc-q*))))))
+
 (deftest test-triangle-edge-deletion
-  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
                [:db/add 2 :s/to 3]
                [:db/add 3 :t/to 1]])
 
   (with-transaction-and-inc-q
-      [[:db/retract 1 :r/to 2]]
+    [[:db/retract 2 :s/to 3]]
 
-      '{:find  [a b c]
-        :where [[a :r/to b]
-                [b :s/to c]
-                [c :t/to a]]}
+    '{:find  [a b c]
+      :where [[a :r/to b]
+              [b :s/to c]
+              [c :t/to a]]}
 
     (t/is (= [[[1 2 3] -1]] (h/consume-delta! *inc-q*)))))
 
+;; TODO move this to some benchmarking setup
 (deftest test-triangle-wcoj-bad-case
-  ;; Blog example 2: even though R and S each have O(n) tuples on the
+  ;; Even though R and S each have O(n) tuples on the
   ;; join variable y, they share no value (R's y is odd, S's y is even),
   ;; so inserting T(1,1) produces no triangles and the delta is empty.
   ;; R = {(1,1) (1,3) (1,5)}
   ;; S = {(2,1) (4,1) (6,1)}
   ;; T = {} -> {(1,1)}
-  (h/transact fix/*node* triangle-schema)
-  (h/transact fix/*node*
-              [[:db/add 1 :r/to 1]
-               [:db/add 1 :r/to 3]
-               [:db/add 1 :r/to 5]
-               [:db/add 2 :s/to 1]
-               [:db/add 4 :s/to 1]
-               [:db/add 6 :s/to 1]])
+  (h/transact fix/*node* g/triangle-relation-schema)
+  (h/transact fix/*node* (g/wcoj-ivm-bad-relations 3 #_10000))
 
   (with-transaction-and-inc-q
       [[:db/add 1 :t/to 1]]
