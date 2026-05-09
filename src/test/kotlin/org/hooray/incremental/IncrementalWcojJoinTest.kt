@@ -20,14 +20,34 @@ class IncrementalWcojJoinTest {
 
     private fun triple(e: Any, a: Any, v: Any, weight: IntegerWeight = IntegerWeight.ONE): ZSetIndices =
         ZSetIndices(
-            eav = singletonPath(e, a, v, weight),
             aev = singletonPath(a, e, v, weight),
-            ave = singletonPath(a, v, e, weight),
-            vae = singletonPath(v, a, e, weight)
+            ave = singletonPath(a, v, e, weight)
+        )
+
+    private fun emptyIndices(): ZSetIndices =
+        ZSetIndices(
+            IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
+            IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE)
+        )
+
+    private fun addIndexedZSets(
+        left: IndexedZSet<Any, IntegerWeight>,
+        right: IndexedZSet<Any, IntegerWeight>
+    ): IndexedZSet<Any, IntegerWeight> =
+        when {
+            left.isEmpty() -> right
+            right.isEmpty() -> left
+            else -> left.add(right)
+        }
+
+    private fun addIndices(left: ZSetIndices, right: ZSetIndices): ZSetIndices =
+        ZSetIndices(
+            addIndexedZSets(left.aev, right.aev),
+            addIndexedZSets(left.ave, right.ave)
         )
 
     private fun triples(vararg triples: ZSetIndices): ZSetIndices =
-        triples.fold(emptyZSetIndices()) { acc, next -> acc.add(next) }
+        triples.fold(emptyIndices()) { acc, next -> addIndices(acc, next) }
 
     @Test
     fun `compiled pattern with fixed entity reads AEV`() {
@@ -55,23 +75,26 @@ class IncrementalWcojJoinTest {
     }
 
     @Test
-    fun `compiled pattern exposes old delta and current arranged views`() {
+    fun `compiled pattern exposes delta and current arranged views`() {
         val pattern = CompiledTriplePattern(null, "attr", null, 0, 1)
         pattern.receiveDelta(triple("old-e", "attr", "old-v"))
         pattern.commit()
 
         pattern.receiveDelta(triple("new-e", "attr", "new-v"))
 
-        val oldView = pattern.view(listOf(0, 1), ArrangementState.OLD).toExtender()
         val deltaView = pattern.view(listOf(0, 1), ArrangementState.DELTA).toExtender()
         val currentView = pattern.view(listOf(0, 1), ArrangementState.CURRENT).toExtender()
 
-        assertEquals(IntegerWeight.ONE, oldView.propose(emptyList()).weight("old-e"))
-        assertEquals(IntegerWeight.ZERO, oldView.propose(emptyList()).weight("new-e"))
         assertEquals(IntegerWeight.ZERO, deltaView.propose(emptyList()).weight("old-e"))
         assertEquals(IntegerWeight.ONE, deltaView.propose(emptyList()).weight("new-e"))
         assertEquals(IntegerWeight.ONE, currentView.propose(emptyList()).weight("old-e"))
-        assertEquals(IntegerWeight.ONE, currentView.propose(emptyList()).weight("new-e"))
+        assertEquals(IntegerWeight.ZERO, currentView.propose(emptyList()).weight("new-e"))
+
+        pattern.commit()
+        val committedView = pattern.view(listOf(0, 1), ArrangementState.CURRENT).toExtender()
+
+        assertEquals(IntegerWeight.ONE, committedView.propose(emptyList()).weight("old-e"))
+        assertEquals(IntegerWeight.ONE, committedView.propose(emptyList()).weight("new-e"))
     }
 
     @Test

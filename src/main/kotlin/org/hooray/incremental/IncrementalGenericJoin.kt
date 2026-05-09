@@ -124,10 +124,17 @@ data class CompiledTriplePattern(
     val entityVarCanonicalIndex: Int,
     val valueVarCanonicalIndex: Int
 ) {
-    private var currentAEV: Arrangement = emptyArrangement()
-    private var currentAVE: Arrangement = emptyArrangement()
-    private var deltaAEV: Arrangement = emptyArrangement()
-    private var deltaAVE: Arrangement = emptyArrangement()
+    private val arrangementKinds: List<ArrangementKind> =
+        when {
+            entityConstant != null && valueVarCanonicalIndex >= 0 -> listOf(ArrangementKind.AEV)
+            valueConstant != null && entityVarCanonicalIndex >= 0 -> listOf(ArrangementKind.AVE)
+            entityVarCanonicalIndex >= 0 && valueVarCanonicalIndex >= 0 ->
+                listOf(ArrangementKind.AEV, ArrangementKind.AVE)
+            else -> throw IllegalArgumentException("Unsupported compiled triple pattern $this")
+        }
+
+    private var currentArrangements: MutableMap<ArrangementKind, Arrangement> = emptyArrangements()
+    private var deltaArrangements: MutableMap<ArrangementKind, Arrangement> = emptyArrangements()
 
     fun variableIndexes(): List<Int> =
         listOf(entityVarCanonicalIndex, valueVarCanonicalIndex).filter { it >= 0 }.distinct()
@@ -154,8 +161,7 @@ data class CompiledTriplePattern(
     }
 
     fun receiveDelta(indices: ZSetIndices) {
-        deltaAEV = extractArrangement(indices, ArrangementKind.AEV)
-        deltaAVE = extractArrangement(indices, ArrangementKind.AVE)
+        deltaArrangements = arrangementKinds.associateWith { extractArrangement(indices, it) }.toMutableMap()
     }
 
     fun view(variableOrder: List<Int>, state: ArrangementState): ArrangedView {
@@ -179,27 +185,23 @@ data class CompiledTriplePattern(
     }
 
     fun commit() {
-        currentAEV = currentAEV.add(deltaAEV)
-        currentAVE = currentAVE.add(deltaAVE)
-        deltaAEV = emptyArrangement()
-        deltaAVE = emptyArrangement()
+        for (kind in arrangementKinds) {
+            currentArrangements[kind] = current(kind).add(delta(kind))
+        }
+        deltaArrangements = emptyArrangements()
     }
 
     private fun current(kind: ArrangementKind): Arrangement =
-        when (kind) {
-            ArrangementKind.AEV -> currentAEV
-            ArrangementKind.AVE -> currentAVE
-        }
+        currentArrangements[kind] ?: throw IllegalStateException("No current $kind arrangement for $this")
 
     private fun delta(kind: ArrangementKind): Arrangement =
-        when (kind) {
-            ArrangementKind.AEV -> deltaAEV
-            ArrangementKind.AVE -> deltaAVE
-        }
+        deltaArrangements[kind] ?: throw IllegalStateException("No delta $kind arrangement for $this")
+
+    private fun emptyArrangements(): MutableMap<ArrangementKind, Arrangement> =
+        arrangementKinds.associateWith { emptyArrangement() }.toMutableMap()
 
     private fun emptyArrangement(): Arrangement =
         Arrangement.empty(variableCount())
-
 
     private fun arrangement(kind: ArrangementKind, state: ArrangementState): Arrangement =
         when (state) {
@@ -208,27 +210,8 @@ data class CompiledTriplePattern(
         }
 
     private fun variableCount(): Int =
-        3 - listOf(entityConstant, valueConstant).count { it != null }
+        variableIndexes().size
 }
-
-private fun addIndexedZSets(
-    left: IndexedZSet<Any, IntegerWeight>,
-    right: IndexedZSet<Any, IntegerWeight>
-): IndexedZSet<Any, IntegerWeight> =
-    when {
-        left.isEmpty() -> right
-        right.isEmpty() -> left
-        else -> left.add(right)
-    }
-
-
-fun ZSetIndices.add(other: ZSetIndices): ZSetIndices =
-    ZSetIndices(
-        addIndexedZSets(eav, other.eav),
-        addIndexedZSets(aev, other.aev),
-        addIndexedZSets(ave, other.ave),
-        addIndexedZSets(vae, other.vae)
-    )
 
 internal class IncrementalWcojJoinEngine(
     private val patterns: List<CompiledTriplePattern>,
@@ -274,18 +257,26 @@ internal class IncrementalWcojJoinEngine(
         return prefixes
     }
 
-    private fun permuteToCanonical(termResult: ResultZSet, variableOrder: List<Int>): ResultZSet {
-        if (variableOrder == (0 until levels).toList()) return termResult
+    private fun canonicalTuplePermutation(variableOrder: List<Int>): (ResultTuple) -> ResultTuple {
+        if (variableOrder == (0 until levels).toList()) return { it }
 
-        val result = mutableMapOf<ResultTuple, IntegerWeight>()
-        for ((tuple, weight) in termResult.entries()) {
+        return { tuple ->
             val canonical = MutableList<Any?>(levels) { null }
             for ((variableOrderIndex, canonicalIndex) in variableOrder.withIndex()) {
                 canonical[canonicalIndex] = tuple[variableOrderIndex]
             }
             @Suppress("UNCHECKED_CAST")
-            val resultTuple = canonical as ResultTuple
-            result.merge(resultTuple, weight) { left, right ->
+            canonical as ResultTuple
+        }
+    }
+
+    private fun permuteToCanonical(termResult: ResultZSet, variableOrder: List<Int>): ResultZSet {
+        if (variableOrder == (0 until levels).toList()) return termResult
+        val permuteTuple = canonicalTuplePermutation(variableOrder)
+
+        val result = mutableMapOf<ResultTuple, IntegerWeight>()
+        for ((tuple, weight) in termResult.entries()) {
+            result.merge(permuteTuple(tuple), weight) { left, right ->
                 val sum = left.add(right)
                 if (sum.isZero()) null else sum
             }
@@ -322,11 +313,3 @@ internal class IncrementalWcojJoinEngine(
         // patterns.forEach { it.commit() }
     }
 }
-
-fun emptyZSetIndices(): ZSetIndices =
-    ZSetIndices(
-        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
-        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
-        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE),
-        IndexedZSet.empty(IntegerWeight.ZERO, IntegerWeight.ONE)
-    )

@@ -1,37 +1,32 @@
 (ns hooray.incremental
-  (:require
-   [clojure.core.match :refer [match]]
-   [clojure.spec.alpha :as s]
-   [hooray.query :as query]
-   [hooray.transact :as t]
-   [hooray.util :as util]
-   [hooray.zset :as zset]
-  [hooray.db :as db]
-  [hooray.error :as err])
-  (:import
-   (org.hooray.incremental IntegerWeight ZSetIndices
-                           CompiledTriplePattern
-                           IncrementalOperator IncrementalDistinct IncrementalJoinOperator IncrementalPipeline
-                           TransformOperator)))
+  (:require [clojure.core.match :refer [match]]
+            [clojure.spec.alpha :as s]
+            [hooray.query :as query]
+            [hooray.transact :as t]
+            [hooray.util :as util]
+            [hooray.zset :as zset]
+            [hooray.db :as db]
+            [hooray.error :as err])
+  (:import (org.hooray.incremental IntegerWeight ZSetIndices CompiledTriplePattern IncrementalDistinct
+                                   IncrementalJoinOperator IncrementalPipeline TransformOperator)))
 
 (set! *warn-on-reflection* true)
 
 (def zero IntegerWeight/ZERO)
 (def one IntegerWeight/ONE)
 
-(defrecord ZSetIndicesClj [eav aev ave vae])
+(defrecord ZSetIndicesClj [aev ave ])
 
 (defn ->zset-indices []
-  (->ZSetIndicesClj zset/empty-indexed-zset zset/empty-indexed-zset zset/empty-indexed-zset zset/empty-indexed-zset))
+  (->ZSetIndicesClj zset/empty-indexed-zset zset/empty-indexed-zset))
 
-(defn zset-indices-clj->kt ^ZSetIndices [{:keys [eav aev ave vae] :as _zset-indices}]
-  (ZSetIndices. eav aev ave vae))
+(defn zset-indices-clj->kt ^ZSetIndices [{:keys [aev ave ] :as _zset-indices}]
+  (ZSetIndices. aev ave ))
 
 (def ^:private zset-update-in (util/create-update-in zset/empty-indexed-zset))
 
 (defn index-triple [{:keys [eav schema] :as db}
-                    {eav-zset :eav aev-zset :aev
-                     ave-zset :ave vae-zset :vae :as zset-indices}
+                    {aev-zset :aev ave-zset :ave :as zset-indices}
                     [op e a v :as _triple]]
   (let [cardinality (t/attribute-cardinality schema a)]
     (case [op cardinality]
@@ -39,10 +34,10 @@
       (if (-> (get-in eav [e a]) (contains? v))
         ;; TODO this might not clean up empty nested structures in the indexed zsets
         (-> zset-indices
-            (assoc :eav (zset-update-in eav-zset [e a] (fnil update zset/empty-zset) v (fnil zset/sub zero) one))
+            #_(assoc :eav (zset-update-in eav-zset [e a] (fnil update zset/empty-zset) v (fnil zset/sub zero) one))
             (assoc :aev (zset-update-in aev-zset [a e] (fnil update zset/empty-zset) v (fnil zset/sub zero) one))
             (assoc :ave (zset-update-in ave-zset [a v] (fnil update zset/empty-zset) e (fnil zset/sub zero) one))
-            (assoc :vae (zset-update-in vae-zset [v a] (fnil update zset/empty-zset) e (fnil zset/sub zero) one)))
+            #_(assoc :vae (zset-update-in vae-zset [v a] (fnil update zset/empty-zset) e (fnil zset/sub zero) one)))
         zset-indices)
       [:add :db.cardinality/one]
       (let [previous-v (first (get-in eav [e a]))
@@ -50,18 +45,18 @@
                            (index-triple db zset-indices [:retract e a previous-v])
                            zset-indices)]
         (-> zset-indices
-            (zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
+            #_(zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
             (zset-update-in [:aev a e] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
             (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/add zero) one)
-            (zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one)))
+            #_(zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one)))
       [:add :db.cardinality/many]
       (if (-> (get-in eav [e a]) (contains? v))
         zset-indices
         (-> zset-indices
-            (zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
+            #_(zset-update-in [:eav e a] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
             (zset-update-in [:aev a e] (fnil update zset/empty-zset) v (fnil zset/add zero) one)
             (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/add zero) one)
-            (zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one))))))
+            #_(zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one))))))
 
 (defn db->zset-indices [{:keys [eav opts] :as _db}]
   (let [empty-db (db/->db opts)
