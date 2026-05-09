@@ -241,7 +241,7 @@ internal class IncrementalWcojJoinEngine(
         return deltaVariables + remaining
     }
 
-    private fun ZSetGenericJoin(extenders: List<ZSetPrefixExtender>): ResultZSet {
+    private fun zSetGenericJoin(extenders: List<ZSetPrefixExtender>): ResultZSet {
         var prefixes = ZSet.singleton<ResultTuple>(persistentListOf())
 
         for (level in 0 until levels) {
@@ -309,7 +309,7 @@ internal class IncrementalWcojJoinEngine(
                 pattern.view(variableOrder, arrangementState).toExtender()
             }
 
-            val term = permuteToCanonical(ZSetGenericJoin(extenders), variableOrder)
+            val term = permuteToCanonical(zSetGenericJoin(extenders), variableOrder)
             patterns[deltaIndex].commit()
             result = result.add(term)
         }
