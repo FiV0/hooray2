@@ -2,8 +2,7 @@
   (:require [clojure.test :as t :refer [deftest is testing]]
             [hooray.fixtures :as fix]
             [hooray.core :as h]
-            [hooray.graph-gen :as g])
-  (:import (clojure.lang ExceptionInfo)))
+            [hooray.graph-gen :as g]))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -163,19 +162,17 @@
                           {:db/id :carol :name "Carol" :city "LA"}])
 
   (with-transaction-and-inc-q
-      [[:db/retractEntity :bob]]
+    [[:db/retractEntity :bob]]
 
-      '{:find [city]
-        :where [[e :city city]]}
+    '{:find [city]
+      :where [[e :city city]]}
 
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))
     (h/transact fix/*node* [[:db/retractEntity :alice]])
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))))
 
-(def triangle-schema g/triangle-relation-schema)
-
 (deftest test-prefix-stable-extension-addition
-  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
                [:db/add 2 :s/to 4]])
@@ -188,7 +185,7 @@
              (set (h/consume-delta! *inc-q*))))))
 
 (deftest test-prefix-stable-extension-retraction
-  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
                [:db/add 2 :s/to 4]
@@ -202,19 +199,19 @@
              (set (h/consume-delta! *inc-q*))))))
 
 (deftest test-triangle-edge-deletion
-  (h/transact fix/*node* triangle-schema)
+  (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
                [:db/add 2 :s/to 3]
                [:db/add 3 :t/to 1]])
 
   (with-transaction-and-inc-q
-      [[:db/retract 2 :s/to 3]]
+    [[:db/retract 2 :s/to 3]]
 
-      '{:find  [a b c]
-        :where [[a :r/to b]
-                [b :s/to c]
-                [c :t/to a]]}
+    '{:find  [a b c]
+      :where [[a :r/to b]
+              [b :s/to c]
+              [c :t/to a]]}
 
     (t/is (= [[[1 2 3] -1]] (h/consume-delta! *inc-q*)))))
 
