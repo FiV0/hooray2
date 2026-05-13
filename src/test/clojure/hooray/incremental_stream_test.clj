@@ -4,7 +4,9 @@
             [hooray.fixtures :as fix]
             [hooray.incremental :as incremental]
             [hooray.incremental.stream :as stream]
-            [hooray.zset :as zset]))
+            [hooray.zset :as zset])
+  (:import (org.hooray.incremental IncrementalPipeline)
+           (org.hooray.incremental.stream Circuit)))
 
 (use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -34,3 +36,20 @@
         (is (= [[["Ivan"] 1]] (h/consume-delta! inc-q)))
         (finally
           (h/unregister-inc-q fix/*node* inc-q))))))
+
+(deftest default-circuit-version-is-stream
+  (let [inc-q (h/q-inc fix/*node* '{:find [name]
+                                    :where [[e :name name]]})]
+    (try
+      (is (instance? Circuit (:pipeline inc-q)))
+      (finally
+        (h/unregister-inc-q fix/*node* inc-q)))))
+
+(deftest pipeline-circuit-version-remains-available
+  (let [inc-q (binding [incremental/*circuit-version* :pipeline]
+                (h/q-inc fix/*node* '{:find [name]
+                                      :where [[e :name name]]}))]
+    (try
+      (is (instance? IncrementalPipeline (:pipeline inc-q)))
+      (finally
+        (h/unregister-inc-q fix/*node* inc-q)))))

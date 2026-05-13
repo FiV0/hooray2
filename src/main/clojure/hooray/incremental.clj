@@ -16,7 +16,7 @@
 (def zero IntegerWeight/ZERO)
 (def one IntegerWeight/ONE)
 
-(def ^:dynamic *circuit-version* :pipeline)
+(def ^:dynamic *circuit-version* :stream)
 
 (defrecord ZSetIndicesClj [aev ave ])
 
