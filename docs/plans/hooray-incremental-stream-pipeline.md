@@ -185,7 +185,26 @@ These don't block planning, but each should be resolved before the relevant phas
   - Acceptance: For a given `IncrementalWcojJoinSpec(patterns, levels, canonicalOrder)`, expansion produces a deterministic DAG of nodes; node ids and connections are inspectable.
   - Verification: Analysis test: fixture spec for a 2-pattern join; assert expanded DAG has the expected node kinds and edges. Triangle-pattern fixture: matches the existing `IncrementalJoinOperator` branch structure (compared via node-kind sequence).
   - Dependencies: Tasks 10, 11, 12, 13, 14
-  - Scope: L → break down if needed
+  - Scope: L → broken down below
+
+  #### Task 15 sub-plan
+
+  - [ ] **15a: WCOJ branch helpers (pure functions).** Extract from `IncrementalWcojJoinEngine`: `variableOrderForDeltaTerm(deltaPattern, allPatterns, levels): List<Int>`; `permuteToCanonical(result, variableOrder, levels): ResultZSet`. These are stand-alone pure functions usable by both the runtime source and the analysis/inspection layer.
+    - Files: `WcojBranchPlan.kt`
+    - Tests: identity case (variable order == canonical), single-permutation case, triangle case (3 branches × 3 variable orders).
+    - Scope: S
+  - [ ] **15b: `IncrementalWcojJoinSource` (runtime parity).** Implements `CircuitSource`. Holds `patterns: List<CompiledTriplePattern>` + `levels`. On `eval`: distributes deltas to each pattern, then for each delta-pattern branch builds extenders (DELTA for active, CURRENT for others), invokes `computeZSetGenericJoin`, canonicalizes via 15a, and sums into the result. On `commit`: no-op (the existing engine commits patterns inline per-branch, and we preserve that).
+    - Files: `IncrementalWcojJoinSource.kt`
+    - Tests: parity test driving the triangle scenario from `IncrementalWcojJoinTest`'s `telescoping triangle delta` through both `IncrementalWcojJoinEngine` and `IncrementalWcojJoinSource` and asserting identical outputs across ticks.
+    - Scope: M
+  - [ ] **15c: `IncrementalWcojJoinSpec` data type + builder.** Data class `IncrementalWcojJoinSpec(patterns, levels, canonicalOrder)`. A `buildWcojSource(spec): IncrementalWcojJoinSource` factory turns a spec into a usable source.
+    - Files: `IncrementalWcojJoinSpec.kt`
+    - Tests: spec construction; builder produces a runnable source whose triangle output matches 15b's reference.
+    - Scope: S
+  - [ ] **15d: Structural DAG expansion (inspection-only).** For each branch, produce a deterministic list of nodes (`MapIndexNode` for input reindex → `IntegrateNode`/`DelayNode` where the delta formula needs accumulated/previous state → `ZSetGenericJoinNode` → canonicalization `MapIndexNode`). These nodes are *not* wired into the runtime source — they are an inspectable representation alongside the source.
+    - Files: `WcojExpansion.kt`
+    - Tests: 2-pattern join spec → expected node-kind sequence; triangle spec → 3 branches, each with the expected node-kind sequence.
+    - Scope: S
 
 - [ ] **Task 16: `TypeCheck` analysis pass.** For each `mapIndex`/`join`/`differentiate(integrate(...))` site, assert key/value types are consistent; type errors abort `CircuitSpec` construction with a useful message.
   - Files: `src/main/kotlin/org/hooray/incremental/stream/analysis/TypeCheck.kt`
