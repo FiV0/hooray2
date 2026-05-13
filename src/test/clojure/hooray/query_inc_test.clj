@@ -2,9 +2,18 @@
   (:require [clojure.test :as t :refer [deftest is testing]]
             [hooray.fixtures :as fix]
             [hooray.core :as h]
-            [hooray.graph-gen :as g]))
+            [hooray.graph-gen :as g]
+            [hooray.incremental :as incremental]))
 
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
+(defn with-circuit-version [f]
+  (doseq [version [:pipeline :stream]]
+    (testing (str "circuit version " version)
+      (binding [incremental/*circuit-version* version]
+        (fix/with-node
+          (fn []
+            (fix/with-people-schema f)))))))
+
+(t/use-fixtures :each with-circuit-version)
 
 (def ^:dynamic *inc-q* nil)
 

@@ -5,6 +5,7 @@ import org.hooray.incremental.IndexedZSet
 import org.hooray.incremental.IntegerWeight
 import org.hooray.incremental.ZSet
 import org.hooray.incremental.ZSetIndices
+import org.hooray.incremental.stream.ops.project
 
 class Circuit(private val spec: CircuitSpec) {
     val input: InputHandle<ZSetIndices> = spec.input
@@ -12,10 +13,15 @@ class Circuit(private val spec: CircuitSpec) {
 
     fun step(): ResultZSet {
         val nextInput = input.take()
-        return when {
+        val sourceResult = when {
             source == null -> ZSet.empty()
             nextInput == null -> source.step(emptyInput())
             else -> source.step(nextInput)
+        }
+        return spec.transforms.fold(sourceResult) { result, transform ->
+            when (transform) {
+                is ProjectSpec -> project(result, transform)
+            }
         }
     }
 
