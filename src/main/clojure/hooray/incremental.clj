@@ -124,7 +124,7 @@
    [(compile-find conformed-find var->idx) #_(IncrementalDistinct.)]))
 
 ;; TODO unify this somehow with query/query
-(defn compile-incremental-q ^IncrementalPipeline [db query]
+(defn- compile-incremental-q-legacy ^IncrementalPipeline [db query]
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query/query query)
         var-order (query/variable-order* where)
@@ -140,7 +140,22 @@
       (.step pipeline zset-indices)
       pipeline)))
 
-(defn compute-delta! [{:keys [^IncrementalPipeline pipeline !queue] :as _inc-q} db-before _db-after tx-data]
+(def ^:dynamic *circuit-version*
+  "Selects the incremental-query backend. :legacy uses IncrementalPipeline
+   (the original path). :stream uses the new stream/circuit pipeline in
+   hooray.incremental.stream. Default is :legacy until migration parity
+   is achieved."
+  :legacy)
+
+(defn compile-incremental-q [db query]
+  (case *circuit-version*
+    :legacy (compile-incremental-q-legacy db query)
+    :stream ((requiring-resolve 'hooray.incremental.stream/compile-incremental-stream-q) db query)
+    (throw (ex-info "Unknown *circuit-version*"
+                    {:version *circuit-version*
+                     :supported #{:legacy :stream}}))))
+
+(defn compute-delta! [{:keys [pipeline !queue] :as _inc-q} db-before _db-after tx-data]
   (let [triples-by-op (db/tx-data->triples db-before tx-data)
         zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
         delta (-> (.step pipeline zset-indices)

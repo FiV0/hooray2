@@ -1,8 +1,9 @@
 (ns hooray.query-inc-test
-  (:require [clojure.test :as t :refer [deftest is testing]]
+  (:require [clojure.test :as t :refer [is testing]]
             [hooray.fixtures :as fix]
             [hooray.core :as h]
-            [hooray.graph-gen :as g]))
+            [hooray.graph-gen :as g]
+            [hooray.incremental.parity :refer [deftest-both]]))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -25,7 +26,7 @@
          (finally
            (h/unregister-inc-q fix/*node* inc-q#))))))
 
-(deftest test-sanity-check
+(deftest-both test-sanity-check
   (with-inc-q '{:find [e]
                 :where [[e :name "Ivan"]]}
 
@@ -33,7 +34,7 @@
 
     (is (= [[[1] 1]] (h/consume-delta! *inc-q*)))))
 
-(deftest with-previous-value
+(deftest-both with-previous-value
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
   (with-inc-q '{:find [name]
                 :where [[1 :name name]]}
@@ -44,7 +45,7 @@
             [["Ivanov"] 1]]
            (h/consume-delta! *inc-q*)))))
 
-(deftest test-basic-query-1
+(deftest-both test-basic-query-1
   (with-transaction-and-inc-q
       [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
        {:db/id :petr :name "Petr" :last-name "Petrov"}]
@@ -55,7 +56,7 @@
 
     (t/is (= [[["Ivan"] 1]] (h/consume-delta! *inc-q*)))))
 
-(deftest test-basic-query-2
+(deftest-both test-basic-query-2
   (t/testing "Can query entity by single field"
     (with-transaction-and-inc-q
         [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -66,7 +67,7 @@
 
       (t/is (= [[[:ivan] 1]] (h/consume-delta! *inc-q*))))))
 
-(deftest test-basic-query-3
+(deftest-both test-basic-query-3
   (t/testing "Can query using multiple terms"
     (with-transaction-and-inc-q
         [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -81,7 +82,7 @@
       (t/is (= [[["Ivan" "Ivanov"] 1]]
                (h/consume-delta! *inc-q*))))))
 
-(deftest test-basic-query-4
+(deftest-both test-basic-query-4
   (t/testing "Negate query based on subsequent non-matching clause"
     (with-transaction-and-inc-q
         [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -93,7 +94,7 @@
 
       (t/is (= nil (h/consume-delta! *inc-q*))))))
 
-(deftest test-basic-query-5
+(deftest-both test-basic-query-5
   (t/testing "Can query for multiple results"
     (with-transaction-and-inc-q
         [{:db/id :ivan :name "Ivan"}
@@ -106,7 +107,7 @@
                 [["Petr"] 1]]
                (h/consume-delta! *inc-q*))))))
 
-(deftest test-basic-query-6
+(deftest-both test-basic-query-6
   (t/testing "Can query across fields for same value"
     (with-transaction-and-inc-q
         [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -119,7 +120,7 @@
       (t/is (= [[[:smith] 1]]
                (h/consume-delta! *inc-q*))))))
 
-(deftest test-basic-query-7
+(deftest-both test-basic-query-7
   (t/testing "Can query across fields for same value when value is passed in"
     (with-transaction-and-inc-q
         [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -132,7 +133,7 @@
       (t/is (= [[[:smith] 1]]
                (h/consume-delta! *inc-q*))))))
 
-(deftest test-basic-retractions-1
+(deftest-both test-basic-retractions-1
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
   (with-transaction-and-inc-q
@@ -144,7 +145,7 @@
     (t/is (= [[["Ivan"] -1] [["Ivanova"] 1]]
              (h/consume-delta! *inc-q*)))))
 
-(deftest test-basic-retractions-2
+(deftest-both test-basic-retractions-2
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
   (with-transaction-and-inc-q
@@ -156,7 +157,7 @@
     (t/is (= [[["Ivan"] -1]]
              (h/consume-delta! *inc-q*)))))
 
-(deftest test-dbsp-distinct-semantics-retractions
+(deftest-both test-dbsp-distinct-semantics-retractions
   (h/transact fix/*node* [{:db/id :alice :name "Alice" :city "NYC"}
                           {:db/id :bob :name "Bob" :city "NYC"}
                           {:db/id :carol :name "Carol" :city "LA"}])
@@ -171,7 +172,7 @@
     (h/transact fix/*node* [[:db/retractEntity :alice]])
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))))
 
-(deftest test-prefix-stable-extension-addition
+(deftest-both test-prefix-stable-extension-addition
   (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
@@ -184,7 +185,7 @@
     (t/is (= #{[[1 2 5] 1]}
              (set (h/consume-delta! *inc-q*))))))
 
-(deftest test-prefix-stable-extension-retraction
+(deftest-both test-prefix-stable-extension-retraction
   (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
@@ -198,7 +199,7 @@
     (t/is (= #{[[1 2 5] -1]}
              (set (h/consume-delta! *inc-q*))))))
 
-(deftest test-triangle-edge-deletion
+(deftest-both test-triangle-edge-deletion
   (h/transact fix/*node* g/triangle-relation-schema)
   (h/transact fix/*node*
               [[:db/add 1 :r/to 2]
@@ -216,7 +217,7 @@
     (t/is (= [[[1 2 3] -1]] (h/consume-delta! *inc-q*)))))
 
 ;; TODO move this to some benchmarking setup
-(deftest test-triangle-wcoj-bad-case
+(deftest-both test-triangle-wcoj-bad-case
   ;; Even though R and S each have O(n) tuples on the
   ;; join variable y, they share no value (R's y is odd, S's y is even),
   ;; so inserting T(1,1) produces no triangles and the delta is empty.
@@ -236,7 +237,7 @@
 
     (t/is (= nil (h/consume-delta! *inc-q*)))))
 
-(deftest test-no-changes
+(deftest-both test-no-changes
   (h/transact fix/*node* g/triangle-relation-schema)
 
   (with-transaction-and-inc-q
@@ -248,3 +249,23 @@
                 [c :t/to a]]}
 
     (t/is (= nil (h/consume-delta! *inc-q*)))))
+
+(deftest-both test-mixed-permutation-on-same-attribute
+  ;; Two patterns on the same :name attribute. The first pattern
+  ;; ([x :name "Ivan"]) has a constant value, so it reads the AVE
+  ;; arrangement. The second pattern ([x :name n]) has both vars, and
+  ;; for the planner's variable order it reads AEV. Both views are over
+  ;; the same base relation; the test asserts both see consistent
+  ;; deltas across ticks.
+  (with-transaction-and-inc-q
+      [{:db/id :ivan-1 :name "Ivan"}
+       {:db/id :ivan-2 :name "Ivan"}
+       {:db/id :sue    :name "Sue"}]
+
+      '{:find  [x n]
+        :where [[x :name "Ivan"]
+                [x :name n]]}
+
+    (is (= [[[:ivan-1 "Ivan"] 1]
+            [[:ivan-2 "Ivan"] 1]]
+           (sort-by (comp first first) (h/consume-delta! *inc-q*))))))
