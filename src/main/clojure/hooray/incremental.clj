@@ -145,7 +145,8 @@
         zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
         delta (-> (.step pipeline zset-indices)
                   zset/zset->result-set)]
-    (swap! !queue conj delta)))
+    (when (seq delta)
+      (swap! !queue conj delta))))
 
 (defrecord IncrementalQuery [id query pipeline !queue])
 

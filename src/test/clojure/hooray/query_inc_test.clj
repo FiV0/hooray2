@@ -91,7 +91,7 @@
           :where [[e :name "Ivan"]
                   [e :last-name "Ivanov-does-not-match"]]}
 
-      (t/is (= [] (h/consume-delta! *inc-q*))))))
+      (t/is (= nil (h/consume-delta! *inc-q*))))))
 
 (deftest test-basic-query-5
   (t/testing "Can query for multiple results"
@@ -234,4 +234,17 @@
                 [b :s/to c]
                 [c :t/to a]]}
 
-    (t/is (= [] (h/consume-delta! *inc-q*)))))
+    (t/is (= nil (h/consume-delta! *inc-q*)))))
+
+(deftest test-no-changes
+  (h/transact fix/*node* g/triangle-relation-schema)
+
+  (with-transaction-and-inc-q
+      [[:db/add 1 :s/to 2]]
+
+      '{:find  [a b c]
+        :where [[a :r/to b]
+                [b :s/to c]
+                [c :t/to a]]}
+
+    (t/is (= nil (h/consume-delta! *inc-q*)))))
