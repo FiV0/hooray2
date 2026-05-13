@@ -27,6 +27,8 @@ data class IncrementalWcojJoinSpec(
     }
 }
 
-/** Compile a spec into a runnable CircuitSource. */
-fun buildWcojSource(spec: IncrementalWcojJoinSpec): IncrementalWcojJoinSource =
-    IncrementalWcojJoinSource(spec.patterns, spec.levels)
+/** Compile a spec into a runnable CircuitSource. Runs `typeCheck` first. */
+fun buildWcojSource(spec: IncrementalWcojJoinSpec): IncrementalWcojJoinSource {
+    typeCheck(spec)
+    return IncrementalWcojJoinSource(spec.patterns, spec.levels)
+}
