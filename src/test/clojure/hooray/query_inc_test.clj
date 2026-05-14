@@ -7,13 +7,10 @@
 
 (defn with-circuit-version [f]
   (doseq [version [:pipeline :stream]]
-    (testing (str "circuit version " version)
-      (binding [incremental/*circuit-version* version]
-        (fix/with-node
-          (fn []
-            (fix/with-people-schema f)))))))
+    (binding [incremental/*circuit-version* version]
+      (f))))
 
-(t/use-fixtures :each with-circuit-version)
+(t/use-fixtures :each with-circuit-version fix/with-node fix/with-people-schema)
 
 (def ^:dynamic *inc-q* nil)
 
