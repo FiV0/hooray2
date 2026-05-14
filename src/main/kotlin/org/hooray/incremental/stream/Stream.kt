@@ -32,9 +32,3 @@ data class IndexedZSetPayload<K, V>(
 )
 
 typealias IndexedZSetStream<K, V> = Stream<IndexedZSetPayload<K, V>>
-
-data class AccumulatedZSet<T>(
-    val current: ZSet<T, IntegerWeight>
-)
-
-typealias AccumulatedStream<T> = Stream<AccumulatedZSet<T>>

@@ -42,7 +42,7 @@ class StreamOperatorTest {
 
         val integrated = integrate(input)
         val delayed = delay(input)
-        val differentiated = differentiate(integrated)
+        val differentiated = differentiate(input)
 
         assertInstanceOf(IntegrateNode::class.java, integrated.node)
         assertInstanceOf(DelayNode::class.java, delayed.node)
@@ -50,7 +50,28 @@ class StreamOperatorTest {
     }
 
     @Test
-    fun `differentiate integrate keeps the intermediate accumulated stream explicit`() {
+    fun `differentiate accepts any stream and records its input`() {
+        val input = sourceStream()
+
+        val differentiated = differentiate(input)
+        val node = assertInstanceOf(DifferentiateNode::class.java, differentiated.node)
+
+        assertEquals(input, node.input)
+    }
+
+    @Test
+    fun `differentiate delay records the delayed stream as input`() {
+        val input = sourceStream()
+
+        val delayed = delay(input)
+        val differentiated = differentiate(delayed)
+        val node = assertInstanceOf(DifferentiateNode::class.java, differentiated.node)
+
+        assertEquals(delayed, node.input)
+    }
+
+    @Test
+    fun `differentiate integrate keeps the intermediate stream explicit`() {
         val input = sourceStream()
 
         val integrated = integrate(input)
