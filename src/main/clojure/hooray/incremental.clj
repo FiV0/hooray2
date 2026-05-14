@@ -6,7 +6,8 @@
             [hooray.util :as util]
             [hooray.zset :as zset]
             [hooray.db :as db]
-            [hooray.error :as err])
+            [hooray.error :as err]
+            [hooray.incremental.stream :as stream])
   (:import (org.hooray.incremental IntegerWeight ZSetIndices CompiledTriplePattern IncrementalDistinct
                                    IncrementalJoinOperator IncrementalPipeline TransformOperator)
            (org.hooray.incremental.stream Circuit)))
@@ -146,13 +147,13 @@
 (defn- compile-query-for-version [db query]
   (case *circuit-version*
     :pipeline (compile-incremental-q db query)
-    :stream ((requiring-resolve 'hooray.incremental.stream/compile-incremental-stream-q) db query)
+    :stream (stream/compile-incremental-q db query)
     (throw (ex-info "Unknown incremental circuit version" {:circuit-version *circuit-version*}))))
 
 (defn- step-compiled-query [pipeline ^ZSetIndices zset-indices]
-  (cond
-    (instance? IncrementalPipeline pipeline) (.step ^IncrementalPipeline pipeline zset-indices)
-    (instance? Circuit pipeline) (.step ^Circuit pipeline zset-indices)
+  (case *circuit-version*
+    :pipeline (.step ^IncrementalPipeline pipeline zset-indices)
+    :stream (.step ^Circuit pipeline zset-indices)
     :else (throw (ex-info "Unknown incremental pipeline type" {:type (some-> pipeline class)}))))
 
 (defn compute-delta! [{:keys [pipeline !queue] :as _inc-q} db-before _db-after tx-data]

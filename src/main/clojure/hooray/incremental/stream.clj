@@ -15,7 +15,7 @@
                             conformed-find)]
     (ProjectSpec. output-levels)))
 
-(defn compile-incremental-stream-q ^Circuit [db query]
+(defn compile-incremental-q ^Circuit [db query]
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query/query query)
         var-order (query/variable-order* where)
