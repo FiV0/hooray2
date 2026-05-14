@@ -46,7 +46,7 @@ dependencies {
     implementation("com.aphyr", "bifurcan-clj","0.1.3")
 
     // Datomic testing
-    devImplementation("com.datomic:peer:1.0.7622")
+    // devImplementation("com.datomic:peer:1.0.7622")
 
     // dev
     devImplementation("com.datomic", "local", "1.0.291")
