@@ -7,7 +7,7 @@
             [hooray.zset :as zset]
             [hooray.db :as db]
             [hooray.error :as err]
-            [hooray.incremental.stream :as stream])
+            #_[hooray.incremental.stream :as stream])
   (:import (org.hooray.incremental IntegerWeight ZSetIndices CompiledTriplePattern IncrementalDistinct
                                    IncrementalJoinOperator IncrementalPipeline TransformOperator)
            (org.hooray.incremental.stream Circuit)))
@@ -147,7 +147,7 @@
 (defn- compile-query-for-version [db query]
   (case *circuit-version*
     :pipeline (compile-incremental-q db query)
-    :stream (stream/compile-incremental-q db query)
+    :stream ((requiring-resolve 'hooray.incremental.stream/compile-incremental-q) db query)
     (throw (ex-info "Unknown incremental circuit version" {:circuit-version *circuit-version*}))))
 
 (defn- step-compiled-query [pipeline ^ZSetIndices zset-indices]
