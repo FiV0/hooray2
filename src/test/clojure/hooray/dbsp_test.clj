@@ -1,9 +1,24 @@
 (ns hooray.dbsp-test
   (:require
    [clojure.test :refer [deftest is testing]]
+   [hooray.core :as h]
    [hooray.dbsp :as dbsp])
   (:import
    (org.hooray.dbsp Tuple)))
+
+(def ^:private opts {:type :mem :storage :hash :algo :generic})
+
+(def ^:private schema
+  [{:db/id -1 :db/ident :name
+    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   {:db/id -2 :db/ident :last-name
+    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}])
+
+(defn- fresh-node
+  "A connected node with the test schema already transacted."
+  []
+  (doto (h/connect opts)
+    (h/transact schema)))
 
 (defn- patterns [query]
   (:patterns (dbsp/parse query)))
@@ -226,3 +241,36 @@
 
   (testing "zero-weight facts are dropped"
     (is (.isEmpty (dbsp/pattern-delta-zset {[1 "Ivan"] 0} :aev)))))
+
+;; --------------------------------------------------------------------------
+;; compile-query + compute-delta!
+;; --------------------------------------------------------------------------
+
+(deftest compute-delta-single-pattern-update-test
+  (let [node (fresh-node)]
+    (h/transact node [{:db/id 1 :name "Ivan"}])
+    (let [db-before (h/db node)
+          iq (dbsp/compile-query db-before '{:find [name] :where [[1 :name name]]})
+          delta (dbsp/compute-delta! iq db-before [{:db/id 1 :name "Ivanov"}])]
+      (is (= #{[["Ivan"] -1] [["Ivanov"] 1]} (set delta))))))
+
+(deftest compute-delta-two-pattern-join-test
+  (let [node (fresh-node)]
+    (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}])
+    (let [db-before (h/db node)
+          iq (dbsp/compile-query db-before '{:find [name last-name]
+                                             :where [[e :name name]
+                                                     [e :last-name last-name]]})
+          delta (dbsp/compute-delta! iq db-before
+                                     [{:db/id :petr :name "Petr" :last-name "Petrov"}])]
+      ;; the new entity joins; the primed entity produces no delta
+      (is (= #{[["Petr" "Petrov"] 1]} (set delta))))))
+
+(deftest compute-delta-queue-test
+  (let [node (fresh-node)]
+    (h/transact node [{:db/id 1 :name "Ivan"}])
+    (let [db-before (h/db node)
+          iq (dbsp/compile-query db-before '{:find [name] :where [[1 :name name]]})]
+      (dbsp/compute-delta! iq db-before [{:db/id 1 :name "Ivanov"}])
+      (is (= #{[["Ivan"] -1] [["Ivanov"] 1]} (set (dbsp/pop-result! iq))))
+      (is (nil? (dbsp/pop-result! iq))))))

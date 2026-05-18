@@ -357,3 +357,74 @@
                            (IntegerWeight. (int w))))
                   {})
        (ZSet/fromMap)))
+
+(defn- full-db-deltas
+  "Treats every fact currently in [db] as a `+1` add — used to prime a freshly
+  compiled circuit with the database's existing state."
+  [db]
+  (reduce (fn [m [e attrs]]
+            (reduce (fn [m [a vs]]
+                      (reduce (fn [m v] (update-in m [a [e v]] (fnil + 0) 1)) m vs))
+                    m attrs))
+          {}
+          (:eav db)))
+
+;; --------------------------------------------------------------------------
+;; Phase 3 — incremental query: compile, step, consume
+;; --------------------------------------------------------------------------
+
+(defn- push-deltas!
+  "Pushes each pattern's delta (in its planned order) onto the circuit inputs."
+  [{:keys [plan inputs]} attr-deltas]
+  (doseq [[i pattern] (map-indexed vector (:patterns plan))]
+    (let [attr (:attr (:descriptor pattern))]
+      (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
+             (pattern-delta-zset (get attr-deltas attr {}) (:order pattern))))))
+
+(defn- format-result
+  "Renders an output `TupleZSet` as a seq of `[tuple-vector weight]` pairs."
+  [^ZSet zset]
+  (mapv (fn [entry]
+          [(vec (.toList ^Tuple (.getKey entry)))
+           (.getValue ^IntegerWeight (.getValue entry))])
+        (.entries zset)))
+
+(defrecord DbspQuery [query plan circuit inputs output queue])
+
+(defn dbsp-query?
+  "True if [x] is a DBSP-standard incremental query (vs. a WCOJ one)."
+  [x]
+  (instance? DbspQuery x))
+
+(defn compile-query
+  "Compiles [query] into a stepping DBSP circuit, primed with the current state
+  of [db]. Returns a [DbspQuery] carrying the circuit and a result queue."
+  ^DbspQuery [db query]
+  (let [p (plan query)
+        {:keys [circuit inputs output]} (plan->circuit p)
+        iq (->DbspQuery query p circuit inputs output
+                        (atom clojure.lang.PersistentQueue/EMPTY))]
+    ;; prime the circuit with the database's existing facts; discard the output
+    (push-deltas! iq (full-db-deltas db))
+    (.step ^Circuit circuit)
+    iq))
+
+(defn compute-delta!
+  "Feeds the change described by [tx-data] (against [db-before]) through the
+  incremental query [iq], queues the resulting delta, and returns it as a seq
+  of `[tuple weight]` pairs."
+  [iq db-before tx-data]
+  (push-deltas! iq (attribute-deltas db-before tx-data))
+  (.step ^Circuit (:circuit iq))
+  (let [result (format-result (.get ^org.hooray.dbsp.OutputHandle (:output iq)))]
+    (when (seq result)
+      (swap! (:queue iq) conj result))
+    result))
+
+(defn pop-result!
+  "Removes and returns the oldest queued delta, or nil if none is pending."
+  [iq]
+  (let [q @(:queue iq)]
+    (when (seq q)
+      (swap! (:queue iq) pop)
+      (peek q))))

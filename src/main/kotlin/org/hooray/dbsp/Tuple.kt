@@ -35,6 +35,9 @@ class Tuple(private val values: Array<Any?>) {
     /** All columns from [from] onwards. */
     fun drop(from: Int): Tuple = Tuple(values.copyOfRange(from, values.size))
 
+    /** The column values as a list — convenient for converting results to Clojure. */
+    fun toList(): List<Any?> = values.toList()
+
     /** This tuple's columns followed by [other]'s columns. */
     fun concat(other: Tuple): Tuple {
         val combined = arrayOfNulls<Any?>(values.size + other.values.size)
