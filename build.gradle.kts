@@ -73,7 +73,7 @@ tasks.clojureRepl {
         val jvmArgs = defaultJvmArgs.toMutableList()
 
         if (project.hasProperty("yourkit")) {
-            jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=xtdb"
+            jvmArgs += "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so=app_name=hooray2"
         }
 
         if (project.hasProperty("debugJvm")) {
