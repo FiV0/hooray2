@@ -223,6 +223,13 @@
            (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [{:db/id 1 :name "Ivanov"}])))))
 
+(deftest attribute-deltas-cardinality-many-duplicate-test
+  (testing "adding an existing cardinality-many value is a no-op"
+    (is (= {}
+           (dbsp/attribute-deltas {:eav {1 {:edge #{2}}}
+                                   :schema {:edge {:db/cardinality :db.cardinality/many}}}
+                                  [[:db/add 1 :edge 2]])))))
+
 (deftest attribute-deltas-retract-test
   (testing "retracting a present fact"
     (is (= {:name {[1 "Ivan"] -1}}
@@ -351,6 +358,15 @@
                                           [2 :city c]]})]
     (h/transact node [{:db/id 1 :name "Ivan"} {:db/id 2 :city "NYC"}])
     (is (= #{[["Ivan" "NYC"] 1]} (set (h/consume-delta! iq))))))
+
+(deftest e2e-cardinality-many-duplicate-add-is-noop-test
+  (let [node (fresh-node)]
+    (h/transact node [[:db/add 1 :edge 2]])
+    (let [iq (standard-q-inc node '{:find [?to] :where [[1 :edge ?to]]})]
+      (h/transact node [[:db/add 1 :edge 2]])
+      (is (nil? (h/consume-delta! iq)))
+      (h/transact node [[:db/retract 1 :edge 2]])
+      (is (= #{[[2] -1]} (set (h/consume-delta! iq)))))))
 
 ;; --------------------------------------------------------------------------
 ;; Cross-engine equivalence: :wcoj vs :standard produce the same deltas

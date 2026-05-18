@@ -341,7 +341,9 @@
                              (first (get-in eav [e a])))
                       (bump ds a e (first (get-in eav [e a])) -1)
                       ds)
-                    (bump a e v 1)))
+                    (cond->
+                     (not (contains? (get-in eav [e a]) v))
+                      (bump a e v 1))))
               deltas add))))
 
 (defn- ->tuple ^Tuple [values]
