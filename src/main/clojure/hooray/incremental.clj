@@ -20,10 +20,69 @@
 (defn ->zset-indices []
   (->ZSetIndicesClj zset/empty-indexed-zset zset/empty-indexed-zset))
 
+(defn- ->transient-zset-indices []
+  (->ZSetIndicesClj (transient zset/empty-indexed-zset)
+                    (transient zset/empty-indexed-zset)))
+
+(defn- persistent-zset-indices! [{:keys [aev ave] :as _zset-indices}]
+  (->ZSetIndicesClj (persistent! aev) (persistent! ave)))
+
 (defn zset-indices-clj->kt ^ZSetIndices [{:keys [aev ave ] :as _zset-indices}]
   (ZSetIndices. aev ave ))
 
 (def ^:private zset-update-in (util/create-update-in zset/empty-indexed-zset))
+
+(defn- ensure-indexed-zset! [indexed-zset k]
+  (or (get indexed-zset k)
+      (let [child (transient zset/empty-indexed-zset)]
+        (assoc! indexed-zset k child)
+        child)))
+
+(defn- ensure-zset! [indexed-zset k]
+  (or (get indexed-zset k)
+      (let [child (transient zset/empty-zset)]
+        (assoc! indexed-zset k child)
+        child)))
+
+(defn- update-zset-weight! [zset k f]
+  (let [^IntegerWeight new-weight (f (or (get zset k) zero))]
+    (if (.isZero new-weight)
+      (dissoc! zset k)
+      (assoc! zset k new-weight))))
+
+(defn- update-index-path! [indexed-zset k1 k2 leaf-key f]
+  (let [nested (ensure-indexed-zset! indexed-zset k1)
+        leaf (ensure-zset! nested k2)]
+    (update-zset-weight! leaf leaf-key f)))
+
+(defn- add-index-entry! [{:keys [aev ave] :as zset-indices} e a v]
+  (update-index-path! aev a e v #(zset/add % one))
+  (update-index-path! ave a v e #(zset/add % one))
+  zset-indices)
+
+(defn- retract-index-entry! [{:keys [aev ave] :as zset-indices} e a v]
+  (update-index-path! aev a e v #(zset/sub % one))
+  (update-index-path! ave a v e #(zset/sub % one))
+  zset-indices)
+
+(defn- index-triple! [{:keys [eav schema] :as db}
+                      zset-indices
+                      [op e a v :as _triple]]
+  (let [cardinality (t/attribute-cardinality schema a)]
+    (case [op cardinality]
+      ([:retract :db.cardinality/one] [:retract :db.cardinality/many])
+      (if (-> (get-in eav [e a]) (contains? v))
+        (retract-index-entry! zset-indices e a v)
+        zset-indices)
+      [:add :db.cardinality/one]
+      (let [previous-v (first (get-in eav [e a]))]
+        (when previous-v
+          (index-triple! db zset-indices [:retract e a previous-v]))
+        (add-index-entry! zset-indices e a v))
+      [:add :db.cardinality/many]
+      (if (-> (get-in eav [e a]) (contains? v))
+        zset-indices
+        (add-index-entry! zset-indices e a v)))))
 
 (defn index-triple [{:keys [eav schema] :as db}
                     {aev-zset :aev ave-zset :ave :as zset-indices}
@@ -64,18 +123,20 @@
                       a (keys (get eav e))
                       v (get-in eav [e a])]
                   [:add e a v])]
-    (reduce (fn [zset-indices triple]
-              (index-triple empty-db zset-indices triple))
-            (->zset-indices)
-            triples)))
+    (persistent-zset-indices!
+     (reduce (fn [zset-indices triple]
+               (index-triple! empty-db zset-indices triple))
+             (->transient-zset-indices)
+             triples))))
 
 (defn calc-zset-indices [db-before {:keys [add retract] :as _triples-by-op}]
   (let [triples (concat (map (fn [t] (into [:add] t)) add)
                         (map (fn [t] (into [:retract] t)) retract))]
-    (reduce (fn [zset-indices triple]
-              (index-triple db-before zset-indices triple))
-            (->zset-indices)
-            triples)))
+    (persistent-zset-indices!
+     (reduce (fn [zset-indices triple]
+               (index-triple! db-before zset-indices triple))
+             (->transient-zset-indices)
+             triples))))
 
 (defn compile-inc-pattern [var-order [type pattern :as where-clause]]
   (let [var-to-index (zipmap var-order (range))]

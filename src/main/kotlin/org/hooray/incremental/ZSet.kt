@@ -15,7 +15,7 @@ import org.hooray.algo.ResultTuple
 class ZSet<K, W : Weight<W>> private constructor(
     private val data: Map<K, W>,
     private val zero: W
-) : IZSet<K, W, ZSet<K, W>>, IPersistentMap {
+) : IZSet<K, W, ZSet<K, W>>, IPersistentMap, IEditableCollection {
     /**
      * Get the weight of a value. Returns zero if the value is not present.
      */
@@ -285,6 +285,62 @@ class ZSet<K, W : Weight<W>> private constructor(
         override fun hasNext() = delegate.hasNext()
         override fun next() = delegate.next()
         override fun remove() = throw UnsupportedOperationException("ZSet is immutable")
+    }
+
+    override fun asTransient(): ITransientCollection =
+        TransientZSet(data.toMutableMap(), zero)
+
+    private class TransientZSet<K, W : Weight<W>>(
+        private var data: MutableMap<K, W>?,
+        private val zero: W
+    ) : ITransientMap {
+        private fun editableData(): MutableMap<K, W> =
+            data ?: throw IllegalAccessError("Transient used after persistent! call")
+
+        @Suppress("UNCHECKED_CAST")
+        override fun assoc(key: Any?, `val`: Any?): ITransientMap {
+            editableData()[key as K] = `val` as W
+            return this
+        }
+
+        override fun without(key: Any?): ITransientMap {
+            editableData().remove(key)
+            return this
+        }
+
+        override fun conj(o: Any?): ITransientCollection {
+            when (o) {
+                is Map.Entry<*, *> -> assoc(o.key, o.value)
+                is IPersistentVector -> {
+                    if (o.count() != 2) {
+                        throw IllegalArgumentException("Vector arg to map conj must be a pair")
+                    }
+                    assoc(o.nth(0), o.nth(1))
+                }
+                else -> {
+                    var entries = RT.seq(o)
+                    while (entries != null) {
+                        val entry = entries.first() as Map.Entry<*, *>
+                        assoc(entry.key, entry.value)
+                        entries = entries.next()
+                    }
+                }
+            }
+            return this
+        }
+
+        override fun persistent(): IPersistentMap {
+            val snapshot = editableData().toMap()
+            data = null
+            return ZSet(snapshot, zero)
+        }
+
+        override fun valAt(key: Any?): Any? = editableData()[key]
+
+        override fun valAt(key: Any?, notFound: Any?): Any? =
+            editableData()[key] ?: notFound
+
+        override fun count(): Int = editableData().size
     }
 
 

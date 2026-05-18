@@ -19,7 +19,7 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
     private val data: Map<K, IZSet<*, W, *>>,
     private val zero: W,
     private val one: W
-) : IZSet<K, W, IndexedZSet<K, W>>, IPersistentMap {
+) : IZSet<K, W, IndexedZSet<K, W>>, IPersistentMap, IEditableCollection {
     /**
      * Get the IZSet associated with a key.
      * Returns null if the key is not present or if the type doesn't match.
@@ -429,6 +429,80 @@ class IndexedZSet<K, W : Weight<W>> private constructor(
         override fun hasNext() = delegate.hasNext()
         override fun next() = delegate.next()
         override fun remove() = throw UnsupportedOperationException("IndexedZSet is immutable")
+    }
+
+    override fun asTransient(): ITransientCollection =
+        TransientIndexedZSet(data.mapValues { it.value as Any? }.toMutableMap(), zero, one)
+
+    private class TransientIndexedZSet<K, W : Weight<W>>(
+        private var data: MutableMap<K, Any?>?,
+        private val zero: W,
+        private val one: W
+    ) : ITransientMap {
+        private fun editableData(): MutableMap<K, Any?> =
+            data ?: throw IllegalAccessError("Transient used after persistent! call")
+
+        @Suppress("UNCHECKED_CAST")
+        override fun assoc(key: Any?, `val`: Any?): ITransientMap {
+            editableData()[key as K] = `val`
+            return this
+        }
+
+        override fun without(key: Any?): ITransientMap {
+            editableData().remove(key)
+            return this
+        }
+
+        override fun conj(o: Any?): ITransientCollection {
+            when (o) {
+                is Map.Entry<*, *> -> assoc(o.key, o.value)
+                is IPersistentVector -> {
+                    if (o.count() != 2) {
+                        throw IllegalArgumentException("Vector arg to map conj must be a pair")
+                    }
+                    assoc(o.nth(0), o.nth(1))
+                }
+                else -> {
+                    var entries = RT.seq(o)
+                    while (entries != null) {
+                        val entry = entries.first() as Map.Entry<*, *>
+                        assoc(entry.key, entry.value)
+                        entries = entries.next()
+                    }
+                }
+            }
+            return this
+        }
+
+        override fun persistent(): IPersistentMap {
+            val snapshot = editableData().mapNotNull { (key, value) ->
+                val child = persistentChild(value)
+                if (child.isEmpty()) null else key to child
+            }.toMap()
+            data = null
+            return IndexedZSet(snapshot, zero, one)
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        private fun persistentChild(value: Any?): IZSet<*, W, *> =
+            when (value) {
+                is ITransientCollection -> {
+                    val persistent = value.persistent()
+                    require(persistent is IZSet<*, *, *>) {
+                        "IndexedZSet transient child must persist to an IZSet, found: ${persistent::class}"
+                    }
+                    persistent as IZSet<*, W, *>
+                }
+                is IZSet<*, *, *> -> value as IZSet<*, W, *>
+                else -> throw IllegalArgumentException("IndexedZSet values must be IZSets, found: ${value?.let { it::class }}")
+            }
+
+        override fun valAt(key: Any?): Any? = editableData()[key]
+
+        override fun valAt(key: Any?, notFound: Any?): Any? =
+            editableData()[key] ?: notFound
+
+        override fun count(): Int = editableData().size
     }
 
     companion object {
