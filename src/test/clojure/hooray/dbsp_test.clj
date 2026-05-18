@@ -368,6 +368,17 @@
       (h/transact node [[:db/retract 1 :edge 2]])
       (is (= #{[[2] -1]} (set (h/consume-delta! iq)))))))
 
+(deftest e2e-rejects-unsupported-query-options-test
+  (let [node (fresh-node)]
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (standard-q-inc node '{:find [name]
+                                        :in [name]
+                                        :where [[?e :name name]]})))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (standard-q-inc node '{:find [name]
+                                        :keys [name]
+                                        :where [[?e :name name]]})))))
+
 ;; --------------------------------------------------------------------------
 ;; Cross-engine equivalence: :wcoj vs :standard produce the same deltas
 ;; --------------------------------------------------------------------------

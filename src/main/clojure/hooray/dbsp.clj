@@ -68,6 +68,15 @@
   [conformed-where]
   (vec (map-indexed compile-pattern conformed-where)))
 
+(defn- reject-unsupported-query-options
+  [{:keys [in keys strs syms]}]
+  (when (seq in)
+    (throw (ex-info "IN clauses not supported for DBSP-standard queries yet"
+                    {:in in})))
+  (when (or (seq keys) (seq strs) (seq syms))
+    (throw (ex-info "KEYS, STRS, and SYMS not supported for DBSP-standard queries yet"
+                    {:keys keys :strs strs :syms syms}))))
+
 ;; --------------------------------------------------------------------------
 ;; Phase 1 — deterministic left-deep join order
 ;; --------------------------------------------------------------------------
@@ -104,6 +113,8 @@
   (let [conformed (s/conform ::query/query query)]
     (when (= ::s/invalid conformed)
       (throw (ex-info "Invalid query" {:query query})))
+    (query/validate-query conformed)
+    (reject-unsupported-query-options conformed)
     {:find (:find conformed)
      :patterns (compile-patterns (:where conformed))}))
 
