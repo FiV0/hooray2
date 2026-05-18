@@ -152,3 +152,37 @@
   (let [q '{:find [?a ?d]
             :where [[?a :r ?b] [?b :s ?c] [?c :t ?d]]}]
     (is (= (dbsp/plan q) (dbsp/plan q)))))
+
+;; --------------------------------------------------------------------------
+;; Circuit assembly
+;; --------------------------------------------------------------------------
+
+(defn- assemble [query]
+  (dbsp/plan->circuit (dbsp/plan query)))
+
+(deftest assemble-single-pattern-test
+  (let [{:keys [circuit inputs output]} (assemble '{:find [name]
+                                                    :where [[?e :name name]]})]
+    (is (= 1 (count inputs)))
+    (is (some? output))
+    ;; input -> map(project) -> map(final projection)
+    (is (= ["input" "permute" "permute"] (vec (.operatorNames circuit))))))
+
+(deftest assemble-constant-pattern-test
+  (let [{:keys [circuit]} (assemble '{:find [?e] :where [[?e :name "Ivan"]]})]
+    ;; input -> filter -> map(project) -> map(final)
+    (is (= ["input" "filter-constants" "permute" "permute"]
+           (vec (.operatorNames circuit))))))
+
+(deftest assemble-three-pattern-chain-test
+  (let [{:keys [circuit inputs]} (assemble '{:find [?a ?d]
+                                             :where [[?a :r ?b]
+                                                     [?b :s ?c]
+                                                     [?c :t ?d]]})]
+    (is (= 3 (count inputs)))
+    ;; 3x (input, permute); join1 (no intermediate map); join2 preceded by a
+    ;; permute; final permute.
+    (is (= ["input" "permute" "input" "permute" "input" "permute"
+            "incremental-join" "permute" "incremental-join" "permute"]
+           (vec (.operatorNames circuit))))
+    (is (= 10 (.getNodeCount circuit)))))

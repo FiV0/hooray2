@@ -10,7 +10,9 @@
   (:require
    [clojure.set :as set]
    [clojure.spec.alpha :as s]
-   [hooray.query :as query]))
+   [hooray.query :as query])
+  (:import
+   (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp)))
 
 ;; --------------------------------------------------------------------------
 ;; Phase 1 — pattern descriptors
@@ -251,3 +253,59 @@
          :joins joins
          :result-vars result-vars
          :final-permute (indices-of result-vars fvars)}))))
+
+;; --------------------------------------------------------------------------
+;; Phase 2 — circuit assembly
+;; --------------------------------------------------------------------------
+
+(defn- assemble-pattern
+  "Wires one base pattern into [circuit]: Source -> Filter? -> Map(project).
+  Returns `{:stream <Stream> :handle <InputHandle>}`."
+  [^Circuit circuit pattern]
+  (let [pair (.addInput circuit)
+        source (.getFirst pair)
+        handle (.getSecond pair)
+        constants (:filter pattern)
+        filtered (if (seq constants)
+                   (.addUnary circuit
+                              (FilterOp/matchingConstants
+                               (int-array (keys constants))
+                               (object-array (vals constants)))
+                              source)
+                   source)
+        projected (.addUnary circuit
+                             (MapOp/permute (int-array (:project pattern)))
+                             filtered)]
+    {:stream projected :handle handle}))
+
+(defn plan->circuit
+  "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
+
+    {:circuit <Circuit>
+     :inputs  [<InputHandle> ...]   ; parallel to (:patterns plan)
+     :output  <OutputHandle>}
+
+  The circuit is per-pattern `Source -> Filter? -> Map`, a left-deep chain of
+  `IncrementalJoin`s (each non-first join preceded by a permuting `Map` when the
+  plan calls for one), and a final `Map` projecting to `:find`."
+  [{:keys [patterns joins final-permute]}]
+  (let [circuit (Circuit.)
+        wired (mapv #(assemble-pattern circuit %) patterns)
+        result (loop [i 1
+                      acc (:stream (first wired))]
+                 (if (>= i (count patterns))
+                   acc
+                   (let [join (nth joins (dec i))
+                         left (if-let [lp (:left-permute join)]
+                                (.addUnary circuit (MapOp/permute (int-array lp)) acc)
+                                acc)
+                         joined (.addBinary circuit
+                                            (IncrementalJoinOp. (int (:key-arity join))
+                                                                "incremental-join")
+                                            left
+                                            (:stream (nth wired i)))]
+                     (recur (inc i) joined))))
+        projected (.addUnary circuit (MapOp/permute (int-array final-permute)) result)]
+    {:circuit circuit
+     :inputs (mapv :handle wired)
+     :output (.output circuit projected)}))

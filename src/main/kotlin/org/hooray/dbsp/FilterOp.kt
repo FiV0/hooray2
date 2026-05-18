@@ -24,4 +24,19 @@ class FilterOp(
         }
         return ZSet.fromMap(result)
     }
+
+    companion object {
+        /**
+         * A [FilterOp] that keeps tuples whose column `columns[i]` equals
+         * `values[i]` for every `i`. Built from plain arrays for easy Clojure
+         * interop — used to enforce a triple pattern's constant columns.
+         */
+        @JvmStatic
+        fun matchingConstants(columns: IntArray, values: Array<Any?>): FilterOp {
+            require(columns.size == values.size) { "columns and values length mismatch" }
+            return FilterOp("filter-constants") { tuple ->
+                columns.indices.all { tuple[columns[it]] == values[it] }
+            }
+        }
+    }
 }
