@@ -96,7 +96,7 @@ I have written two blog posts about combining WCOJ with DBSP:
 	- [x] aggregates
 	- [ ] pull
 - Incremental
-    - [x] Standard tirple pattern
+    - [x] Standard triple pattern
 	- [ ] Or
 	- [ ] And
 	- [ ] Not
