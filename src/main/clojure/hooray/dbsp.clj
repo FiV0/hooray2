@@ -10,9 +10,12 @@
   (:require
    [clojure.set :as set]
    [clojure.spec.alpha :as s]
-   [hooray.query :as query])
+   [hooray.db :as db]
+   [hooray.query :as query]
+   [hooray.transact :as t])
   (:import
-   (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp)))
+   (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp Tuple)
+   (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
 ;; Phase 1 — pattern descriptors
@@ -309,3 +312,48 @@
     {:circuit circuit
      :inputs (mapv :handle wired)
      :output (.output circuit projected)}))
+
+;; --------------------------------------------------------------------------
+;; Phase 2 — per-pattern delta construction
+;; --------------------------------------------------------------------------
+
+(defn attribute-deltas
+  "Given [db-before] and [tx-data], returns `{attr -> {[e v] -> weight}}` — the
+  per-attribute change to the set of `(e, v)` facts.
+
+  Retracts count only facts actually present in `db-before`; an `:add` to a
+  cardinality-one attribute also retracts that entity's previous value (so an
+  update shows up as `-1` for the old value and `+1` for the new)."
+  [db-before tx-data]
+  (let [{:keys [eav schema]} db-before
+        {:keys [add retract]} (db/tx-data->triples db-before tx-data)
+        bump (fn [deltas a e v dw]
+               (update-in deltas [a [e v]] (fnil + 0) dw))]
+    (as-> {} deltas
+      (reduce (fn [ds [e a v]]
+                (if (contains? (get-in eav [e a]) v)
+                  (bump ds a e v -1)
+                  ds))
+              deltas retract)
+      (reduce (fn [ds [e a v]]
+                (-> (if (and (= :db.cardinality/one (t/attribute-cardinality schema a))
+                             (first (get-in eav [e a])))
+                      (bump ds a e (first (get-in eav [e a])) -1)
+                      ds)
+                    (bump a e v 1)))
+              deltas add))))
+
+(defn- ->tuple ^Tuple [values]
+  (Tuple/of (object-array values)))
+
+(defn pattern-delta-zset
+  "Converts an attribute delta `{[e v] -> weight}` into a flat `TupleZSet` in
+  the given [order] (`:aev` => `[e v]`, `:ave` => `[v e]`)."
+  ^ZSet [attr-delta order]
+  (->> attr-delta
+       (reduce-kv (fn [m [e v] w]
+                    (assoc m
+                           (->tuple (case order :aev [e v] :ave [v e]))
+                           (IntegerWeight. (int w))))
+                  {})
+       (ZSet/fromMap)))

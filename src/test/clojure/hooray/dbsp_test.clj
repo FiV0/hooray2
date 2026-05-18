@@ -1,7 +1,9 @@
 (ns hooray.dbsp-test
   (:require
    [clojure.test :refer [deftest is testing]]
-   [hooray.dbsp :as dbsp]))
+   [hooray.dbsp :as dbsp])
+  (:import
+   (org.hooray.dbsp Tuple)))
 
 (defn- patterns [query]
   (:patterns (dbsp/parse query)))
@@ -186,3 +188,41 @@
             "incremental-join" "permute" "incremental-join" "permute"]
            (vec (.operatorNames circuit))))
     (is (= 10 (.getNodeCount circuit)))))
+
+;; --------------------------------------------------------------------------
+;; Per-pattern delta construction
+;; --------------------------------------------------------------------------
+
+(deftest attribute-deltas-add-test
+  (is (= {:name {[1 "Ivan"] 1}}
+         (dbsp/attribute-deltas {:eav {} :schema {}}
+                                [{:db/id 1 :name "Ivan"}]))))
+
+(deftest attribute-deltas-cardinality-one-replacement-test
+  (testing "an add over an existing cardinality-one value retracts the old one"
+    (is (= {:name {[1 "Ivan"] -1 [1 "Ivanov"] 1}}
+           (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
+                                  [{:db/id 1 :name "Ivanov"}])))))
+
+(deftest attribute-deltas-retract-test
+  (testing "retracting a present fact"
+    (is (= {:name {[1 "Ivan"] -1}}
+           (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
+                                  [[:db/retract 1 :name "Ivan"]]))))
+  (testing "retracting an absent fact yields no delta"
+    (is (= {}
+           (dbsp/attribute-deltas {:eav {} :schema {}}
+                                  [[:db/retract 1 :name "Ivan"]])))))
+
+(deftest pattern-delta-zset-test
+  (testing ":aev order keeps [e v]"
+    (let [zs (dbsp/pattern-delta-zset {[1 "Ivan"] 1} :aev)]
+      (is (= 1 (.getSize zs)))
+      (is (= 1 (.getValue (.weight zs (Tuple/of (object-array [1 "Ivan"]))))))))
+
+  (testing ":ave order swaps to [v e]"
+    (let [zs (dbsp/pattern-delta-zset {[1 "Ivan"] 1} :ave)]
+      (is (= 1 (.getValue (.weight zs (Tuple/of (object-array ["Ivan" 1]))))))))
+
+  (testing "zero-weight facts are dropped"
+    (is (.isEmpty (dbsp/pattern-delta-zset {[1 "Ivan"] 0} :aev)))))
