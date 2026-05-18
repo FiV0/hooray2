@@ -8,6 +8,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
+            [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t])
   (:import (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp Tuple)
@@ -42,21 +43,21 @@
   The DBSP-standard engine only supports triple patterns with a constant
   attribute."
   [index [clause-type pattern]]
-  (when-not (= :triple clause-type)
-    (throw (ex-info "DBSP-standard engine supports only triple patterns"
-                    {:clause-type clause-type :pattern pattern})))
-  (let [{:keys [e a v]} pattern
-        a* (elem a)
-        e* (elem e)
-        v* (elem v)]
-    (when-not (= :constant (:kind a*))
-      (throw (ex-info "DBSP-standard engine requires a constant attribute"
-                      {:pattern pattern})))
-    {:index index
-     :attr (:value a*)
-     :e e*
-     :v v*
-     :vars (vec (keep elem-var [e* v*]))}))
+  (case clause-type
+    :triple (let [{:keys [e a v]} pattern
+                  a* (elem a)
+                  e* (elem e)
+                  v* (elem v)]
+              (when-not (= :constant (:kind a*))
+                (err/unsupported-ex "Currently variables in attribute position are not supported"))
+              {:index index
+               :attr (:value a*)
+               :e e*
+               :v v*
+               :vars (vec (keep elem-var [e* v*]))})
+
+    (err/unsupported-ex "DBSP-standard engine currently only supports triples"
+                        {:clause-type clause-type :pattern pattern})))
 
 (defn compile-patterns
   "Compiles every clause of a conformed `:where` into a vector of descriptors,

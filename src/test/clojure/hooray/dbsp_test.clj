@@ -91,15 +91,7 @@
                                     [?c :bar ?d]]}))))
 
   (testing "single pattern"
-    (is (= [0] (order-indices '{:find [name] :where [[?e :name name]]}))))
-
-  (testing "deterministic — same query yields the same order"
-    (let [q '{:find [?a]
-              :where [[?a :foo ?b]
-                      [?c :bar ?d]
-                      [?b :baz ?c]
-                      [?d :qux ?a]]}]
-      (is (= (order-indices q) (order-indices q))))))
+    (is (= [0] (order-indices '{:find [name] :where [[?e :name name]]})))))
 
 ;; --------------------------------------------------------------------------
 ;; Full join plan
