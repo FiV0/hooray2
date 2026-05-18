@@ -35,6 +35,7 @@
 (defn- ensure-indexed-zset! [indexed-zset k]
   (or (get indexed-zset k)
       (let [child (transient zset/empty-indexed-zset)]
+        ;; TODO this seems a ref flag
         (assoc! indexed-zset k child)
         child)))
 
