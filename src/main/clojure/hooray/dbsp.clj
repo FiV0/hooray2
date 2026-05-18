@@ -227,35 +227,36 @@
                              (set/union accset (nth var-sets i))
                              (conj ks (set/intersection accset (nth var-sets i))))))
             pp0 (pattern-plan (first ordered)
-                              (lead-with (first keys*) (:vars (first ordered))))
-            pattern-plans
-            (into [pp0]
-                  (map (fn [i]
-                         (let [d (nth ordered i)]
-                           (pattern-plan d (lead-with (nth keys* (dec i)) (:vars d)))))
-                       (range 1 (count ordered))))
-            joins (loop [i 1, acc (:out-vars pp0), js []]
-                    (if (>= i (count ordered))
-                      js
-                      (let [ki (nth keys* (dec i))
-                            right-vars (:out-vars (nth pattern-plans i))
-                            left-needed (lead-with ki acc)
-                            permute (indices-of acc left-needed)
-                            out-vars (vec (concat left-needed (remove ki right-vars)))]
-                        (recur (inc i)
-                               out-vars
-                               (conj js {:key-arity (count ki)
-                                         :key-vars (vec (filter ki left-needed))
-                                         :left-permute (when (not= permute
-                                                                   (vec (range (count acc))))
-                                                         permute)
-                                         :out-vars out-vars})))))
-            result-vars (:out-vars (last joins))]
-        {:find fvars
-         :patterns pattern-plans
-         :joins joins
-         :result-vars result-vars
-         :final-permute (indices-of result-vars fvars)}))))
+                              (lead-with (first keys*) (:vars (first ordered))))]
+        ;; Single left-to-right pass: each join's key column *order* is fixed by
+        ;; the accumulated (left) layout, and the right pattern is arranged to
+        ;; that same key order so both sides' leading columns line up.
+        (loop [i 1
+               acc (:out-vars pp0)
+               pattern-plans [pp0]
+               joins []]
+          (if (>= i (count ordered))
+            {:find fvars
+             :patterns pattern-plans
+             :joins joins
+             :result-vars acc
+             :final-permute (indices-of acc fvars)}
+            (let [ki (nth keys* (dec i))
+                  qi (nth ordered i)
+                  key-order (vec (filter ki acc))
+                  left-needed (into key-order (remove ki acc))
+                  permute (indices-of acc left-needed)
+                  qi-target (into key-order (remove ki (:vars qi)))
+                  out-vars (into left-needed (remove ki (:vars qi)))]
+              (recur (inc i)
+                     out-vars
+                     (conj pattern-plans (pattern-plan qi qi-target))
+                     (conj joins {:key-arity (count ki)
+                                  :key-vars key-order
+                                  :left-permute (when (not= permute
+                                                             (vec (range (count acc))))
+                                                  permute)
+                                  :out-vars out-vars})))))))))
 
 ;; --------------------------------------------------------------------------
 ;; Phase 2 — circuit assembly

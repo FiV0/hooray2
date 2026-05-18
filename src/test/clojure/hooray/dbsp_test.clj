@@ -12,7 +12,11 @@
   [{:db/id -1 :db/ident :name
     :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
    {:db/id -2 :db/ident :last-name
-    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}])
+    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   {:db/id -3 :db/ident :city
+    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
+   {:db/id -4 :db/ident :edge
+    :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}])
 
 (defn- fresh-node
   "A connected node with the test schema already transacted."
@@ -274,3 +278,127 @@
       (dbsp/compute-delta! iq db-before [{:db/id 1 :name "Ivanov"}])
       (is (= #{[["Ivan"] -1] [["Ivanov"] 1]} (set (dbsp/pop-result! iq))))
       (is (nil? (dbsp/pop-result! iq))))))
+
+;; --------------------------------------------------------------------------
+;; End-to-end via q-inc / transact / consume-delta!
+;; --------------------------------------------------------------------------
+
+(defn- standard-q-inc [node query]
+  (binding [h/*dbsp-version* :standard]
+    (h/q-inc node query)))
+
+(deftest e2e-single-pattern-test
+  (let [node (fresh-node)
+        iq (standard-q-inc node '{:find [name] :where [[1 :name name]]})]
+    (h/transact node [{:db/id 1 :name "Ivan"}])
+    (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))))
+
+(deftest e2e-update-test
+  (let [node (fresh-node)]
+    (h/transact node [{:db/id 1 :name "Ivan"}])
+    (let [iq (standard-q-inc node '{:find [name] :where [[1 :name name]]})]
+      (h/transact node [{:db/id 1 :name "Ivanov"}])
+      (is (= #{[["Ivan"] -1] [["Ivanov"] 1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-two-pattern-join-test
+  (let [node (fresh-node)]
+    (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}])
+    (let [iq (standard-q-inc node '{:find [name last-name]
+                                    :where [[e :name name]
+                                            [e :last-name last-name]]})]
+      (h/transact node [{:db/id :petr :name "Petr" :last-name "Petrov"}])
+      (is (= #{[["Petr" "Petrov"] 1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-self-join-test
+  (let [node (fresh-node)
+        iq (standard-q-inc node '{:find [?a ?b]
+                                  :where [[?a :name n]
+                                          [?b :name n]]})]
+    (h/transact node [{:db/id 1 :name "Ivan"} {:db/id 2 :name "Ivan"}])
+    ;; every ordered pair of entities sharing the name, including reflexive
+    (is (= #{[[1 1] 1] [[1 2] 1] [[2 1] 1] [[2 2] 1]}
+           (set (h/consume-delta! iq))))))
+
+(deftest e2e-three-pattern-chain-test
+  (let [node (fresh-node)
+        iq (standard-q-inc node '{:find [?a ?d]
+                                  :where [[?a :edge ?b]
+                                          [?b :edge ?c]
+                                          [?c :edge ?d]]})]
+    ;; path n1 -> n2 -> n3 -> n4
+    (h/transact node [{:db/id :n1 :edge :n2}
+                      {:db/id :n2 :edge :n3}
+                      {:db/id :n3 :edge :n4}])
+    (is (= #{[[:n1 :n4] 1]} (set (h/consume-delta! iq))))))
+
+(deftest e2e-triangle-test
+  (let [node (fresh-node)
+        iq (standard-q-inc node '{:find [?a ?b ?c]
+                                  :where [[?a :edge ?b]
+                                          [?b :edge ?c]
+                                          [?c :edge ?a]]})]
+    ;; directed 3-cycle n1 -> n2 -> n3 -> n1
+    (h/transact node [{:db/id :n1 :edge :n2}
+                      {:db/id :n2 :edge :n3}
+                      {:db/id :n3 :edge :n1}])
+    (is (= #{[[:n1 :n2 :n3] 1] [[:n2 :n3 :n1] 1] [[:n3 :n1 :n2] 1]}
+           (set (h/consume-delta! iq))))))
+
+(deftest e2e-cartesian-test
+  (let [node (fresh-node)
+        iq (standard-q-inc node '{:find [n c]
+                                  :where [[1 :name n]
+                                          [2 :city c]]})]
+    (h/transact node [{:db/id 1 :name "Ivan"} {:db/id 2 :city "NYC"}])
+    (is (= #{[["Ivan" "NYC"] 1]} (set (h/consume-delta! iq))))))
+
+;; --------------------------------------------------------------------------
+;; Cross-engine equivalence: :wcoj vs :standard produce the same deltas
+;; --------------------------------------------------------------------------
+
+(defn- run-engine
+  "Registers [query] under [version], applies each transaction in [delta-txs],
+  and returns the per-transaction deltas as sets."
+  [version initial-tx query delta-txs]
+  (let [node (fresh-node)]
+    (when (seq initial-tx)
+      (h/transact node initial-tx))
+    (let [iq (binding [h/*dbsp-version* version] (h/q-inc node query))]
+      (mapv (fn [tx]
+              (h/transact node tx)
+              (set (h/consume-delta! iq)))
+            delta-txs))))
+
+(defn- cross-engine= [initial-tx query delta-txs]
+  (= (run-engine :wcoj initial-tx query delta-txs)
+     (run-engine :standard initial-tx query delta-txs)))
+
+(deftest cross-engine-update-test
+  (is (cross-engine= [{:db/id 1 :name "Ivan"}]
+                     '{:find [name] :where [[1 :name name]]}
+                     [[{:db/id 1 :name "Ivanov"}]])))
+
+(deftest cross-engine-two-pattern-join-test
+  (is (cross-engine= [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}]
+                     '{:find [name last-name]
+                       :where [[e :name name]
+                               [e :last-name last-name]]}
+                     [[{:db/id :petr :name "Petr" :last-name "Petrov"}]
+                      [{:db/id :sam :name "Sam" :last-name "Smith"}]])))
+
+(deftest cross-engine-self-join-test
+  (is (cross-engine= []
+                     '{:find [?a ?b]
+                       :where [[?a :name n]
+                               [?b :name n]]}
+                     [[{:db/id 1 :name "Ivan"} {:db/id 2 :name "Ivan"}]
+                      [{:db/id 3 :name "Ivan"}]])))
+
+(deftest cross-engine-multi-step-test
+  (is (cross-engine= []
+                     '{:find [name last-name]
+                       :where [[e :name name]
+                               [e :last-name last-name]]}
+                     [[{:db/id :a :name "A" :last-name "AA"}]
+                      [{:db/id :b :name "B" :last-name "BB"}]
+                      [[:db/retractEntity :a]]])))
