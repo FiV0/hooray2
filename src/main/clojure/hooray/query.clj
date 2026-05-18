@@ -166,7 +166,8 @@
                        (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
                        (map second))
                   (conj ret-var))))
-      distinct))
+      distinct
+      vec))
 
 (defn- in->variables [in]
   (-> (for [[type var] in]
@@ -180,7 +181,8 @@
 (defn variable-order* [patterns]
   (->> (map variable-order patterns)
        flatten
-       distinct))
+       distinct
+       vec))
 
 (defn query->variable-order [{:keys [in where] :as _conformed-query}]
   (let [in-vars (in->variables in)

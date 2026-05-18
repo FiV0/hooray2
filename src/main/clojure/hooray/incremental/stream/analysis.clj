@@ -40,10 +40,31 @@
  :delta-var-order []
  :requested-var-orders [[]]}
 
+(defn delta-var-order [canonical-order pattern-var-order]
+  (into pattern-var-order (remove (set pattern-var-order) canonical-order)))
+
+(defn pattern-analysis [patterns]
+  (let [canonical-order (query/variable-order* patterns)
+        children (for [[type child-patterns :as pattern] patterns]
+                   (case type
+                     (:triple)
+                     {:op type
+                      :delta-var-order (delta-var-order canonical-order (query/variable-order pattern))}
+
+                     (:or)
+                     {:op type
+                      ;; :children (pattern-analysis child-patterns)
+                      :delta-var-order (delta-var-order canonical-order (query/variable-order pattern))}))
+        child-orders (into #{} (map :delta-var-order children))
+        children (mapv (fn [{:keys [delta-var-order] :as child}]
+                         (assoc child :requested-var-orders (vec (disj child-orders delta-var-order))))
+                       children)]
+    {:op :n-ary-join
+     :children children
+     :canonical-var-order canonical-order}))
+
 (defn query-analysis [{:keys [where] :as query}]
-  (for [[type _ :as pattern] where]
-    {:op type
-     :delta-var-order (vec (query/variable-order pattern))}))
+  (pattern-analysis where))
 
 
 (comment
@@ -52,6 +73,12 @@
                :where [[a :x b]
                        (or [b :y c]
                            [b :z c])]})
+
+  (def query '{:find [a b c]
+               :where [[a :x b]
+                       (or [b :y c]
+                           [b :z c])]})
+
 
   (query-analysis (s/conform ::query/query query) )
 
