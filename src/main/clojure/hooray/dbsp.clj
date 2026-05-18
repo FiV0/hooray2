@@ -101,3 +101,153 @@
       (throw (ex-info "Invalid query" {:query query})))
     {:find (:find conformed)
      :patterns (compile-patterns (:where conformed))}))
+
+;; --------------------------------------------------------------------------
+;; Phase 1 — full join plan
+;; --------------------------------------------------------------------------
+;;
+;; Tuples flow through the circuit as positional value vectors. A base
+;; pattern's Source emits 2-column `[e v]` (`:aev`) or `[v e]` (`:ave`) tuples;
+;; a Filter drops rows that miss the pattern's constants; a Map projects to the
+;; pattern's variable columns. Joins are left-deep: each `IncrementalJoin` keys
+;; on the leading columns shared with the accumulated result. The planner picks
+;; every pattern's `:order` so its variables already lead correctly (no
+;; re-index for base patterns) and inserts a permuting Map before each
+;; non-first join for the intermediate result.
+
+(defn- variable? [el] (= :variable (:kind el)))
+
+(defn- ordered-vars
+  "The pattern's variables in [order] permutation (`:aev` = e then v)."
+  [descriptor order]
+  (->> (case order
+         :aev [(:e descriptor) (:v descriptor)]
+         :ave [(:v descriptor) (:e descriptor)])
+       (keep #(when (variable? %) (:var %)))
+       vec))
+
+(defn- choose-order
+  "Picks `:aev` or `:ave` so the pattern's variables emerge in [target] order."
+  [descriptor target]
+  (condp = (vec target)
+    (ordered-vars descriptor :aev) :aev
+    (ordered-vars descriptor :ave) :ave
+    (throw (ex-info "pattern variables cannot be arranged to the join target"
+                    {:descriptor descriptor :target target}))))
+
+(defn- order-elems [descriptor order]
+  (case order
+    :aev [(:e descriptor) (:v descriptor)]
+    :ave [(:v descriptor) (:e descriptor)]))
+
+(defn- constant-filter
+  "Map of source-column -> required constant value, in [order] coordinates."
+  [descriptor order]
+  (into (sorted-map)
+        (keep-indexed (fn [i el] (when-not (variable? el) [i (:value el)]))
+                      (order-elems descriptor order))))
+
+(defn- projection
+  "Source columns holding variables, in [order] coordinates."
+  [descriptor order]
+  (vec (keep-indexed (fn [i el] (when (variable? el) i))
+                     (order-elems descriptor order))))
+
+(defn- pattern-plan
+  "Plan for one base pattern, producing its variables in [target] order."
+  [descriptor target]
+  (let [order (choose-order descriptor target)]
+    {:descriptor descriptor
+     :order order
+     :filter (constant-filter descriptor order)
+     :project (projection descriptor order)
+     :out-vars (vec target)}))
+
+(defn- lead-with
+  "Reorders [layout] so the members of [key-set] (in layout order) come first."
+  [key-set layout]
+  (vec (concat (filter key-set layout) (remove key-set layout))))
+
+(defn- indices-of
+  "For each variable in [targets], its position in [layout]."
+  [layout targets]
+  (let [pos (zipmap layout (range))]
+    (mapv (fn [v]
+            (or (pos v)
+                (throw (ex-info "variable not present in layout"
+                                {:var v :layout layout}))))
+          targets)))
+
+(defn- find-vars [conformed-find]
+  (mapv (fn [[t v]]
+          (if (= t :variable)
+            v
+            (throw (ex-info "DBSP-standard engine does not support aggregates yet"
+                            {:find-element [t v]}))))
+        conformed-find))
+
+(defn plan
+  "Builds the full circuit plan for [query]:
+
+    {:find          [find vars]
+     :patterns      [{:descriptor :order :filter :project :out-vars} ...]  ; join order
+     :joins         [{:key-arity :key-vars :left-permute :out-vars} ...]   ; one per join
+     :result-vars   [layout after the last join]
+     :final-permute [columns of :result-vars projected to :find]}
+
+  `:joins` has one entry per pattern after the first; join `i` joins the
+  accumulated result with `:patterns[i]`. `:left-permute` is nil when the
+  accumulated result already leads with the join key (always so for the first
+  join), otherwise the column order the intermediate Map must produce."
+  [query]
+  (let [{:keys [find patterns]} (parse query)
+        ordered (left-deep-order patterns)
+        fvars (find-vars find)]
+    (when (empty? ordered)
+      (throw (ex-info "query has no patterns" {:query query})))
+    (if (= 1 (count ordered))
+      (let [pp (pattern-plan (first ordered) (:vars (first ordered)))]
+        {:find fvars
+         :patterns [pp]
+         :joins []
+         :result-vars (:out-vars pp)
+         :final-permute (indices-of (:out-vars pp) fvars)})
+      (let [var-sets (mapv #(set (:vars %)) ordered)
+            ;; keys*[i-1] is the variable set joining the accumulated result
+            ;; with ordered[i].
+            keys* (loop [i 1, accset (first var-sets), ks []]
+                    (if (>= i (count ordered))
+                      ks
+                      (recur (inc i)
+                             (set/union accset (nth var-sets i))
+                             (conj ks (set/intersection accset (nth var-sets i))))))
+            pp0 (pattern-plan (first ordered)
+                              (lead-with (first keys*) (:vars (first ordered))))
+            pattern-plans
+            (into [pp0]
+                  (map (fn [i]
+                         (let [d (nth ordered i)]
+                           (pattern-plan d (lead-with (nth keys* (dec i)) (:vars d)))))
+                       (range 1 (count ordered))))
+            joins (loop [i 1, acc (:out-vars pp0), js []]
+                    (if (>= i (count ordered))
+                      js
+                      (let [ki (nth keys* (dec i))
+                            right-vars (:out-vars (nth pattern-plans i))
+                            left-needed (lead-with ki acc)
+                            permute (indices-of acc left-needed)
+                            out-vars (vec (concat left-needed (remove ki right-vars)))]
+                        (recur (inc i)
+                               out-vars
+                               (conj js {:key-arity (count ki)
+                                         :key-vars (vec (filter ki left-needed))
+                                         :left-permute (when (not= permute
+                                                                   (vec (range (count acc))))
+                                                         permute)
+                                         :out-vars out-vars})))))
+            result-vars (:out-vars (last joins))]
+        {:find fvars
+         :patterns pattern-plans
+         :joins joins
+         :result-vars result-vars
+         :final-permute (indices-of result-vars fvars)}))))

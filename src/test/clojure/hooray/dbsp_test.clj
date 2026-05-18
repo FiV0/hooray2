@@ -79,3 +79,76 @@
                       [?b :baz ?c]
                       [?d :qux ?a]]}]
       (is (= (order-indices q) (order-indices q))))))
+
+;; --------------------------------------------------------------------------
+;; Full join plan
+;; --------------------------------------------------------------------------
+
+(deftest plan-single-pattern-test
+  (let [p (dbsp/plan '{:find [name] :where [[?e :name name]]})]
+    (is (= 1 (count (:patterns p))))
+    (is (= [] (:joins p)))
+    (is (= '[?e name] (:result-vars p)))
+    (is (= [1] (:final-permute p)))
+    (let [pat (first (:patterns p))]
+      (is (= :aev (:order pat)))
+      (is (= {} (:filter pat)))
+      (is (= [0 1] (:project pat)))
+      (is (= '[?e name] (:out-vars pat))))))
+
+(deftest plan-two-pattern-join-test
+  (let [p (dbsp/plan '{:find [name age]
+                       :where [[?e :name name]
+                               [?e :age age]]})]
+    (is (= '[?e name age] (:result-vars p)))
+    (is (= [1 2] (:final-permute p)))
+    (is (= 1 (count (:joins p))))
+    (let [j (first (:joins p))]
+      (is (= 1 (:key-arity j)))
+      (is (= '[?e] (:key-vars j)))
+      (is (nil? (:left-permute j)))
+      (is (= '[?e name age] (:out-vars j))))))
+
+(deftest plan-ave-order-test
+  (testing "a pattern joining on its value column is fed in :ave order"
+    (let [p (dbsp/plan '{:find [?e ?p]
+                         :where [[?e :name name]
+                                 [?p :age name]]})]
+      (is (= :ave (:order (nth (:patterns p) 0))))
+      (is (= :ave (:order (nth (:patterns p) 1))))
+      (is (= '[name ?e ?p] (:result-vars p))))))
+
+(deftest plan-constant-filter-test
+  (testing "a constant value column becomes a Filter and is projected away"
+    (let [p (dbsp/plan '{:find [?e] :where [[?e :name "Ivan"]]})
+          pat (first (:patterns p))]
+      (is (= {1 "Ivan"} (:filter pat)))
+      (is (= [0] (:project pat)))
+      (is (= '[?e] (:out-vars pat))))))
+
+(deftest plan-chain-intermediate-permute-test
+  (testing "the third join needs the intermediate result re-permuted"
+    (let [p (dbsp/plan '{:find [?a ?d]
+                         :where [[?a :r ?b]
+                                 [?b :s ?c]
+                                 [?c :t ?d]]})]
+      (is (= 2 (count (:joins p))))
+      (is (nil? (:left-permute (nth (:joins p) 0))))
+      (is (= [2 0 1] (:left-permute (nth (:joins p) 1))))
+      (is (= '[?c ?b ?a ?d] (:result-vars p)))
+      (is (= [2 3] (:final-permute p))))))
+
+(deftest plan-triangle-test
+  (testing "a cyclic query joins the closing pattern on a two-variable key"
+    (let [p (dbsp/plan '{:find [?a]
+                         :where [[?a :r ?b]
+                                 [?b :s ?c]
+                                 [?c :t ?a]]})
+          closing (last (:joins p))]
+      (is (= 2 (:key-arity closing)))
+      (is (= 2 (count (set (:key-vars closing))))))))
+
+(deftest plan-deterministic-test
+  (let [q '{:find [?a ?d]
+            :where [[?a :r ?b] [?b :s ?c] [?c :t ?d]]}]
+    (is (= (dbsp/plan q) (dbsp/plan q)))))
