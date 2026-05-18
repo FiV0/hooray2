@@ -1,6 +1,5 @@
 (ns hooray.core
-  (:require [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [hooray.db :as db]
             [hooray.query :as query]
             [hooray.pull :as pull]

@@ -4,7 +4,7 @@
             [hooray.core :as h]
             [hooray.graph-gen :as g]))
 
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
+(t/use-fixtures :each fix/with-each-dbsp-version fix/with-node fix/with-people-schema)
 
 (def ^:dynamic *inc-q* nil)
 
@@ -102,9 +102,9 @@
         '{:find [name]
           :where [[e :name name]]}
 
-      (t/is (= [[["Petr"] 1]
-                [["Ivan"] 1]]
-               (h/consume-delta! *inc-q*))))))
+      (t/is (= #{[["Ivan"] 1]
+                 [["Petr"] 1]}
+               (set (h/consume-delta! *inc-q*)))))))
 
 (deftest test-basic-query-6
   (t/testing "Can query across fields for same value"
@@ -141,8 +141,8 @@
       '{:find [name]
         :where [[e :name name]]}
 
-    (t/is (= [[["Ivan"] -1] [["Ivanova"] 1]]
-             (h/consume-delta! *inc-q*)))))
+    (t/is (= #{[["Ivan"] -1] [["Ivanova"] 1]}
+             (set (h/consume-delta! *inc-q*))))))
 
 (deftest test-basic-retractions-2
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
