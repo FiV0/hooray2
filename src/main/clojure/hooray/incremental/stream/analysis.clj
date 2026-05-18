@@ -50,10 +50,11 @@
                      {:op type
                       :delta-var-order (delta-var-order canonical-order (query/variable-order pattern))}
 
-                     (:or)
-                     {:op type
-                      :children (pattern-analysis canonical-order child-patterns)
-                      :delta-var-order (delta-var-order canonical-order (query/variable-order pattern))}))
+                     (:or :and)
+                     (let [sub-canonical-order (query/variable-order* child-patterns)]
+                       {:op type
+                        :children (pattern-analysis sub-canonical-order child-patterns)
+                        :delta-var-order (delta-var-order canonical-order (query/variable-order pattern))})))
         child-orders (into #{} (map :delta-var-order children))]
     (mapv (fn [{:keys [delta-var-order] :as child}]
             (assoc child :requested-var-orders (vec (disj child-orders delta-var-order))))
