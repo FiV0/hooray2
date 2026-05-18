@@ -25,6 +25,31 @@
 (defn- create-node []
   (h/connect {:type :mem :storage :hash :algo :hash}))
 
+(deftest db->zset-indices-does-not-use-persistent-index-triple-test
+  (testing "Initial index construction does not route through persistent index-triple updates"
+    (let [node (create-node)
+          _ (h/transact node fix/people-schema2)
+          _ (h/transact node [{:db/id 1 :person/name "Alice"}])
+          db (h/db node)]
+      (with-redefs [incremental/index-triple
+                    (fn [& _]
+                      (throw (ex-info "index-triple should not be used during transient construction" {})))]
+        (let [result (incremental/db->zset-indices db)]
+          (is (= one (weight-at (:aev result) :person/name 1 "Alice")))
+          (is (= one (weight-at (:ave result) :person/name "Alice" 1))))))))
+
+(deftest calc-zset-indices-does-not-use-persistent-index-triple-test
+  (testing "Delta index construction does not route through persistent index-triple updates"
+    (let [node (create-node)
+          db-before (h/db node)]
+      (with-redefs [incremental/index-triple
+                    (fn [& _]
+                      (throw (ex-info "index-triple should not be used during transient construction" {})))]
+        (let [result (incremental/calc-zset-indices db-before {:add [[1 :person/name "Alice"]]
+                                                               :retract []})]
+          (is (= one (weight-at (:aev result) :person/name 1 "Alice")))
+          (is (= one (weight-at (:ave result) :person/name "Alice" 1))))))))
+
 ;; Test 1: Add with cardinality/one (default)
 (deftest calc-zset-indices-add-cardinality-one-test
   (testing "Adding a triple with default cardinality/one creates positive weights in AEV and AVE"

@@ -1,9 +1,14 @@
 package org.hooray.incremental
 
+import clojure.lang.IEditableCollection
+import clojure.lang.ITransientMap
+import clojure.lang.MapEntry
+import clojure.lang.PersistentVector
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.assertThrows
 
+@Suppress("UNCHECKED_CAST")
 class ZSetTest {
 
     @Test
@@ -59,6 +64,57 @@ class ZSetTest {
         assertEquals(IntegerWeight(1), zset.weight("a"))
         assertEquals(IntegerWeight.ZERO, zset.weight("b"))
         assertEquals(IntegerWeight(2), zset.weight("c"))
+    }
+
+    @Test
+    fun `test transient ZSet supports map operations`() {
+        val transient = (ZSet.fromMap(mapOf("a" to IntegerWeight(1))) as IEditableCollection)
+            .asTransient() as ITransientMap
+
+        val afterAssoc = transient.assoc("b", IntegerWeight(2))
+        assertSame(transient, afterAssoc)
+        assertEquals(IntegerWeight(1), transient.valAt("a"))
+        assertEquals(IntegerWeight(2), transient.valAt("b"))
+        assertEquals(2, transient.count())
+
+        transient.conj(PersistentVector.create("c", IntegerWeight(3)))
+        transient.conj(MapEntry.create("d", IntegerWeight(4)))
+        transient.without("a")
+
+        val persistent = transient.persistent() as ZSet<String, IntegerWeight>
+        assertEquals(IntegerWeight.ZERO, persistent.weight("a"))
+        assertEquals(IntegerWeight(2), persistent.weight("b"))
+        assertEquals(IntegerWeight(3), persistent.weight("c"))
+        assertEquals(IntegerWeight(4), persistent.weight("d"))
+    }
+
+    @Test
+    fun `test transient ZSet rejects use after persistent`() {
+        val transient = (ZSet.empty<String>() as IEditableCollection).asTransient() as ITransientMap
+
+        transient.assoc("a", IntegerWeight(1))
+        transient.persistent()
+
+        assertThrows<IllegalAccessError> {
+            transient.assoc("b", IntegerWeight(2))
+        }
+        assertThrows<IllegalAccessError> {
+            transient.valAt("a")
+        }
+        assertThrows<IllegalAccessError> {
+            transient.persistent()
+        }
+    }
+
+    @Test
+    fun `test transient ZSet persistent does not filter zero weights`() {
+        val transient = (ZSet.empty<String>() as IEditableCollection).asTransient() as ITransientMap
+
+        transient.assoc("zero", IntegerWeight.ZERO)
+
+        val persistent = transient.persistent() as ZSet<String, IntegerWeight>
+        assertTrue(persistent.containsKey("zero"))
+        assertEquals(IntegerWeight.ZERO, persistent.valAt("zero"))
     }
 
     @Test

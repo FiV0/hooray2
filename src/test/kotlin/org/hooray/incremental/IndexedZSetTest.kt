@@ -1,9 +1,14 @@
 package org.hooray.incremental
 
+import clojure.lang.IEditableCollection
+import clojure.lang.ITransientMap
+import clojure.lang.MapEntry
+import clojure.lang.PersistentVector
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.assertThrows
 
+@Suppress("UNCHECKED_CAST")
 class IndexedZSetTest {
 
     // ========== Core Functionality Tests ==========
@@ -47,6 +52,79 @@ class IndexedZSetTest {
         assertNotNull(indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("a"))
         assertNull(indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("b"))  // Empty ZSet filtered out
         assertNotNull(indexed.getTyped<Int, ZSet<Int, IntegerWeight>>("c"))
+    }
+
+    @Test
+    fun `test transient IndexedZSet supports map operations`() {
+        val first = ZSet.fromMap(mapOf(1 to IntegerWeight(1)))
+        val transient = (IndexedZSet.fromMap(mapOf("a" to first), IntegerWeight.ZERO, IntegerWeight.ONE) as IEditableCollection)
+            .asTransient() as ITransientMap
+
+        val second = ZSet.fromMap(mapOf(2 to IntegerWeight(2)))
+        val afterAssoc = transient.assoc("b", second)
+        assertSame(transient, afterAssoc)
+        assertEquals(first, transient.valAt("a"))
+        assertEquals(second, transient.valAt("b"))
+        assertEquals(2, transient.count())
+
+        val third = ZSet.fromMap(mapOf(3 to IntegerWeight(3)))
+        val fourth = ZSet.fromMap(mapOf(4 to IntegerWeight(4)))
+        transient.conj(PersistentVector.create("c", third))
+        transient.conj(MapEntry.create("d", fourth))
+        transient.without("a")
+
+        val persistent = transient.persistent() as IndexedZSet<String, IntegerWeight>
+        assertNull(persistent.getTyped<Int, ZSet<Int, IntegerWeight>>("a"))
+        assertEquals(second, persistent.getTyped<Int, ZSet<Int, IntegerWeight>>("b"))
+        assertEquals(third, persistent.getTyped<Int, ZSet<Int, IntegerWeight>>("c"))
+        assertEquals(fourth, persistent.getTyped<Int, ZSet<Int, IntegerWeight>>("d"))
+    }
+
+    @Test
+    fun `test transient IndexedZSet persists nested transient children`() {
+        val child = (ZSet.empty<String>() as IEditableCollection).asTransient() as ITransientMap
+        child.assoc("leaf", IntegerWeight(5))
+        val parent = (IndexedZSet.empty<String, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE) as IEditableCollection)
+            .asTransient() as ITransientMap
+
+        parent.assoc("group", child)
+
+        val persistent = parent.persistent() as IndexedZSet<String, IntegerWeight>
+        val group = persistent.getTyped<String, ZSet<String, IntegerWeight>>("group")
+        assertNotNull(group)
+        assertEquals(IntegerWeight(5), group!!.weight("leaf"))
+    }
+
+    @Test
+    fun `test transient IndexedZSet rejects use after persistent`() {
+        val transient = (IndexedZSet.empty<String, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE) as IEditableCollection)
+            .asTransient() as ITransientMap
+
+        transient.assoc("a", ZSet.singleton(1, IntegerWeight.ONE))
+        transient.persistent()
+
+        assertThrows<IllegalAccessError> {
+            transient.assoc("b", ZSet.singleton(2, IntegerWeight.ONE))
+        }
+        assertThrows<IllegalAccessError> {
+            transient.valAt("a")
+        }
+        assertThrows<IllegalAccessError> {
+            transient.persistent()
+        }
+    }
+
+    @Test
+    fun `test transient IndexedZSet filters empty children on persistent`() {
+        val transient = (IndexedZSet.empty<String, IntegerWeight>(IntegerWeight.ZERO, IntegerWeight.ONE) as IEditableCollection)
+            .asTransient() as ITransientMap
+
+        transient.assoc("empty", ZSet.empty<Int>())
+        transient.assoc("non-empty", ZSet.singleton(1, IntegerWeight.ONE))
+
+        val persistent = transient.persistent() as IndexedZSet<String, IntegerWeight>
+        assertNull(persistent.getTyped<Int, ZSet<Int, IntegerWeight>>("empty"))
+        assertNotNull(persistent.getTyped<Int, ZSet<Int, IntegerWeight>>("non-empty"))
     }
 
     @Test
