@@ -3,8 +3,8 @@
 
   Compiles a conjunctive Datalog query of standard triple patterns into a
   circuit of unary/binary operators (see `org.hooray.dbsp`), modelled on the
-  Feldera `dbsp` crate. This is the `:standard` engine; the `:wcoj` engine in
-  `hooray.incremental` is unaffected."
+  Feldera `dbsp` crate. This is the `:standard` engine. The WCOJ engine in
+  `hooray.incremental` uses a different approach."
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
@@ -344,13 +344,15 @@
                   ds))
               deltas retract)
       (reduce (fn [ds [e a v]]
-                (-> (if (and (= :db.cardinality/one (t/attribute-cardinality schema a))
-                             (first (get-in eav [e a])))
-                      (bump ds a e (first (get-in eav [e a])) -1)
-                      ds)
-                    (cond->
-                     (not (contains? (get-in eav [e a]) v))
-                      (bump a e v 1))))
+                ;; retract old delta when cardinality/one
+                (let [ds (if (and (= :db.cardinality/one (t/attribute-cardinality schema a))
+                                  (first (get-in eav [e a])))
+                           (bump ds a e (first (get-in eav [e a])) -1)
+                           ds)]
+                  ;; add new delta if non existant
+                  (if (not (contains? (get-in eav [e a]) v))
+                    (bump ds a e v 1)
+                    ds)))
               deltas add))))
 
 (defn- ->tuple ^Tuple [values]
@@ -391,7 +393,7 @@
       (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
              (pattern-delta-zset (get attr-deltas attr {}) (:order pattern))))))
 
-(defn- format-result
+(defn- zset->result-set
   "Renders an output `TupleZSet` as a seq of `[tuple-vector weight]` pairs."
   [^ZSet zset]
   (mapv (fn [entry]
@@ -403,8 +405,7 @@
 
 (defn dbsp-query?
   "True if [x] is a DBSP-standard incremental query (vs. a WCOJ one)."
-  [x]
-  (instance? DbspQuery x))
+  [x] (instance? DbspQuery x))
 
 (defn compile-query
   "Compiles [query] into a stepping DBSP circuit, primed with the current state
@@ -426,7 +427,7 @@
   [iq db-before tx-data]
   (push-deltas! iq (attribute-deltas db-before tx-data))
   (.step ^Circuit (:circuit iq))
-  (let [result (format-result (.get ^org.hooray.dbsp.OutputHandle (:output iq)))]
+  (let [result (zset->result-set (.get ^org.hooray.dbsp.OutputHandle (:output iq)))]
     (when (seq result)
       (swap! (:queue iq) conj result))
     result))
