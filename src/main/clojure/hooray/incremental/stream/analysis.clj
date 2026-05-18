@@ -43,9 +43,8 @@
 (defn delta-var-order [canonical-order pattern-var-order]
   (into pattern-var-order (remove (set pattern-var-order) canonical-order)))
 
-(defn pattern-analysis [patterns]
-  (let [canonical-order (query/variable-order* patterns)
-        children (for [[type child-patterns :as pattern] patterns]
+(defn pattern-analysis [canonical-order patterns]
+  (let [children (for [[type child-patterns :as pattern] patterns]
                    (case type
                      (:triple)
                      {:op type
@@ -53,18 +52,18 @@
 
                      (:or)
                      {:op type
-                      ;; :children (pattern-analysis child-patterns)
+                      :children (pattern-analysis canonical-order child-patterns)
                       :delta-var-order (delta-var-order canonical-order (query/variable-order pattern))}))
-        child-orders (into #{} (map :delta-var-order children))
-        children (mapv (fn [{:keys [delta-var-order] :as child}]
-                         (assoc child :requested-var-orders (vec (disj child-orders delta-var-order))))
-                       children)]
-    {:op :n-ary-join
-     :children children
-     :canonical-var-order canonical-order}))
+        child-orders (into #{} (map :delta-var-order children))]
+    (mapv (fn [{:keys [delta-var-order] :as child}]
+            (assoc child :requested-var-orders (vec (disj child-orders delta-var-order))))
+          children)))
 
 (defn query-analysis [{:keys [where] :as query}]
-  (pattern-analysis where))
+  (let [canonical-order (query/variable-order* where)]
+    {:op :n-ary-join
+     :children (pattern-analysis canonical-order where)
+     :canonical-var-order canonical-order}))
 
 
 (comment

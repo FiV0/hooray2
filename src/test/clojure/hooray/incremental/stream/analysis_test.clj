@@ -31,6 +31,9 @@
                :delta-var-order [a b c],
                :requested-var-orders [[b c a]]}
               {:op :or,
+               :children
+               [{:op :triple, :delta-var-order [b c a], :requested-var-orders []}
+                {:op :triple, :delta-var-order [b c a], :requested-var-orders []}],
                :delta-var-order [b c a],
                :requested-var-orders [[a b c]]}],
              :canonical-var-order [a b c]}
