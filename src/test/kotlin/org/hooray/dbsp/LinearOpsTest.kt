@@ -1,0 +1,74 @@
+package org.hooray.dbsp
+
+import org.hooray.incremental.IntegerWeight
+import org.hooray.incremental.ZSet
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.*
+
+class LinearOpsTest {
+
+    /** Builds a TupleZSet; repeated tuples have their weights summed. */
+    private fun zset(vararg pairs: Pair<Tuple, Int>): TupleZSet {
+        val m = HashMap<Tuple, IntegerWeight>()
+        for ((t, w) in pairs) {
+            m.merge(t, IntegerWeight(w)) { a, b -> a.add(b) }
+        }
+        return ZSet.fromMap(m)
+    }
+
+    // --- FilterOp ---
+
+    @Test
+    fun `filter keeps matching tuples and drops the rest`() {
+        val op = FilterOp("keep-a") { it[0] == "a" }
+        val out = op.eval(zset(Tuple.of("a", 1) to 1, Tuple.of("b", 2) to 1))
+        assertEquals(zset(Tuple.of("a", 1) to 1), out)
+    }
+
+    @Test
+    fun `filter preserves weights including negative`() {
+        val op = FilterOp { it[0] == "a" }
+        val out = op.eval(zset(Tuple.of("a", 1) to -3, Tuple.of("a", 2) to 5))
+        assertEquals(zset(Tuple.of("a", 1) to -3, Tuple.of("a", 2) to 5), out)
+    }
+
+    @Test
+    fun `filter on empty input yields empty`() {
+        assertTrue(FilterOp { true }.eval(emptyTupleZSet()).isEmpty())
+    }
+
+    // --- MapOp ---
+
+    @Test
+    fun `map permute reorders columns`() {
+        val op = MapOp.permute(intArrayOf(1, 0))
+        val out = op.eval(zset(Tuple.of("e", "v") to 1))
+        assertEquals(zset(Tuple.of("v", "e") to 1), out)
+    }
+
+    @Test
+    fun `map projection sums weights of colliding tuples`() {
+        val op = MapOp.permute(intArrayOf(0))   // project to column 0
+        val out = op.eval(zset(Tuple.of("a", 1) to 1, Tuple.of("a", 2) to 2))
+        assertEquals(zset(Tuple.of("a") to 3), out)
+    }
+
+    @Test
+    fun `map projection drops tuples whose weights cancel to zero`() {
+        val op = MapOp.permute(intArrayOf(0))
+        val out = op.eval(zset(Tuple.of("a", 1) to 1, Tuple.of("a", 2) to -1))
+        assertTrue(out.isEmpty())
+    }
+
+    @Test
+    fun `map applies an arbitrary transform`() {
+        val op = MapOp("tag") { Tuple.of(it[0], "tagged") }
+        val out = op.eval(zset(Tuple.of("x") to 2))
+        assertEquals(zset(Tuple.of("x", "tagged") to 2), out)
+    }
+
+    @Test
+    fun `map on empty input yields empty`() {
+        assertTrue(MapOp.permute(intArrayOf(0)).eval(emptyTupleZSet()).isEmpty())
+    }
+}
