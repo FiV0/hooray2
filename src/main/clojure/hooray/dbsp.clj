@@ -4,18 +4,14 @@
   Compiles a conjunctive Datalog query of standard triple patterns into a
   circuit of unary/binary operators (see `org.hooray.dbsp`), modelled on the
   Feldera `dbsp` crate. This is the `:standard` engine; the `:wcoj` engine in
-  `hooray.incremental` is unaffected.
-
-  See specs/dbsp-standard.md."
-  (:require
-   [clojure.set :as set]
-   [clojure.spec.alpha :as s]
-   [hooray.db :as db]
-   [hooray.query :as query]
-   [hooray.transact :as t])
-  (:import
-   (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp Tuple)
-   (org.hooray.incremental IntegerWeight ZSet)))
+  `hooray.incremental` is unaffected."
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
+            [hooray.db :as db]
+            [hooray.query :as query]
+            [hooray.transact :as t])
+  (:import (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp Tuple)
+           (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
 ;; Phase 1 — pattern descriptors
