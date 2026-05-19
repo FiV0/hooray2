@@ -4,7 +4,7 @@
             [hooray.core :as h]
             [hooray.graph-gen :as g]))
 
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
+(t/use-fixtures :each fix/with-each-dbsp-version fix/with-node fix/with-people-schema)
 
 (def ^:dynamic *inc-q* nil)
 
@@ -102,9 +102,9 @@
         '{:find [name]
           :where [[e :name name]]}
 
-      (t/is (= [[["Petr"] 1]
-                [["Ivan"] 1]]
-               (h/consume-delta! *inc-q*))))))
+      (t/is (= #{[["Ivan"] 1]
+                 [["Petr"] 1]}
+               (set (h/consume-delta! *inc-q*)))))))
 
 (deftest test-basic-query-6
   (t/testing "Can query across fields for same value"
@@ -141,8 +141,8 @@
       '{:find [name]
         :where [[e :name name]]}
 
-    (t/is (= [[["Ivan"] -1] [["Ivanova"] 1]]
-             (h/consume-delta! *inc-q*)))))
+    (t/is (= #{[["Ivan"] -1] [["Ivanova"] 1]}
+             (set (h/consume-delta! *inc-q*))))))
 
 (deftest test-basic-retractions-2
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -162,10 +162,10 @@
                           {:db/id :carol :name "Carol" :city "LA"}])
 
   (with-transaction-and-inc-q
-    [[:db/retractEntity :bob]]
+      [[:db/retractEntity :bob]]
 
-    '{:find [city]
-      :where [[e :city city]]}
+      '{:find [city]
+        :where [[e :city city]]}
 
     (t/is (= [[["NYC"] -1]] (h/consume-delta! *inc-q*)))
     (h/transact fix/*node* [[:db/retractEntity :alice]])
@@ -206,14 +206,29 @@
                [:db/add 3 :t/to 1]])
 
   (with-transaction-and-inc-q
-    [[:db/retract 2 :s/to 3]]
+      [[:db/retract 2 :s/to 3]]
 
-    '{:find  [a b c]
-      :where [[a :r/to b]
-              [b :s/to c]
-              [c :t/to a]]}
+      '{:find  [a b c]
+        :where [[a :r/to b]
+                [b :s/to c]
+                [c :t/to a]]}
 
     (t/is (= [[[1 2 3] -1]] (h/consume-delta! *inc-q*)))))
+
+(deftest e2e-triangle-test
+  (h/transact fix/*node* [g/edge-attribute])
+
+  (with-transaction-and-inc-q
+      [[:db/add 1 :g/to 2]
+       [:db/add 2 :g/to 3]
+       [:db/add 3 :g/to 1]]
+
+      '{:find  [a b c]
+        :where [[a :g/to b]
+                [b :g/to c]
+                [c :g/to a]]}
+
+    (t/is (= #{[[2 3 1] 1] [[1 2 3] 1] [[3 1 2] 1]} (set (h/consume-delta! *inc-q*))))))
 
 ;; TODO move this to some benchmarking setup
 (deftest test-triangle-wcoj-bad-case

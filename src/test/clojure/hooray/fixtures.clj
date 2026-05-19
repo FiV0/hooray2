@@ -7,6 +7,13 @@
 (def ^:dynamic *opts* {:type :mem :storage :hash :algo :generic})
 (def ^:dynamic *node* nil)
 
+(def ^:private dbsp-versions [:wcoj :standard])
+
+(defn with-each-dbsp-version [f]
+  (doseq [version dbsp-versions]
+    (binding [h/*dbsp-version* version]
+      (f))))
+
 (defn with-node
   ([f] (with-node *opts* f))
   ([opts f]
