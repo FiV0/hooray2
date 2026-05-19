@@ -10,7 +10,8 @@ package org.hooray.dbsp
  *
  * Tuples are immutable; every transformation returns a new `Tuple`.
  */
-class Tuple(private val values: Array<Any?>) {
+class Tuple(values: Array<Any?>) {
+    private val values: Array<Any?> = values.copyOf()
 
     /** Number of columns in this tuple. */
     val arity: Int get() = values.size

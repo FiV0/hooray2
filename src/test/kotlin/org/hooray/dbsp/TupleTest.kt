@@ -27,6 +27,18 @@ class TupleTest {
     }
 
     @Test
+    fun `tuple constructor defensively copies input array`() {
+        val values = arrayOf<Any?>(1, "x")
+        val tuple = Tuple(values)
+        val map = mutableMapOf(tuple to "hit")
+
+        values[0] = 2
+
+        assertEquals(Tuple.of(1, "x"), tuple)
+        assertEquals("hit", map[Tuple.of(1, "x")])
+    }
+
+    @Test
     fun `arity and indexed access`() {
         val t = Tuple.of("a", "b", "c")
         assertEquals(3, t.arity)
