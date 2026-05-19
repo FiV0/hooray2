@@ -351,8 +351,6 @@
   [db-before tx-data]
   (let [{:keys [eav schema]} db-before
         {:keys [add retract]} (db/tx-data->triples db-before tx-data)
-        clean-deltas (fn [deltas]
-                       (into {} (remove (comp empty? val)) deltas))
         bump-helper (fn [deltas order tuple dw]
                       (update deltas order
                               (fnil (fn [m]
@@ -364,45 +362,33 @@
         bump (fn [deltas a e v dw]
                (-> deltas
                    (bump-helper :aev [a e v] dw)
-                   (bump-helper :ave [a v e] dw)))
-        replace-cardinality-one
-        (fn [[state deltas] e a v]
-          (let [current-values (get-in state [e a])
-                previous-present? (seq current-values)
-                previous-v (first current-values)]
-            (cond
-              (contains? current-values v) [state deltas]
-              previous-present? [(assoc-in state [e a] #{v})
-                                 (-> deltas
-                                     (bump a e previous-v -1)
-                                     (bump a e v 1))]
-              :else [(assoc-in state [e a] #{v})
-                     (bump deltas a e v 1)])))
-        add-many
-        (fn [[state deltas] e a v]
-          (if (contains? (get-in state [e a]) v)
-            [state deltas]
-            [(update-in state [e a] (fnil conj #{}) v)
-             (bump deltas a e v 1)]))
-        retract-existing
-        (fn [[state deltas] e a v]
-          (if (contains? (get-in state [e a]) v)
-            [(update-in state [e a] disj v)
-             (bump deltas a e v -1)]
-            [state deltas]))]
-    (-> (reduce (fn [acc [e a v]]
+                   (bump-helper :ave [a v e] dw)))]
+    (as-> {} deltas
+      (reduce (fn [ds [e a v]]
+                (if (contains? (get-in eav [e a]) v)
+                  (bump ds a e v -1)
+                  ds))
+              deltas retract)
+      (reduce (fn [ds [e a v]]
+                (let [current-values (get-in eav [e a])
+                      previous-v (first current-values)]
                   (case (t/attribute-cardinality schema a)
-                    :db.cardinality/one (replace-cardinality-one acc e a v)
-                    :db.cardinality/many (add-many acc e a v)))
-                [eav {}]
-                add)
-        (as-> [state deltas]
-            (reduce (fn [acc [e a v]]
-                      (retract-existing acc e a v))
-                    [state deltas]
-                    retract))
-        second
-        clean-deltas)))
+                    :db.cardinality/one
+                    (cond
+                      (= previous-v v) ds
+                      (and (not (nil? previous-v))
+                           ;; also check that that we are not explicitly retracting
+                           (nil? (get-in ds [:aev [a e previous-v]])))
+                      (-> ds
+                          (bump a e previous-v -1)
+                          (bump a e v 1))
+                      :else (bump ds a e v 1))
+
+                    :db.cardinality/many
+                    (if (contains? current-values v)
+                      ds
+                      (bump ds a e v 1)))))
+              deltas add))))
 
 (defn- ->tuple ^Tuple [values]
   (Tuple/of (object-array values)))
