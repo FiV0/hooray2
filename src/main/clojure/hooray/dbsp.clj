@@ -56,8 +56,8 @@
                :v v*
                :vars (vec (keep elem-var [e* v*]))})
 
-    (err/unsupported-ex "DBSP-standard engine currently only supports triples"
-                        {:clause-type clause-type :pattern pattern})))
+    (throw (ex-info  "DBSP-standard engine currently only supports triples"
+                     {:clause-type clause-type :pattern pattern}))))
 
 (defn compile-patterns
   "Compiles every clause of a conformed `:where` into a vector of descriptors,
@@ -68,10 +68,10 @@
 (defn- reject-unsupported-query-options
   [{:keys [in keys strs syms]}]
   (when (seq in)
-    (throw (ex-info "IN clauses not supported for DBSP-standard queries yet"
+    (throw (ex-info ":in clauses not supported for DBSP-standard queries yet"
                     {:in in})))
   (when (or (seq keys) (seq strs) (seq syms))
-    (throw (ex-info "KEYS, STRS, and SYMS not supported for DBSP-standard queries yet"
+    (throw (ex-info ":keys, :strs, and :syms not supported for DBSP-standard queries yet"
                     {:keys keys :strs strs :syms syms}))))
 
 ;; --------------------------------------------------------------------------
