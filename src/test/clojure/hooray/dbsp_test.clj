@@ -405,6 +405,15 @@
       (h/transact node [[:db/retract 1 :edge 2]])
       (is (= #{[[2] -1]} (set (h/consume-delta! iq)))))))
 
+(deftest e2e-unregister-standard-query-test
+  (let [node (fresh-node)
+        iq (standard-q-inc node '{:find [name] :where [[?e :name name]]})]
+    (h/transact node [{:db/id 1 :name "Ivan"}])
+    (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))
+    (h/unregister-inc-q node iq)
+    (h/transact node [{:db/id 2 :name "Petr"}])
+    (is (nil? (h/consume-delta! iq)))))
+
 (deftest e2e-rejects-unsupported-query-options-test
   (let [node (fresh-node)]
     (is (thrown? clojure.lang.ExceptionInfo

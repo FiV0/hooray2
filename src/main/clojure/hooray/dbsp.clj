@@ -451,7 +451,7 @@
            (.getValue ^IntegerWeight (.getValue entry))])
         (.entries zset)))
 
-(defrecord DbspQuery [query plan circuit inputs output queue])
+(defrecord DbspQuery [id query plan circuit inputs output queue])
 
 (defn dbsp-query?
   "True if [x] is a DBSP-standard incremental query (vs. a WCOJ one)."
@@ -463,7 +463,7 @@
   ^DbspQuery [db query]
   (let [p (plan query)
         {:keys [circuit inputs output]} (plan->circuit p)
-        iq (->DbspQuery query p circuit inputs output
+        iq (->DbspQuery (random-uuid) query p circuit inputs output
                         (atom clojure.lang.PersistentQueue/EMPTY))]
     ;; prime the circuit with the database's existing facts; discard the output
     (push-deltas! iq (full-db-deltas db))

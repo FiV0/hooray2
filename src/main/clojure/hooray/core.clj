@@ -77,7 +77,7 @@
   (let [inc-q (case *dbsp-version*
                 :wcoj (incremental/query (db node) query)
                 :standard (dbsp/compile-query (db node) query))]
-    (swap! !inc-qs assoc query inc-q)
+    (swap! !inc-qs assoc (:id inc-q) inc-q)
     inc-q))
 
 (defn unregister-inc-q [{:keys [!inc-qs] :as node} {:keys [id] :as inc-q}]
