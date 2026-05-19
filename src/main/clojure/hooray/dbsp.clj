@@ -170,9 +170,14 @@
   [descriptor target]
   (let [order (choose-order descriptor target)]
     {:descriptor descriptor
+     ;; the order in which we are processing triples in this triple pattern
      :order order
+     ;; the constant part of the triple pattern
      :filter (constant-filter descriptor order)
+     ;; the projection after the filter of the constants
+     ;; for example [a(constant) e(constant) v] -> [v]
      :project (projection descriptor order)
+     ;; the vars of this pattern
      :out-vars (vec target)}))
 
 (defn- lead-with
@@ -214,8 +219,10 @@
   (let [{:keys [find patterns]} (parse query)
         ordered (left-deep-order patterns)
         fvars (find-vars find)]
+
     (when (empty? ordered)
       (throw (ex-info "query has no patterns" {:query query})))
+
     (if (= 1 (count ordered))
       (let [pp (pattern-plan (first ordered) (:vars (first ordered)))]
         {:find fvars
@@ -260,7 +267,7 @@
                      (conj joins {:key-arity (count ki)
                                   :key-vars key-order
                                   :left-permute (when (not= permute
-                                                             (vec (range (count acc))))
+                                                            (vec (range (count acc))))
                                                   permute)
                                   :out-vars out-vars})))))))))
 
