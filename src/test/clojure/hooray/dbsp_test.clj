@@ -422,6 +422,10 @@
                                         :where [[?e :name name]]})))
     (is (thrown? clojure.lang.ExceptionInfo
                  (standard-q-inc node '{:find [name]
+                                        :in []
+                                        :where [[?e :name name]]})))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (standard-q-inc node '{:find [name]
                                         :keys [name]
                                         :where [[?e :name name]]})))))
 

@@ -71,8 +71,8 @@
   (vec (map-indexed compile-pattern conformed-where)))
 
 (defn- reject-unsupported-query-options
-  [{:keys [in keys strs syms]}]
-  (when (seq in)
+  [{:keys [in keys strs syms] :as query}]
+  (when (contains? query :in)
     (throw (ex-info ":in clauses not supported for DBSP-standard queries yet"
                     {:in in})))
   (when (or (seq keys) (seq strs) (seq syms))
