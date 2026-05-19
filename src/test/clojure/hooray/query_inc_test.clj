@@ -248,3 +248,24 @@
                 [c :t/to a]]}
 
     (t/is (= nil (h/consume-delta! *inc-q*)))))
+
+(deftest residence-example
+  (h/transact fix/*node* fix/people-schema2)
+  (h/transact fix/*node* [{:db/id 1
+                           :person/name "Ada Lovelace"
+                           :person/residence "12 St. James's Square"}
+                          {:db/id 2
+                           :person/name "Alan Turing"
+                           :person/residence "Bletchley Park"}])
+
+  (with-transaction-and-inc-q
+      [[:db/add 1 :person/residence "Buckingham Palace"]]
+
+      '{:find [?name ?residence]
+        :where [[?p :person/name ?name]
+                [?p :person/residence ?residence]]}
+
+
+    (t/is (= [[["Ada Lovelace" "12 St. James's Square"] -1]
+              [["Ada Lovelace" "Buckingham Palace"] 1]]
+             (h/consume-delta! *inc-q*)))))

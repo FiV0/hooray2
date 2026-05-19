@@ -54,6 +54,10 @@
    {:db/id :db/person-hobby-attr
     :db/ident :person/hobby
     :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}
+   {:db/id :db/person-residence-attr
+    :db/ident :person/residence
+    :db/valueType :db.type/string
     :db/cardinality :db.cardinality/one}])
 
 
