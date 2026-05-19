@@ -109,7 +109,7 @@
 (defn tx-data->triples [db tx-data]
   (-> (->> (map (partial tx-datum->triples db) tx-data)
            (group-by :op))
-      (update-vals (fn [ops] (vec (set (mapcat :triples ops)))))))
+      (update-vals (fn [ops] (vec (distinct (mapcat :triples ops)))))))
 
 (defn reserved-keyword? [k]
   (and (keyword? k) (= (namespace k) "db")))
