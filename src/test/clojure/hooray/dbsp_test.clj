@@ -37,7 +37,7 @@
 (deftest compile-pattern-test
   (testing "two variables"
     (let [[p] (patterns '{:find [name] :where [[?e :name name]]})]
-      (is (= :name (:attr p)))
+      (is (= {:kind :constant, :value :name} (:attr p)))
       (is (= {:kind :variable :var '?e} (:e p)))
       (is (= {:kind :variable :var 'name} (:v p)))
       (is (= '[?e name] (:vars p)))))

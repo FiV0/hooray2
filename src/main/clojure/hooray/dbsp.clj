@@ -35,7 +35,7 @@
   "Compiles one conformed `where` clause into a triple-pattern descriptor:
 
     {:index   <position in :where>
-     :attr    <constant attribute>
+     :attr    {:kind :constant :value v}
      :e       {:kind :constant :value v} | {:kind :variable :var s}
      :v       {:kind :constant :value v} | {:kind :variable :var s}
      :vars    [vars in entity/value encounter order]}
@@ -51,7 +51,7 @@
               (when-not (= :constant (:kind a*))
                 (err/unsupported-ex "Currently variables in attribute position are not supported"))
               {:index index
-               :attr (:value a*)
+               :attr a*
                :e e*
                :v v*
                :vars (vec (keep elem-var [e* v*]))})
@@ -131,7 +131,7 @@
 (defn- variable? [el] (= :variable (:kind el)))
 
 (defn- order-elems [descriptor order]
-  (let [a {:kind :constant :value (:attr descriptor)}]
+  (let [a (:attr descriptor)]
     (case order
       :aev [a (:e descriptor) (:v descriptor)]
       :ave [a (:v descriptor) (:e descriptor)])))
