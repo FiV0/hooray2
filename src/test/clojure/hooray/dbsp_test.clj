@@ -370,10 +370,17 @@
 (deftest e2e-cartesian-test
   (let [node (fresh-node)
         iq (standard-q-inc node '{:find [n c]
-                                  :where [[1 :name n]
-                                          [2 :city c]]})]
-    (h/transact node [{:db/id 1 :name "Ivan"} {:db/id 2 :city "NYC"}])
-    (is (= #{[["Ivan" "NYC"] 1]} (set (h/consume-delta! iq))))))
+                                  :where [[e1 :name n]
+                                          [e2 :city c]]})]
+    (h/transact node [{:db/id 1 :name "Ivan"}
+                      {:db/id 2 :name "Bob"}
+                      {:db/id 3 :city "NYC"}
+                      {:db/id 4 :city "Berlin"}])
+    (is (= #{[["Ivan" "NYC"] 1]
+             [["Ivan" "Berlin"] 1]
+             [["Bob" "NYC"] 1]
+             [["Bob" "Berlin"] 1]}
+           (set (h/consume-delta! iq))))))
 
 (deftest e2e-cardinality-many-duplicate-add-is-noop-test
   (let [node (fresh-node)]
