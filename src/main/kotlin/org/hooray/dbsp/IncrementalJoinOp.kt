@@ -29,6 +29,11 @@ class IncrementalJoinOp(
 
     private val join = StreamJoinOp(keyArity)
 
+    // TODO: This is incremental in output semantics, but not in indexing cost.
+    // StreamJoinOp rebuilds a hash index over the full accumulated relation on
+    // every step. A trace-backed join should maintain keyed indexes for A and B
+    // incrementally and probe those indexes with the incoming deltas.
+
     /** `A[t-1]` — integral of the left input, excluding the current step. */
     private var integralA: TupleZSet = emptyTupleZSet()
 
