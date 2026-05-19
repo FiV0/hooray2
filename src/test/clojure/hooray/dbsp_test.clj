@@ -70,7 +70,10 @@
 (deftest rejects-unsupported-clauses-test
   (testing "predicate clauses are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
-                 (dbsp/parse '{:find [?x] :where [[?x :age ?y] [(= ?y 1)]]})))))
+                 (dbsp/parse '{:find [?x] :where [[?x :age ?y] [(= ?y 1)]]}))))
+  (testing "repeated variables inside one triple pattern are rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/parse '{:find [?x] :where [[?x :edge ?x]]})))))
 
 ;; --------------------------------------------------------------------------
 ;; Left-deep join order

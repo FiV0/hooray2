@@ -50,6 +50,11 @@
                   v* (elem v)]
               (when-not (= :constant (:kind a*))
                 (err/unsupported-ex "Currently variables in attribute position are not supported"))
+              (when (and (= :variable (:kind e*))
+                         (= :variable (:kind v*))
+                         (= (:var e*) (:var v*)))
+                (err/unsupported-ex "DBSP-standard engine does not support repeated variables inside one triple pattern"
+                                    {:pattern pattern}))
               {:index index
                :attr a*
                :entity e*
