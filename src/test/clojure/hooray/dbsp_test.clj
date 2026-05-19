@@ -38,18 +38,18 @@
   (testing "two variables"
     (let [[p] (patterns '{:find [name] :where [[?e :name name]]})]
       (is (= {:kind :constant, :value :name} (:attr p)))
-      (is (= {:kind :variable :var '?e} (:e p)))
-      (is (= {:kind :variable :var 'name} (:v p)))
+      (is (= {:kind :variable :var '?e} (:entity p)))
+      (is (= {:kind :variable :var 'name} (:value p)))
       (is (= '[?e name] (:vars p)))))
 
   (testing "constant value"
     (let [[p] (patterns '{:find [?e] :where [[?e :name "Ivan"]]})]
-      (is (= {:kind :constant :value "Ivan"} (:v p)))
+      (is (= {:kind :constant :value "Ivan"} (:value p)))
       (is (= '[?e] (:vars p)))))
 
   (testing "constant entity"
     (let [[p] (patterns '{:find [name] :where [[1 :name name]]})]
-      (is (= {:kind :constant :value 1} (:e p)))
+      (is (= {:kind :constant :value 1} (:entity p)))
       (is (= '[name] (:vars p)))))
 
   (testing "indices follow :where position"
@@ -217,35 +217,35 @@
 ;; Per-pattern delta construction
 ;; --------------------------------------------------------------------------
 
-(deftest attribute-deltas-add-test
+(deftest db->index-deltas-add-test
   (is (= {:aev {[:name 1 "Ivan"] 1}
           :ave {[:name "Ivan" 1] 1}}
-         (dbsp/attribute-deltas {:eav {} :schema {}}
+         (dbsp/db->index-deltas {:eav {} :schema {}}
                                 [{:db/id 1 :name "Ivan"}]))))
 
-(deftest attribute-deltas-cardinality-one-replacement-test
+(deftest db->index-deltas-cardinality-one-replacement-test
   (testing "an add over an existing cardinality-one value retracts the old one"
     (is (= {:aev {[:name 1 "Ivan"] -1, [:name 1 "Ivanov"] 1}
             :ave {[:name "Ivan" 1] -1, [:name "Ivanov" 1] 1}}
-           (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
+           (dbsp/db->index-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [{:db/id 1 :name "Ivanov"}])))))
 
-(deftest attribute-deltas-cardinality-many-duplicate-test
+(deftest db->index-deltas-cardinality-many-duplicate-test
   (testing "adding an existing cardinality-many value is a no-op"
     (is (= {}
-           (dbsp/attribute-deltas {:eav {1 {:edge #{2}}}
+           (dbsp/db->index-deltas {:eav {1 {:edge #{2}}}
                                    :schema {:edge {:db/cardinality :db.cardinality/many}}}
                                   [[:db/add 1 :edge 2]])))))
 
-(deftest attribute-deltas-retract-test
+(deftest db->index-deltas-retract-test
   (testing "retracting a present fact"
     (is (= {:aev {[:name 1 "Ivan"] -1}
             :ave {[:name "Ivan" 1] -1}}
-           (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
+           (dbsp/db->index-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [[:db/retract 1 :name "Ivan"]]))))
   (testing "retracting an absent fact yields no delta"
     (is (= {}
-           (dbsp/attribute-deltas {:eav {} :schema {}}
+           (dbsp/db->index-deltas {:eav {} :schema {}}
                                   [[:db/retract 1 :name "Ivan"]])))))
 
 (deftest index-delta-zset-test

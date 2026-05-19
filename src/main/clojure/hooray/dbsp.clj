@@ -36,8 +36,8 @@
 
     {:index   <position in :where>
      :attr    {:kind :constant :value v}
-     :e       {:kind :constant :value v} | {:kind :variable :var s}
-     :v       {:kind :constant :value v} | {:kind :variable :var s}
+     :entity  {:kind :constant :value v} | {:kind :variable :var s}
+     :value   {:kind :constant :value v} | {:kind :variable :var s}
      :vars    [vars in entity/value encounter order]}
 
   The DBSP-standard engine only supports triple patterns with a constant
@@ -52,8 +52,8 @@
                 (err/unsupported-ex "Currently variables in attribute position are not supported"))
               {:index index
                :attr a*
-               :e e*
-               :v v*
+               :entity e*
+               :value v*
                :vars (vec (keep elem-var [e* v*]))})
 
     (throw (ex-info  "DBSP-standard engine currently only supports triples"
@@ -133,8 +133,8 @@
 (defn- order-elems [descriptor order]
   (let [a (:attr descriptor)]
     (case order
-      :aev [a (:e descriptor) (:v descriptor)]
-      :ave [a (:v descriptor) (:e descriptor)])))
+      :aev [a (:entity descriptor) (:value descriptor)]
+      :ave [a (:value descriptor) (:entity descriptor)])))
 
 (defn- ordered-vars
   "The pattern's variables in [order]'s source tuple coordinates."
