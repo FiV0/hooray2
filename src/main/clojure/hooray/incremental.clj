@@ -6,14 +6,18 @@
             [hooray.util :as util]
             [hooray.zset :as zset]
             [hooray.db :as db]
-            [hooray.error :as err])
+            [hooray.error :as err]
+            #_[hooray.incremental.stream :as stream])
   (:import (org.hooray.incremental IntegerWeight ZSetIndices CompiledTriplePattern IncrementalDistinct
-                                   IncrementalJoinOperator IncrementalPipeline TransformOperator)))
+                                   IncrementalJoinOperator IncrementalPipeline TransformOperator)
+           (org.hooray.incremental.stream Circuit)))
 
 (set! *warn-on-reflection* true)
 
 (def zero IntegerWeight/ZERO)
 (def one IntegerWeight/ONE)
+
+(def ^:dynamic *circuit-version* :stream)
 
 (defrecord ZSetIndicesClj [aev ave ])
 
@@ -140,10 +144,22 @@
       (.step pipeline zset-indices)
       pipeline)))
 
-(defn compute-delta! [{:keys [^IncrementalPipeline pipeline !queue] :as _inc-q} db-before _db-after tx-data]
+(defn- compile-query-for-version [db query]
+  (case *circuit-version*
+    :pipeline (compile-incremental-q db query)
+    :stream ((requiring-resolve 'hooray.incremental.stream/compile-incremental-q) db query)
+    (throw (ex-info "Unknown incremental circuit version" {:circuit-version *circuit-version*}))))
+
+(defn- step-compiled-query [pipeline ^ZSetIndices zset-indices]
+  (case *circuit-version*
+    :pipeline (.step ^IncrementalPipeline pipeline zset-indices)
+    :stream (.step ^Circuit pipeline zset-indices)
+    :else (throw (ex-info "Unknown incremental pipeline type" {:type (some-> pipeline class)}))))
+
+(defn compute-delta! [{:keys [pipeline !queue] :as _inc-q} db-before _db-after tx-data]
   (let [triples-by-op (db/tx-data->triples db-before tx-data)
         zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
-        delta (-> (.step pipeline zset-indices)
+        delta (-> (step-compiled-query pipeline zset-indices)
                   zset/zset->result-set)]
     (when (seq delta)
       (swap! !queue conj delta))))
@@ -157,7 +173,7 @@
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (when (seq args)
     (throw (ex-info "Positional arguments not supported for incremental queries yet" {:args args})))
-  (->incremental-query query (compile-incremental-q initial-db query)))
+  (->incremental-query query (compile-query-for-version initial-db query)))
 
 (defn pop-result! [{:keys [!queue] :as _inc-q}]
   (let [res (peek @!queue)]
