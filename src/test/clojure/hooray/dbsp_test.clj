@@ -240,12 +240,20 @@
             :ave {[:name "Ivan" 1] -1, [:name "Ivanov" 1] 1}}
            (dbsp/db->index-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [{:db/id 1 :name "Ivanov"}]))))
+
   (testing "a tx with explicit retract plus replacement only retracts the old value once"
     (is (= {:aev {[:name 1 "Ivan"] -1, [:name 1 "Ivanov"] 1}
             :ave {[:name "Ivan" 1] -1, [:name "Ivanov" 1] 1}}
            (dbsp/db->index-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [[:db/retract 1 :name "Ivan"]
                                    [:db/add 1 :name "Ivanov"]]))))
+
+  (testing "a tx with duplicate retract only results in one retraction"
+    (is (= {:aev {[:name 1 "Ivan"] -1} :ave {[:name "Ivan" 1] -1}}
+           (dbsp/db->index-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
+                                  [[:db/retract 1 :name "Ivan"]
+                                   [:db/retract 1 :name "Ivan"]]))))
+
   (testing "false existing values are still retracted during replacement"
     (is (= {:aev {[:enabled 1 false] -1, [:enabled 1 true] 1}
             :ave {[:enabled false 1] -1, [:enabled true 1] 1}}
