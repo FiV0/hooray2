@@ -130,12 +130,15 @@
 
 (defn- variable? [el] (= :variable (:kind el)))
 
+(defn- order-elems [descriptor order]
+  (case order
+    :aev [(:e descriptor) (:v descriptor)]
+    :ave [(:v descriptor) (:e descriptor)]))
+
 (defn- ordered-vars
   "The pattern's variables in [order] permutation (`:aev` = e then v)."
   [descriptor order]
-  (->> (case order
-         :aev [(:e descriptor) (:v descriptor)]
-         :ave [(:v descriptor) (:e descriptor)])
+  (->> (order-elems descriptor order)
        (keep #(when (variable? %) (:var %)))
        vec))
 
@@ -147,11 +150,6 @@
     (ordered-vars descriptor :ave) :ave
     (throw (ex-info "pattern variables cannot be arranged to the join target"
                     {:descriptor descriptor :target target}))))
-
-(defn- order-elems [descriptor order]
-  (case order
-    :aev [(:e descriptor) (:v descriptor)]
-    :ave [(:v descriptor) (:e descriptor)]))
 
 (defn- constant-filter
   "Map of source-column -> required constant value, in [order] coordinates."
@@ -172,7 +170,10 @@
   (let [order (choose-order descriptor target)]
     {:descriptor descriptor
      :order order
+     ;; filter is for filtering [e v] or [v e] if constants
+     ;; are present
      :filter (constant-filter descriptor order)
+     ;; project is the projection of [e v] or [v e] to only the variable parts
      :project (projection descriptor order)
      :out-vars (vec target)}))
 
@@ -195,8 +196,7 @@
   (mapv (fn [[t v]]
           (if (= t :variable)
             v
-            (throw (ex-info "DBSP-standard engine does not support aggregates yet"
-                            {:find-element [t v]}))))
+            (err/unsupported-ex "DBSP-standard engine does not support aggregates yet" {:find-element [t v]})))
         conformed-find))
 
 (defn plan
