@@ -15,12 +15,12 @@
 (def zero IntegerWeight/ZERO)
 (def one IntegerWeight/ONE)
 
-(defrecord ZSetIndicesClj [aev ave ])
+(defrecord ZSetIndexesClj [aev ave])
 
-(defn ->zset-indices []
-  (->ZSetIndicesClj zset/empty-indexed-zset zset/empty-indexed-zset))
+(defn ->zset-indexes []
+  (->ZSetIndexesClj zset/empty-indexed-zset zset/empty-indexed-zset))
 
-(defn zset-indices-clj->kt ^ZSetIndices [{:keys [aev ave ] :as _zset-indices}]
+(defn zset-indexes-clj->kt ^ZSetIndices [{:keys [aev ave ] :as _zset-indices}]
   (ZSetIndices. aev ave ))
 
 (def ^:private zset-update-in (util/create-update-in zset/empty-indexed-zset))
@@ -58,7 +58,7 @@
             (zset-update-in [:ave a v] (fnil update zset/empty-zset) e (fnil zset/add zero) one)
             #_(zset-update-in [:vae v a] (fnil update zset/empty-zset) e (fnil zset/add zero) one))))))
 
-(defn db->zset-indices [{:keys [eav opts] :as _db}]
+(defn db->zset-indexes [{:keys [eav opts] :as _db}]
   (let [empty-db (db/->db opts)
         triples (for [e (keys eav)
                       a (keys (get eav e))
@@ -66,7 +66,7 @@
                   [:add e a v])]
     (reduce (fn [zset-indices triple]
               (index-triple empty-db zset-indices triple))
-            (->zset-indices)
+            (->zset-indexes)
             triples)))
 
 (defn calc-zset-indices [db-before {:keys [add retract] :as _triples-by-op}]
@@ -74,7 +74,7 @@
                         (map (fn [t] (into [:retract] t)) retract))]
     (reduce (fn [zset-indices triple]
               (index-triple db-before zset-indices triple))
-            (->zset-indices)
+            (->zset-indexes)
             triples)))
 
 (defn compile-inc-pattern [var-order [type pattern :as where-clause]]
@@ -135,14 +135,14 @@
     (when (or (seq keys) (seq strs) (seq syms))
       (throw (ex-info "KEYS, STRS, and SYMS not supported for incremental queries yet" {:keys keys :strs strs :syms syms})))
     (let [pipeline (compile-query find var->index compiled-patterns (count var-order))
-          zset-indices (zset-indices-clj->kt (db->zset-indices db))]
+          zset-indices (zset-indexes-clj->kt (db->zset-indexes db))]
       ;; to initialize the pipeline from the db state
       (.step pipeline zset-indices)
       pipeline)))
 
 (defn compute-delta! [{:keys [^IncrementalPipeline pipeline !queue] :as _inc-q} db-before _db-after tx-data]
   (let [triples-by-op (db/tx-data->triples db-before tx-data)
-        zset-indices (zset-indices-clj->kt (calc-zset-indices db-before triples-by-op))
+        zset-indices (zset-indexes-clj->kt (calc-zset-indices db-before triples-by-op))
         delta (-> (.step pipeline zset-indices)
                   zset/zset->result-set)]
     (when (seq delta)
