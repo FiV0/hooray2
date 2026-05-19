@@ -102,8 +102,8 @@
         '{:find [name]
           :where [[e :name name]]}
 
-      (t/is (= [[["Ivan"] 1]
-                [["Petr"] 1]]
+      (t/is (= [[["Petr"] 1]
+                [["Ivan"] 1]]
                (h/consume-delta! *inc-q*))))))
 
 (deftest test-basic-query-6

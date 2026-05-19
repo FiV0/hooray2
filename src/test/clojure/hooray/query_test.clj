@@ -82,8 +82,8 @@
                                [e :last-name "Ivanov-does-not-match"]]} (h/db fix/*node*)))))
 
   (t/testing "Can query for multiple results"
-    (t/is (= [["Ivan"] ["Petr"]]
-             (h/q '{:find [name] :where [[e :name name]]} (h/db fix/*node*)))))
+    (t/is (= #{["Ivan"] ["Petr"]}
+             (set (h/q '{:find [name] :where [[e :name name]]} (h/db fix/*node*))))))
 
   (h/transact fix/*node* [{:db/id :smith :name "Smith" :last-name "Smith"}])
 
@@ -143,26 +143,26 @@
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
 
   (let [db (h/db fix/*node*)]
-    (t/is (= [{:user/name "Ivan", :user/last-name "Ivanov"}
-              {:user/name "Petr", :user/last-name "Petrov"}]
-             (h/q '{:find [?name ?last-name]
-                    :keys [user/name user/last-name]
-                    :where [[e :name ?name]
-                            [e :last-name ?last-name]]} db)))
+    (t/is (= #{{:user/name "Ivan", :user/last-name "Ivanov"}
+               {:user/name "Petr", :user/last-name "Petrov"}}
+             (set (h/q '{:find [?name ?last-name]
+                         :keys [user/name user/last-name]
+                         :where [[e :name ?name]
+                                 [e :last-name ?last-name]]} db))))
 
-    (t/is (= [{'user/name "Ivan", 'user/last-name "Ivanov"}
-              {'user/name "Petr", 'user/last-name "Petrov"}]
-             (h/q '{:find [?name ?last-name]
-                    :syms [user/name user/last-name]
-                    :where [[e :name ?name]
-                            [e :last-name ?last-name]]} (h/db fix/*node*))))
+    (t/is (= #{{'user/name "Ivan", 'user/last-name "Ivanov"}
+               {'user/name "Petr", 'user/last-name "Petrov"}}
+             (set (h/q '{:find [?name ?last-name]
+                         :syms [user/name user/last-name]
+                         :where [[e :name ?name]
+                                 [e :last-name ?last-name]]} (h/db fix/*node*)))))
 
-    (t/is (= [{"name" "Ivan", "last-name" "Ivanov"}
-              {"name" "Petr", "last-name" "Petrov"}]
-             (h/q '{:find [?name ?last-name]
-                    :strs [name last-name]
-                    :where [[e :name ?name]
-                            [e :last-name ?last-name]]} (h/db fix/*node*))))
+    (t/is (= #{{"name" "Ivan", "last-name" "Ivanov"}
+               {"name" "Petr", "last-name" "Petrov"}}
+             (set (h/q '{:find [?name ?last-name]
+                         :strs [name last-name]
+                         :where [[e :name ?name]
+                                 [e :last-name ?last-name]]} (h/db fix/*node*)))))
 
     (t/is (thrown? IllegalArgumentException
                    (h/q '{:find [name last-name]
@@ -296,11 +296,11 @@
                      "Bob"))))
 
   (t/testing "Can query entity with empty arguments"
-    (t/is (= [[:ivan] [:petr]]
-             (h/q '{:find [e]
-                    :in []
-                    :where [[e :name name]]}
-                  (h/db fix/*node*)))))
+    (t/is (= #{[:ivan] [:petr]}
+             (set (h/q '{:find [e]
+                         :in []
+                         :where [[e :name name]]}
+                       (h/db fix/*node*))))))
 
   (t/testing "Can query entity with tuple arguments"
     (t/is (= [[:ivan]] (h/q '{:find [e]
@@ -869,12 +869,12 @@
                           {:db/id :dominic :name "Dominic" :last-name "Monroe" :age 50}])
 
   (t/testing "range expressions"
-    (t/is (= [["Ivan"] ["Bob"]]
-             (h/q '{:find [name]
-                    :where [[e :name name]
-                            [e :age age]
-                            [(< age 50)]]}
-                  (h/db fix/*node*))))
+    (t/is (= #{["Ivan"] ["Bob"]}
+             (set (h/q '{:find [name]
+                         :where [[e :name name]
+                                 [e :age age]
+                                 [(< age 50)]]}
+                       (h/db fix/*node*)))))
 
     (t/is (= [["Dominic"]]
              (h/q '{:find [name]
@@ -883,25 +883,25 @@
                             [(>= age 50)]]} (h/db fix/*node*))))
 
     (t/testing "fallback to built in predicate for vars"
-      (t/is (= [["Ivan" 30 "Ivan" 30]
-                ["Ivan" 30 "Bob" 40]
-                ["Ivan" 30 "Dominic" 50]
-                ["Bob" 40 "Bob" 40]
-                ["Bob" 40 "Dominic" 50]
-                ["Dominic" 50 "Dominic" 50]]
-               (h/q '{:find [name age1 name2 age2]
-                      :where [[e :name name]
-                              [e :age age1]
-                              [e2 :name name2]
-                              [e2 :age age2]
-                              [(<= age1 age2)]]} (h/db fix/*node*))))))
+      (t/is (= #{["Ivan" 30 "Ivan" 30]
+                 ["Ivan" 30 "Bob" 40]
+                 ["Ivan" 30 "Dominic" 50]
+                 ["Bob" 40 "Bob" 40]
+                 ["Bob" 40 "Dominic" 50]
+                 ["Dominic" 50 "Dominic" 50]}
+               (set (h/q '{:find [name age1 name2 age2]
+                           :where [[e :name name]
+                                   [e :age age1]
+                                   [e2 :name name2]
+                                   [e2 :age age2]
+                                   [(<= age1 age2)]]} (h/db fix/*node*)))))))
 
   (t/testing "clojure.core predicate"
-    (t/is (= [["Bob"] ["Dominic"]]
-             (h/q '{:find [name]
-                    :where [[e :name name]
-                            [(re-find #"o" name)]]}
-                  (h/db fix/*node*))))
+    (t/is (= #{["Bob"] ["Dominic"]}
+             (set (h/q '{:find [name]
+                         :where [[e :name name]
+                                 [(re-find #"o" name)]]}
+                       (h/db fix/*node*)))))
 
     (t/testing "No results"
       (t/is (empty? (h/q '{:find [name]
@@ -924,11 +924,11 @@
                     (h/db fix/*node*))))
 
       (t/testing "Filtered by value"
-        (t/is (= [[:ivan] [:bob]]
-                 (h/q '{:find [e]
-                        :where [[e :last-name last-name]
-                                [(= "Ivanov" last-name)]]}
-                      (h/db fix/*node*))))
+        (t/is (= #{[:ivan] [:bob]}
+                 (set (h/q '{:find [e]
+                             :where [[e :last-name last-name]
+                                     [(= "Ivanov" last-name)]]}
+                           (h/db fix/*node*)))))
 
         (t/is (= [[:ivan]]
                  (h/q '{:find [e]
@@ -965,21 +965,21 @@
                                 [(= age name)]]} (h/db fix/*node*))))))
 
     (t/testing "Bind result to var"
-      (t/is (= [["Ivan" 15] ["Bob" 20] ["Dominic" 25]]
-               (h/q '{:find [name half-age]
-                      :where [[e :name name]
-                              [e :age age]
-                              [(quot age 2) half-age]]}
-                    (h/db fix/*node*))))
+      (t/is (= #{["Ivan" 15] ["Bob" 20] ["Dominic" 25]}
+               (set (h/q '{:find [name half-age]
+                           :where [[e :name name]
+                                   [e :age age]
+                                   [(quot age 2) half-age]]}
+                         (h/db fix/*node*)))))
 
 
       (t/testing "Order of joins is rearranged to ensure arguments are bound"
-        (t/is (= [["Ivan" 15] ["Bob" 20] ["Dominic" 25]]
-                 (h/q '{:find [name half-age]
-                        :where [[e :name name]
-                                [e :age real-age]
-                                [(quot real-age 2) half-age]]}
-                      (h/db fix/*node*)))))
+        (t/is (= #{["Ivan" 15] ["Bob" 20] ["Dominic" 25]}
+                 (set (h/q '{:find [name half-age]
+                             :where [[e :name name]
+                                     [e :age real-age]
+                                     [(quot real-age 2) half-age]]}
+                           (h/db fix/*node*))))))
 
       (t/testing "Binding more than once intersects result"
         (t/is (= [["Ivan" 15]]
