@@ -300,7 +300,9 @@
   plan calls for one), and a final `Map` projecting to `:find`."
   [{:keys [patterns joins final-permute]}]
   (let [circuit (Circuit.)
+        ;; wire up the base patterns
         wired (mapv #(assemble-pattern circuit %) patterns)
+        ;; wire up the left-deep join
         result (loop [i 1
                       acc (:stream (first wired))]
                  (if (>= i (count patterns))
@@ -315,6 +317,7 @@
                                             left
                                             (:stream (nth wired i)))]
                      (recur (inc i) joined))))
+        ;; wire up the find clause
         projected (.addUnary circuit (MapOp/permute (int-array final-permute)) result)]
     {:circuit circuit
      :inputs (mapv :handle wired)
@@ -324,7 +327,7 @@
 ;; Phase 2 — per-pattern delta construction
 ;; --------------------------------------------------------------------------
 
-(defn attribute-deltas
+(defn db->index-deltas
   "Given [db-before] and [tx-data], returns DBSP input deltas in index order:
 
     {:aev {[a e v] weight}
@@ -336,18 +339,18 @@
   [db-before tx-data]
   (let [{:keys [eav schema]} db-before
         {:keys [add retract]} (db/tx-data->triples db-before tx-data)
-        bump* (fn [deltas order tuple dw]
-                (update deltas order
-                        (fnil (fn [m]
-                                (let [w (+ (get m tuple 0) dw)]
-                                  (if (zero? w)
-                                    (dissoc m tuple)
-                                    (assoc m tuple w))))
-                              {})))
+        bump-helper (fn [deltas order tuple dw]
+                      (update deltas order
+                              (fnil (fn [m]
+                                      (let [w (+ (get m tuple 0) dw)]
+                                        (if (zero? w)
+                                          (dissoc m tuple)
+                                          (assoc m tuple w))))
+                                    {})))
         bump (fn [deltas a e v dw]
                (-> deltas
-                   (bump* :aev [a e v] dw)
-                   (bump* :ave [a v e] dw)))]
+                   (bump-helper :aev [a e v] dw)
+                   (bump-helper :ave [a v e] dw)))]
     (as-> {} deltas
       (reduce (fn [ds [e a v]]
                 (if (contains? (get-in eav [e a]) v)
@@ -443,7 +446,7 @@
   incremental query [iq], queues the resulting delta, and returns it as a seq
   of `[tuple weight]` pairs."
   [iq db-before tx-data]
-  (push-deltas! iq (attribute-deltas db-before tx-data))
+  (push-deltas! iq (db->index-deltas db-before tx-data))
   (.step ^Circuit (:circuit iq))
   (let [result (zset->result-set (.get ^org.hooray.dbsp.OutputHandle (:output iq)))]
     (when (seq result)
