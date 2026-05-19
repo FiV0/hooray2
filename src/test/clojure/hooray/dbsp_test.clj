@@ -9,14 +9,22 @@
 (def ^:private opts {:type :mem :storage :hash :algo :generic})
 
 (def ^:private schema
-  [{:db/id -1 :db/ident :name
-    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
-   {:db/id -2 :db/ident :last-name
-    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
-   {:db/id -3 :db/ident :city
-    :db/valueType :db.type/string :db/cardinality :db.cardinality/one}
-   {:db/id -4 :db/ident :edge
-    :db/valueType :db.type/ref :db/cardinality :db.cardinality/many}])
+  [{:db/id -1
+    :db/ident :name
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}
+   {:db/id -2
+    :db/ident :last-name
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}
+   {:db/id -3
+    :db/ident :city
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}
+   {:db/id -4
+    :db/ident :edge
+    :db/valueType :db.type/ref
+    :db/cardinality :db.cardinality/many}])
 
 (defn- fresh-node
   "A connected node with the test schema already transacted."
