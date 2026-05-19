@@ -105,8 +105,8 @@
     (is (= [1] (:final-permute p)))
     (let [pat (first (:patterns p))]
       (is (= :aev (:order pat)))
-      (is (= {} (:filter pat)))
-      (is (= [0 1] (:project pat)))
+      (is (= {0 :name} (:filter pat)))
+      (is (= [1 2] (:project pat)))
       (is (= '[?e name] (:out-vars pat))))))
 
 (deftest plan-two-pattern-join-test
@@ -129,15 +129,25 @@
                                  [?p :age name]]})]
       (is (= :ave (:order (nth (:patterns p) 0))))
       (is (= :ave (:order (nth (:patterns p) 1))))
+      (is (= {0 :name} (:filter (nth (:patterns p) 0))))
+      (is (= [1 2] (:project (nth (:patterns p) 0))))
+      (is (= {0 :age} (:filter (nth (:patterns p) 1))))
+      (is (= [1 2] (:project (nth (:patterns p) 1))))
       (is (= '[name ?e ?p] (:result-vars p))))))
 
 (deftest plan-constant-filter-test
   (testing "a constant value column becomes a Filter and is projected away"
     (let [p (dbsp/plan '{:find [?e] :where [[?e :name "Ivan"]]})
           pat (first (:patterns p))]
-      (is (= {1 "Ivan"} (:filter pat)))
-      (is (= [0] (:project pat)))
-      (is (= '[?e] (:out-vars pat))))))
+      (is (= {0 :name, 2 "Ivan"} (:filter pat)))
+      (is (= [1] (:project pat)))
+      (is (= '[?e] (:out-vars pat)))))
+  (testing "a constant entity column becomes a Filter and is projected away"
+    (let [p (dbsp/plan '{:find [name] :where [[1 :name name]]})
+          pat (first (:patterns p))]
+      (is (= {0 :name, 1 1} (:filter pat)))
+      (is (= [2] (:project pat)))
+      (is (= '[name] (:out-vars pat))))))
 
 (deftest plan-chain-intermediate-permute-test
   (testing "the third join needs the intermediate result re-permuted"
@@ -178,8 +188,9 @@
                                                     :where [[?e :name name]]})]
     (is (= 1 (count inputs)))
     (is (some? output))
-    ;; input -> map(project) -> map(final projection)
-    (is (= ["input" "permute" "permute"] (vec (.operatorNames circuit))))))
+    ;; input -> filter(attribute constant) -> map(project) -> map(final projection)
+    (is (= ["input" "filter-constants" "permute" "permute"]
+           (vec (.operatorNames circuit))))))
 
 (deftest assemble-constant-pattern-test
   (let [{:keys [circuit]} (assemble '{:find [?e] :where [[?e :name "Ivan"]]})]
@@ -193,25 +204,29 @@
                                                      [?b :s ?c]
                                                      [?c :t ?d]]})]
     (is (= 3 (count inputs)))
-    ;; 3x (input, permute); join1 (no intermediate map); join2 preceded by a
-    ;; permute; final permute.
-    (is (= ["input" "permute" "input" "permute" "input" "permute"
+    ;; 3x (input, filter, permute); join1 (no intermediate map); join2
+    ;; preceded by a permute; final permute.
+    (is (= ["input" "filter-constants" "permute"
+            "input" "filter-constants" "permute"
+            "input" "filter-constants" "permute"
             "incremental-join" "permute" "incremental-join" "permute"]
            (vec (.operatorNames circuit))))
-    (is (= 10 (.getNodeCount circuit)))))
+    (is (= 13 (.getNodeCount circuit)))))
 
 ;; --------------------------------------------------------------------------
 ;; Per-pattern delta construction
 ;; --------------------------------------------------------------------------
 
 (deftest attribute-deltas-add-test
-  (is (= {:name {[1 "Ivan"] 1}}
+  (is (= {:aev {[:name 1 "Ivan"] 1}
+          :ave {[:name "Ivan" 1] 1}}
          (dbsp/attribute-deltas {:eav {} :schema {}}
                                 [{:db/id 1 :name "Ivan"}]))))
 
 (deftest attribute-deltas-cardinality-one-replacement-test
   (testing "an add over an existing cardinality-one value retracts the old one"
-    (is (= {:name {[1 "Ivan"] -1 [1 "Ivanov"] 1}}
+    (is (= {:aev {[:name 1 "Ivan"] -1, [:name 1 "Ivanov"] 1}
+            :ave {[:name "Ivan" 1] -1, [:name "Ivanov" 1] 1}}
            (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [{:db/id 1 :name "Ivanov"}])))))
 
@@ -224,7 +239,8 @@
 
 (deftest attribute-deltas-retract-test
   (testing "retracting a present fact"
-    (is (= {:name {[1 "Ivan"] -1}}
+    (is (= {:aev {[:name 1 "Ivan"] -1}
+            :ave {[:name "Ivan" 1] -1}}
            (dbsp/attribute-deltas {:eav {1 {:name #{"Ivan"}}} :schema {}}
                                   [[:db/retract 1 :name "Ivan"]]))))
   (testing "retracting an absent fact yields no delta"
@@ -232,18 +248,18 @@
            (dbsp/attribute-deltas {:eav {} :schema {}}
                                   [[:db/retract 1 :name "Ivan"]])))))
 
-(deftest pattern-delta-zset-test
-  (testing ":aev order keeps [e v]"
-    (let [zs (dbsp/pattern-delta-zset {[1 "Ivan"] 1} :aev)]
+(deftest index-delta-zset-test
+  (testing ":aev order keeps [a e v]"
+    (let [zs (dbsp/index-delta-zset {:aev {[:name 1 "Ivan"] 1}} :aev)]
       (is (= 1 (.getSize zs)))
-      (is (= 1 (.getValue (.weight zs (Tuple/of (object-array [1 "Ivan"]))))))))
+      (is (= 1 (.getValue (.weight zs (Tuple/of (object-array [:name 1 "Ivan"]))))))))
 
-  (testing ":ave order swaps to [v e]"
-    (let [zs (dbsp/pattern-delta-zset {[1 "Ivan"] 1} :ave)]
-      (is (= 1 (.getValue (.weight zs (Tuple/of (object-array ["Ivan" 1]))))))))
+  (testing ":ave order keeps [a v e]"
+    (let [zs (dbsp/index-delta-zset {:ave {[:name "Ivan" 1] 1}} :ave)]
+      (is (= 1 (.getValue (.weight zs (Tuple/of (object-array [:name "Ivan" 1]))))))))
 
   (testing "zero-weight facts are dropped"
-    (is (.isEmpty (dbsp/pattern-delta-zset {[1 "Ivan"] 0} :aev)))))
+    (is (.isEmpty (dbsp/index-delta-zset {:aev {[:name 1 "Ivan"] 0}} :aev)))))
 
 ;; --------------------------------------------------------------------------
 ;; compile-query + compute-delta!

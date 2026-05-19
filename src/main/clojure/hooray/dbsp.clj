@@ -38,7 +38,7 @@
      :attr    <constant attribute>
      :e       {:kind :constant :value v} | {:kind :variable :var s}
      :v       {:kind :constant :value v} | {:kind :variable :var s}
-     :vars    [vars in [e v] column order]}
+     :vars    [vars in entity/value encounter order]}
 
   The DBSP-standard engine only supports triple patterns with a constant
   attribute."
@@ -120,23 +120,24 @@
 ;; --------------------------------------------------------------------------
 ;;
 ;; Tuples flow through the circuit as positional value vectors. A base
-;; pattern's Source emits 2-column `[e v]` (`:aev`) or `[v e]` (`:ave`) tuples;
-;; a Filter drops rows that miss the pattern's constants; a Map projects to the
-;; pattern's variable columns. Joins are left-deep: each `IncrementalJoin` keys
-;; on the leading columns shared with the accumulated result. The planner picks
-;; every pattern's `:order` so its variables already lead correctly (no
-;; re-index for base patterns) and inserts a permuting Map before each
-;; non-first join for the intermediate result.
+;; pattern's Source emits 3-column `[a e v]` (`:aev`) or `[a v e]` (`:ave`)
+;; tuples; a Filter drops rows that miss the pattern's constants; a Map
+;; projects to the pattern's variable columns. Joins are left-deep: each
+;; `IncrementalJoin` keys on the leading columns shared with the accumulated
+;; result. The planner picks every pattern's `:order` so its variables already
+;; lead correctly (no re-index for base patterns) and inserts a permuting Map
+;; before each non-first join for the intermediate result.
 
 (defn- variable? [el] (= :variable (:kind el)))
 
 (defn- order-elems [descriptor order]
-  (case order
-    :aev [(:e descriptor) (:v descriptor)]
-    :ave [(:v descriptor) (:e descriptor)]))
+  (let [a {:kind :constant :value (:attr descriptor)}]
+    (case order
+      :aev [a (:e descriptor) (:v descriptor)]
+      :ave [a (:v descriptor) (:e descriptor)])))
 
 (defn- ordered-vars
-  "The pattern's variables in [order] permutation (`:aev` = e then v)."
+  "The pattern's variables in [order]'s source tuple coordinates."
   [descriptor order]
   (->> (order-elems descriptor order)
        (keep #(when (variable? %) (:var %)))
@@ -170,10 +171,7 @@
   (let [order (choose-order descriptor target)]
     {:descriptor descriptor
      :order order
-     ;; filter is for filtering [e v] or [v e] if constants
-     ;; are present
      :filter (constant-filter descriptor order)
-     ;; project is the projection of [e v] or [v e] to only the variable parts
      :project (projection descriptor order)
      :out-vars (vec target)}))
 
@@ -327,8 +325,10 @@
 ;; --------------------------------------------------------------------------
 
 (defn attribute-deltas
-  "Given [db-before] and [tx-data], returns `{attr -> {[e v] -> weight}}` — the
-  per-attribute change to the set of `(e, v)` facts.
+  "Given [db-before] and [tx-data], returns DBSP input deltas in index order:
+
+    {:aev {[a e v] weight}
+     :ave {[a v e] weight}}
 
   Retracts count only facts actually present in `db-before`; an `:add` to a
   cardinality-one attribute also retracts that entity's previous value (so an
@@ -336,8 +336,18 @@
   [db-before tx-data]
   (let [{:keys [eav schema]} db-before
         {:keys [add retract]} (db/tx-data->triples db-before tx-data)
+        bump* (fn [deltas order tuple dw]
+                (update deltas order
+                        (fnil (fn [m]
+                                (let [w (+ (get m tuple 0) dw)]
+                                  (if (zero? w)
+                                    (dissoc m tuple)
+                                    (assoc m tuple w))))
+                              {})))
         bump (fn [deltas a e v dw]
-               (update-in deltas [a [e v]] (fnil + 0) dw))]
+               (-> deltas
+                   (bump* :aev [a e v] dw)
+                   (bump* :ave [a v e] dw)))]
     (as-> {} deltas
       (reduce (fn [ds [e a v]]
                 (if (contains? (get-in eav [e a]) v)
@@ -345,29 +355,33 @@
                   ds))
               deltas retract)
       (reduce (fn [ds [e a v]]
-                ;; retract old delta when cardinality/one
-                (let [ds (if (and (= :db.cardinality/one (t/attribute-cardinality schema a))
-                                  (first (get-in eav [e a])))
-                           (bump ds a e (first (get-in eav [e a])) -1)
-                           ds)]
-                  ;; add new delta if non existant
-                  (if (not (contains? (get-in eav [e a]) v))
-                    (bump ds a e v 1)
-                    ds)))
+                (let [current-values (get-in eav [e a])
+                      previous-v (first current-values)]
+                  (case (t/attribute-cardinality schema a)
+                    :db.cardinality/one
+                    (cond
+                      (= previous-v v) ds
+                      previous-v (-> ds
+                                     (bump a e previous-v -1)
+                                     (bump a e v 1))
+                      :else (bump ds a e v 1))
+
+                    :db.cardinality/many
+                    (if (contains? current-values v)
+                      ds
+                      (bump ds a e v 1)))))
               deltas add))))
 
 (defn- ->tuple ^Tuple [values]
   (Tuple/of (object-array values)))
 
-(defn pattern-delta-zset
-  "Converts an attribute delta `{[e v] -> weight}` into a flat `TupleZSet` in
-  the given [order] (`:aev` => `[e v]`, `:ave` => `[v e]`)."
-  ^ZSet [attr-delta order]
-  (->> attr-delta
-       (reduce-kv (fn [m [e v] w]
-                    (assoc m
-                           (->tuple (case order :aev [e v] :ave [v e]))
-                           (IntegerWeight. (int w))))
+(defn index-delta-zset
+  "Converts DBSP input deltas into a flat `TupleZSet` in the given [order]
+  (`:aev` => `[a e v]`, `:ave` => `[a v e]`)."
+  ^ZSet [index-deltas order]
+  (->> (get index-deltas order {})
+       (reduce-kv (fn [m tuple w]
+                    (assoc m (->tuple tuple) (IntegerWeight. (int w))))
                   {})
        (ZSet/fromMap)))
 
@@ -377,7 +391,11 @@
   [db]
   (reduce (fn [m [e attrs]]
             (reduce (fn [m [a vs]]
-                      (reduce (fn [m v] (update-in m [a [e v]] (fnil + 0) 1)) m vs))
+                      (reduce (fn [m v]
+                                (-> m
+                                    (update-in [:aev [a e v]] (fnil + 0) 1)
+                                    (update-in [:ave [a v e]] (fnil + 0) 1)))
+                              m vs))
                     m attrs))
           {}
           (:eav db)))
@@ -388,11 +406,10 @@
 
 (defn- push-deltas!
   "Pushes each pattern's delta (in its planned order) onto the circuit inputs."
-  [{:keys [plan inputs]} attr-deltas]
+  [{:keys [plan inputs]} index-deltas]
   (doseq [[i pattern] (map-indexed vector (:patterns plan))]
-    (let [attr (:attr (:descriptor pattern))]
-      (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
-             (pattern-delta-zset (get attr-deltas attr {}) (:order pattern))))))
+    (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
+           (index-delta-zset index-deltas (:order pattern)))))
 
 (defn- zset->result-set
   "Renders an output `TupleZSet` as a seq of `[tuple-vector weight]` pairs."
