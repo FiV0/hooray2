@@ -32,16 +32,26 @@
   (when (= :variable (:kind el)) (:var el)))
 
 (defn compile-pattern
-  "Compiles one conformed `where` clause into a triple-pattern descriptor:
+  "Compiles one conformed `where` clause into a pattern descriptor.
 
-    {:index   <position in :where>
+  Triple descriptor:
+
+    {:index   <position in the immediate parent clause>
+     :kind    :triple
      :attr    {:kind :constant :value v}
      :entity  {:kind :constant :value v} | {:kind :variable :var s}
      :value   {:kind :constant :value v} | {:kind :variable :var s}
      :vars    [vars in entity/value encounter order]}
 
-  The DBSP-standard engine only supports triple patterns with a constant
-  attribute."
+  Or descriptor (nesting preserved, not flattened):
+
+    {:index    <position in the immediate parent clause>
+     :kind     :or
+     :branches [<descriptor> …]                 ; each :kind :triple or :kind :or
+     :vars     [vars in encounter order of the first branch]}
+
+  Other clause types (`:and`, `:not`, `:predicate`, `:fn`) are not yet
+  supported and trigger `err/unsupported-ex`."
   [index [clause-type pattern]]
   (case clause-type
     :triple (let [{:keys [e a v]} pattern
@@ -62,8 +72,14 @@
                :value v*
                :vars (vec (keep elem-var [e* v*]))})
 
-    (throw (ex-info  "DBSP-standard engine currently only supports triples"
-                     {:clause-type clause-type :pattern pattern}))))
+    :or (let [branches (vec (map-indexed compile-pattern pattern))]
+          {:index index
+           :kind :or
+           :branches branches
+           :vars (:vars (first branches))})
+
+    (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
+                        {:clause-type clause-type :pattern pattern})))
 
 (defn compile-patterns
   "Compiles every clause of a conformed `:where` into a vector of descriptors,

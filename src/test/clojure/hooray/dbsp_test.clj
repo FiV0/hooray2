@@ -76,6 +76,73 @@
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?x] :where [[?x :edge ?x]]})))))
 
+(deftest compile-pattern-or-test
+  (testing "flat single-variable or"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or [?e :sex :male]
+                                      [?e :sex :female])]})]
+      (is (= :or (:kind p)))
+      (is (= '[?e] (:vars p)))
+      (is (= 2 (count (:branches p))))
+      (is (every? #(= :triple (:kind %)) (:branches p)))))
+
+  (testing "flat multi-variable or — :vars in encounter order of first branch"
+    (let [[p] (patterns '{:find [?p n]
+                          :where [(or [?p :name n]
+                                      [?p :age n])]})]
+      (is (= :or (:kind p)))
+      (is (= '[?p n] (:vars p)))))
+
+  (testing "multi-variable or where branches use different encounter orders"
+    ;; first branch's encounter order is [?p v]; that becomes the :or's :vars
+    (let [[p] (patterns '{:find [?p v]
+                          :where [(or [?p :name v]
+                                      [v :age ?p])]})]
+      (is (= :or (:kind p)))
+      (is (= '[?p v] (:vars p)))))
+
+  (testing "nested or is preserved (not flattened)"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or [?e :name "Ada"]
+                                      (or [?e :name "Bob"]
+                                          [?e :name "Carla"]))]})]
+      (is (= :or (:kind p)))
+      (is (= 2 (count (:branches p))))
+      (is (= :triple (:kind (first (:branches p)))))
+      (is (= :or (:kind (second (:branches p)))))
+      (is (= 2 (count (:branches (second (:branches p))))))))
+
+  (testing "deeply nested or (3 levels) compiles to matching descriptor tree"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or [?e :name "Ada"]
+                                      (or [?e :name "Bob"]
+                                          (or [?e :name "Carla"]
+                                              [?e :name "Dave"])))]})]
+      (is (= :or (:kind p)))
+      (is (= :or (:kind (second (:branches p)))))
+      (is (= :or (:kind (second (:branches (second (:branches p)))))))))
+
+  (testing "or branch positions are 0, 1, … within their immediate or clause"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or [?e :sex :male]
+                                      [?e :sex :female]
+                                      [?e :sex :other])]})]
+      (is (= [0 1 2] (mapv :index (:branches p))))))
+
+  (testing "rejects :and branch inside or"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/parse '{:find [?e]
+                               :where [(or [?e :name "Ada"]
+                                           (and [?e :name "Bob"]
+                                                [?e :age 30]))]}))))
+
+  (testing "rejects :not branch inside or"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/parse '{:find [?e]
+                               :where [[?e :name n]
+                                       (or [?e :name "Ada"]
+                                           (not [?e :name "Bob"]))]})))))
+
 ;; --------------------------------------------------------------------------
 ;; Left-deep join order
 ;; --------------------------------------------------------------------------
