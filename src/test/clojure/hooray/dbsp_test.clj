@@ -45,6 +45,7 @@
 (deftest compile-pattern-test
   (testing "two variables"
     (let [[p] (patterns '{:find [name] :where [[?e :name name]]})]
+      (is (= :triple (:kind p)))
       (is (= {:kind :constant, :value :name} (:attr p)))
       (is (= {:kind :variable :var '?e} (:entity p)))
       (is (= {:kind :variable :var 'name} (:value p)))
@@ -115,10 +116,19 @@
     (is (= '[?e name] (:result-vars p)))
     (is (= [1] (:final-permute p)))
     (let [pat (first (:patterns p))]
+      (is (= :triple (:kind pat)))
       (is (= :aev (:order pat)))
       (is (= {0 :name} (:filter pat)))
       (is (= [1 2] (:project pat)))
       (is (= '[?e name] (:out-vars pat))))))
+
+(deftest plan-multi-pattern-kind-test
+  (testing "every pattern plan node carries :kind :triple"
+    (let [p (dbsp/plan '{:find [?a ?d]
+                         :where [[?a :r ?b]
+                                 [?b :s ?c]
+                                 [?c :t ?d]]})]
+      (is (every? #(= :triple (:kind %)) (:patterns p))))))
 
 (deftest plan-two-pattern-join-test
   (let [p (dbsp/plan '{:find [name age]

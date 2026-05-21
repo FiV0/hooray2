@@ -56,6 +56,7 @@
                 (err/unsupported-ex "DBSP-standard engine does not support repeated variables inside one triple pattern"
                                     {:pattern pattern}))
               {:index index
+               :kind :triple
                :attr a*
                :entity e*
                :value v*
@@ -174,7 +175,8 @@
   "Plan for one base pattern, producing its variables in [target] order."
   [descriptor target]
   (let [order (choose-order descriptor target)]
-    {:descriptor descriptor
+    {:kind :triple
+     :descriptor descriptor
      ;; the order in which we are processing triples in this triple pattern
      :order order
      ;; the constant part of the triple pattern
@@ -280,8 +282,8 @@
 ;; Phase 2 — circuit assembly
 ;; --------------------------------------------------------------------------
 
-(defn- assemble-pattern
-  "Wires one base pattern into [circuit]: Source -> Filter? -> Map(project).
+(defn- assemble-triple
+  "Wires one triple pattern into [circuit]: Source -> Filter? -> Map(project).
   Returns `{:stream <Stream> :handle <InputHandle>}`."
   [^Circuit circuit pattern]
   (let [pair (.addInput circuit)
@@ -299,6 +301,14 @@
                              (MapOp/permute (int-array (:project pattern)))
                              filtered)]
     {:stream projected :handle handle}))
+
+(defn- assemble-pattern
+  "Dispatches per-pattern circuit assembly by [pattern]'s `:kind`. Each branch
+  returns `{:stream <Stream> :handle <InputHandle>}` for a triple; additional
+  shapes (e.g. `:or`) will be added in later phases."
+  [^Circuit circuit pattern]
+  (case (:kind pattern)
+    :triple (assemble-triple circuit pattern)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
