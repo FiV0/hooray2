@@ -387,6 +387,65 @@
       (is (= 3 (count leaves)))
       (is (every? :order leaves)))))
 
+(deftest assemble-or-single-branch-test
+  (testing "single-branch :or — no plus, just distinct after the projection"
+    (let [{:keys [circuit inputs leaves]} (assemble '{:find [?e]
+                                                      :where [(or [?e :name "Ada"])]})]
+      (is (= 1 (count inputs)))
+      (is (= 1 (count leaves)))
+      ;; branch: input -> filter -> permute; then distinct on the union; then final permute
+      (is (= ["input" "filter-constants" "permute" "distinct" "permute"]
+             (vec (.operatorNames circuit)))))))
+
+(deftest assemble-or-two-branch-test
+  (testing "two-branch :or — one plus, one distinct"
+    (let [{:keys [circuit inputs leaves]} (assemble '{:find [?e]
+                                                      :where [(or [?e :sex :male]
+                                                                  [?e :sex :female])]})]
+      (is (= 2 (count inputs)))
+      (is (= 2 (count leaves)))
+      (is (= ["input" "filter-constants" "permute"
+              "input" "filter-constants" "permute"
+              "plus" "distinct" "permute"]
+             (vec (.operatorNames circuit)))))))
+
+(deftest assemble-or-k-branch-test
+  (testing "k-branch :or has (k - 1) plus operators and one distinct"
+    (let [{:keys [circuit inputs]} (assemble '{:find [?e]
+                                               :where [(or [?e :sex :male]
+                                                           [?e :sex :female]
+                                                           [?e :sex :other])]})
+          ops (vec (.operatorNames circuit))]
+      (is (= 3 (count inputs)))
+      (is (= 2 (count (filter #(= "plus" %) ops))))
+      (is (= 1 (count (filter #(= "distinct" %) ops)))))))
+
+(deftest assemble-or-with-outer-join-test
+  (testing ":or joined with an outer triple wires through incremental-join"
+    (let [{:keys [circuit inputs]} (assemble '{:find [name]
+                                               :where [[?e :name name]
+                                                       (or [?e :sex :male]
+                                                           [?e :sex :female])]})
+          ops (vec (.operatorNames circuit))]
+      (is (= 3 (count inputs)))
+      (is (= 1 (count (filter #(= "incremental-join" %) ops))))
+      (is (= 1 (count (filter #(= "plus" %) ops))))
+      (is (= 1 (count (filter #(= "distinct" %) ops)))))))
+
+(deftest assemble-nested-or-test
+  (testing "nested :or yields one plus + one distinct per :or node"
+    (let [{:keys [circuit inputs leaves]} (assemble
+                                           '{:find [?e]
+                                             :where [(or [?e :name "Ada"]
+                                                         (or [?e :name "Bob"]
+                                                             [?e :name "Carla"]))]})
+          ops (vec (.operatorNames circuit))]
+      (is (= 3 (count inputs)))
+      (is (= 3 (count leaves)))
+      ;; two :or nodes -> two plus, two distinct
+      (is (= 2 (count (filter #(= "plus" %) ops))))
+      (is (= 2 (count (filter #(= "distinct" %) ops)))))))
+
 ;; --------------------------------------------------------------------------
 ;; Per-pattern delta construction
 ;; --------------------------------------------------------------------------

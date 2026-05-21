@@ -11,7 +11,7 @@
             [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t])
-  (:import (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp Tuple)
+  (:import (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
@@ -334,14 +334,34 @@
      :handles [handle]
      :leaves [{:order (:order pattern)}]}))
 
+(declare assemble-pattern)
+
+(defn- assemble-or
+  "Wires an :or plan node into [circuit]: each branch is recursively assembled,
+  the branch streams are folded left-to-right with `PlusOp`, and the union is
+  fed into a `DistinctOp` to enforce set-union semantics. Returns
+  `{:stream <Stream> :handles […] :leaves […]}` with handles/leaves
+  concatenated across all branches in plan order."
+  [^Circuit circuit {:keys [branch-plans]}]
+  (let [wired (mapv #(assemble-pattern circuit %) branch-plans)
+        summed (reduce (fn [acc {:keys [stream]}]
+                         (.addBinary circuit (PlusOp.) acc stream))
+                       (:stream (first wired))
+                       (rest wired))
+        distinct-out (.addUnary circuit (DistinctOp.) summed)]
+    {:stream distinct-out
+     :handles (vec (mapcat :handles wired))
+     :leaves (vec (mapcat :leaves wired))}))
+
 (defn- assemble-pattern
   "Dispatches per-pattern circuit assembly by [pattern]'s `:kind`. Returns
   `{:stream <Stream> :handles […] :leaves […]}` — `:handles` and `:leaves` are
   equal-length flat vectors, one entry per leaf input triple. `:or` patterns
-  added in later phases will return multiple entries from a single call."
+  return multiple entries from a single call (one per branch, recursively)."
   [^Circuit circuit pattern]
   (case (:kind pattern)
-    :triple (assemble-triple circuit pattern)))
+    :triple (assemble-triple circuit pattern)
+    :or     (assemble-or     circuit pattern)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
