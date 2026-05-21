@@ -660,6 +660,100 @@
                                         :where [[?e :name name]]})))))
 
 ;; --------------------------------------------------------------------------
+;; End-to-end: flat :or
+;; --------------------------------------------------------------------------
+
+(deftest e2e-or-single-branch-equivalent-to-bare-test
+  (testing "(or B) produces the same delta as the bare triple B"
+    (let [bare-node (fresh-node)
+          or-node (fresh-node)
+          bare-iq (standard-q-inc bare-node '{:find [?e]
+                                              :where [[?e :name "Ivan"]]})
+          or-iq (standard-q-inc or-node '{:find [?e]
+                                          :where [(or [?e :name "Ivan"])]})]
+      (h/transact bare-node [{:db/id 1 :name "Ivan"}])
+      (h/transact or-node   [{:db/id 1 :name "Ivan"}])
+      (is (= (set (h/consume-delta! bare-iq))
+             (set (h/consume-delta! or-iq)))))))
+
+(deftest e2e-or-disjoint-union-test
+  (testing "two-branch :or returns the union of its branches"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [?e]
+                                    :where [(or [?e :name "Ada"]
+                                                [?e :name "Bob"])]})]
+      (h/transact node [{:db/id :ada  :name "Ada"}
+                        {:db/id :bob  :name "Bob"}
+                        {:db/id :carla :name "Carla"}])
+      (is (= #{[[:ada] 1] [[:bob] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-or-overlap-distinct-test
+  (testing "overlapping branches collapse via DistinctOp"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [?e]
+                                    :where [(or [?e :name "X"]
+                                                [?e :last-name "X"])]})]
+      ;; entity 1 satisfies both branches at once — DistinctOp keeps weight 1
+      (h/transact node [{:db/id 1 :name "X" :last-name "X"}])
+      (is (= #{[[1] 1]} (set (h/consume-delta! iq))))
+
+      ;; retract one of the two matching facts: entity still in the set, no delta
+      (h/transact node [[:db/retract 1 :name "X"]])
+      (is (nil? (h/consume-delta! iq)))
+
+      ;; retract the remaining matching fact: entity leaves the set, emit -1
+      (h/transact node [[:db/retract 1 :last-name "X"]])
+      (is (= #{[[1] -1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-or-with-outer-join-test
+  (testing ":or joined with an outer triple — adds"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [[?e :name name]
+                                            (or [?e :last-name "Lovelace"]
+                                                [?e :last-name "Turing"])]})]
+      (h/transact node [{:db/id :ada  :name "Ada"   :last-name "Lovelace"}
+                        {:db/id :alan :name "Alan"  :last-name "Turing"}
+                        {:db/id :bob  :name "Bob"   :last-name "Smith"}])
+      (is (= #{[["Ada"] 1] [["Alan"] 1]}
+             (set (h/consume-delta! iq))))))
+
+  (testing ":or joined with an outer triple — retract drops a matching row"
+    (let [node (fresh-node)]
+      (h/transact node [{:db/id :ada :name "Ada" :last-name "Lovelace"}])
+      (let [iq (standard-q-inc node '{:find [name]
+                                      :where [[?e :name name]
+                                              (or [?e :last-name "Lovelace"]
+                                                  [?e :last-name "Turing"])]})]
+        (h/transact node [[:db/retract :ada :last-name "Lovelace"]])
+        (is (= #{[["Ada"] -1]} (set (h/consume-delta! iq))))))))
+
+(deftest e2e-or-two-var-in-chain-test
+  (testing "2-var :or joined into a chain"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [[?e :city "NYC"]
+                                            (or [?e :name name]
+                                                [?e :last-name name])]})]
+      (h/transact node [{:db/id :ada  :name "Ada"  :last-name "Lovelace" :city "NYC"}
+                        {:db/id :bob  :name "Bob"  :last-name "Smith"    :city "London"}])
+      (is (= #{[["Ada"] 1] [["Lovelace"] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-or-only-query-test
+  (testing "an :or block as the only :where pattern"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [?e]
+                                    :where [(or [?e :name "Ada"]
+                                                [?e :name "Bob"]
+                                                [?e :name "Carla"])]})]
+      (h/transact node [{:db/id 1 :name "Ada"}
+                        {:db/id 2 :name "Bob"}
+                        {:db/id 3 :name "Dave"}])
+      (is (= #{[[1] 1] [[2] 1]} (set (h/consume-delta! iq)))))))
+
+;; --------------------------------------------------------------------------
 ;; Cross-engine equivalence: :wcoj vs :standard produce the same deltas
 ;; --------------------------------------------------------------------------
 
