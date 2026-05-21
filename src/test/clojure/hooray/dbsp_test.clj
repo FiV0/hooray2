@@ -234,6 +234,31 @@
            (vec (.operatorNames circuit))))
     (is (= 13 (.getNodeCount circuit)))))
 
+(deftest assemble-leaves-test
+  (testing "plan->circuit returns a :leaves vector parallel to :inputs"
+    (let [{:keys [inputs leaves]} (assemble '{:find [name]
+                                              :where [[?e :name name]]})]
+      (is (= 1 (count leaves)))
+      (is (= (count inputs) (count leaves)))
+      (is (= :aev (:order (first leaves))))))
+
+  (testing "each leaf carries :order; aev/ave mixed chain"
+    (let [{:keys [inputs leaves]} (assemble '{:find [?e ?p]
+                                              :where [[?e :name name]
+                                                      [?p :age name]]})]
+      (is (= 2 (count inputs)))
+      (is (= 2 (count leaves)))
+      (is (every? #{:aev :ave} (map :order leaves)))))
+
+  (testing "leaf count equals total triple count in a chain"
+    (let [{:keys [inputs leaves]} (assemble '{:find [?a ?d]
+                                              :where [[?a :r ?b]
+                                                      [?b :s ?c]
+                                                      [?c :t ?d]]})]
+      (is (= 3 (count inputs)))
+      (is (= 3 (count leaves)))
+      (is (every? :order leaves)))))
+
 ;; --------------------------------------------------------------------------
 ;; Per-pattern delta construction
 ;; --------------------------------------------------------------------------

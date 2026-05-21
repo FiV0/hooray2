@@ -284,7 +284,7 @@
 
 (defn- assemble-triple
   "Wires one triple pattern into [circuit]: Source -> Filter? -> Map(project).
-  Returns `{:stream <Stream> :handle <InputHandle>}`."
+  Returns `{:stream <Stream> :handles [<InputHandle>] :leaves [{:order …}]}`."
   [^Circuit circuit pattern]
   (let [pair (.addInput circuit)
         source (.getFirst pair)
@@ -300,12 +300,15 @@
         projected (.addUnary circuit
                              (MapOp/permute (int-array (:project pattern)))
                              filtered)]
-    {:stream projected :handle handle}))
+    {:stream projected
+     :handles [handle]
+     :leaves [{:order (:order pattern)}]}))
 
 (defn- assemble-pattern
-  "Dispatches per-pattern circuit assembly by [pattern]'s `:kind`. Each branch
-  returns `{:stream <Stream> :handle <InputHandle>}` for a triple; additional
-  shapes (e.g. `:or`) will be added in later phases."
+  "Dispatches per-pattern circuit assembly by [pattern]'s `:kind`. Returns
+  `{:stream <Stream> :handles […] :leaves […]}` — `:handles` and `:leaves` are
+  equal-length flat vectors, one entry per leaf input triple. `:or` patterns
+  added in later phases will return multiple entries from a single call."
   [^Circuit circuit pattern]
   (case (:kind pattern)
     :triple (assemble-triple circuit pattern)))
@@ -314,7 +317,8 @@
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
 
     {:circuit <Circuit>
-     :inputs  [<InputHandle> ...]   ; parallel to (:patterns plan)
+     :inputs  [<InputHandle> ...]   ; flat, one per leaf triple
+     :leaves  [{:order …} ...]      ; parallel to :inputs
      :output  <OutputHandle>}
 
   The circuit is per-pattern `Source -> Filter? -> Map`, a left-deep chain of
@@ -342,7 +346,8 @@
         ;; wire up the find clause
         projected (.addUnary circuit (MapOp/permute (int-array final-permute)) result)]
     {:circuit circuit
-     :inputs (mapv :handle wired)
+     :inputs (vec (mapcat :handles wired))
+     :leaves (vec (mapcat :leaves wired))
      :output (.output circuit projected)}))
 
 ;; --------------------------------------------------------------------------
@@ -433,11 +438,14 @@
 ;; --------------------------------------------------------------------------
 
 (defn- push-deltas!
-  "Pushes each pattern's delta (in its planned order) onto the circuit inputs."
-  [{:keys [plan inputs]} index-deltas]
-  (doseq [[i pattern] (map-indexed vector (:patterns plan))]
+  "Pushes each leaf triple's delta (in its planned order) onto the circuit
+  inputs. `:leaves` and `:inputs` are parallel flat vectors, one entry per
+  leaf — for triple-only plans that's one entry per pattern; an `:or` block
+  contributes one entry per branch."
+  [{:keys [inputs leaves]} index-deltas]
+  (dotimes [i (count leaves)]
     (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
-           (index-delta-zset index-deltas (:order pattern)))))
+           (index-delta-zset index-deltas (:order (nth leaves i))))))
 
 (defn- zset->result-set
   "Renders an output `TupleZSet` as a seq of `[tuple-vector weight]` pairs."
@@ -447,7 +455,7 @@
            (.getValue ^IntegerWeight (.getValue entry))])
         (.entries zset)))
 
-(defrecord DbspQuery [id query plan circuit inputs output queue])
+(defrecord DbspQuery [id query plan circuit inputs leaves output queue])
 
 (defn dbsp-query?
   "True if [x] is a DBSP-standard incremental query (vs. a WCOJ one)."
@@ -458,8 +466,8 @@
   of [db]. Returns a [DbspQuery] carrying the circuit and a result queue."
   ^DbspQuery [db query]
   (let [p (plan query)
-        {:keys [circuit inputs output]} (plan->circuit p)
-        iq (->DbspQuery (random-uuid) query p circuit inputs output
+        {:keys [circuit inputs leaves output]} (plan->circuit p)
+        iq (->DbspQuery (random-uuid) query p circuit inputs leaves output
                         (atom clojure.lang.PersistentQueue/EMPTY))]
     ;; prime the circuit with the database's existing facts; discard the output
     (push-deltas! iq (full-db-deltas db))
