@@ -188,20 +188,34 @@
                      (order-elems descriptor order))))
 
 (defn- pattern-plan
-  "Plan for one base pattern, producing its variables in [target] order."
+  "Plan for one pattern descriptor, producing its variables in [target] order.
+
+  Triple plan:
+    {:kind :triple :descriptor … :order :aev/:ave :filter … :project …
+     :out-vars target}
+
+  Or plan (recursive — each branch plan is itself a triple or or plan with
+  the same :out-vars):
+    {:kind :or :descriptor … :branch-plans [<plan> …] :out-vars target}"
   [descriptor target]
-  (let [order (choose-order descriptor target)]
-    {:kind :triple
-     :descriptor descriptor
-     ;; the order in which we are processing triples in this triple pattern
-     :order order
-     ;; the constant part of the triple pattern
-     :filter (constant-filter descriptor order)
-     ;; the projection after the filter of the constants
-     ;; for example [a(constant) e(constant) v] -> [v]
-     :project (projection descriptor order)
-     ;; the vars of this pattern
-     :out-vars (vec target)}))
+  (case (:kind descriptor)
+    :triple (let [order (choose-order descriptor target)]
+              {:kind :triple
+               :descriptor descriptor
+               ;; the order in which we are processing triples in this triple pattern
+               :order order
+               ;; the constant part of the triple pattern
+               :filter (constant-filter descriptor order)
+               ;; the projection after the filter of the constants
+               ;; for example [a(constant) e(constant) v] -> [v]
+               :project (projection descriptor order)
+               ;; the vars of this pattern
+               :out-vars (vec target)})
+
+    :or {:kind :or
+         :descriptor descriptor
+         :branch-plans (mapv #(pattern-plan % target) (:branches descriptor))
+         :out-vars (vec target)}))
 
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."

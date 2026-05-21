@@ -259,6 +259,67 @@
       (is (= 2 (:key-arity closing)))
       (is (= 2 (count (set (:key-vars closing))))))))
 
+(deftest plan-or-only-test
+  (testing "single :or block as the only pattern"
+    (let [p (dbsp/plan '{:find [?e]
+                         :where [(or [?e :sex :male]
+                                     [?e :sex :female])]})
+          pat (first (:patterns p))]
+      (is (= :or (:kind pat)))
+      (is (= '[?e] (:out-vars pat)))
+      (is (= 2 (count (:branch-plans pat))))
+      (is (every? #(= '[?e] (:out-vars %)) (:branch-plans pat)))
+      (is (every? #(= :triple (:kind %)) (:branch-plans pat)))
+      (is (= '[?e] (:result-vars p))))))
+
+(deftest plan-or-with-outer-join-test
+  (testing ":or joined with an outer triple — outer chain forces target order"
+    (let [p (dbsp/plan '{:find [name]
+                         :where [[?e :name name]
+                                 (or [?e :sex :male]
+                                     [?e :sex :female])]})
+          [outer or-pat] (:patterns p)]
+      (is (= :triple (:kind outer)))
+      (is (= :or (:kind or-pat)))
+      (is (= '[?e] (:out-vars or-pat)))
+      (is (every? #(= '[?e] (:out-vars %)) (:branch-plans or-pat)))
+      (is (= 1 (count (:joins p)))))))
+
+(deftest plan-or-multi-var-test
+  (testing "2-var :or joined with an outer pattern that re-orders branch columns"
+    (let [p (dbsp/plan '{:find [n]
+                         :where [[?p :tag "x"]
+                                 (or [?p :name n]
+                                     [?p :age n])]})
+          [_outer or-pat] (:patterns p)]
+      (is (= :or (:kind or-pat)))
+      ;; the outer chain leads with ?p, so each branch is planned with target [?p n]
+      (is (= '[?p n] (:out-vars or-pat)))
+      (is (every? #(= '[?p n] (:out-vars %)) (:branch-plans or-pat))))))
+
+(deftest plan-nested-or-test
+  (testing "nested :or plan preserves the descriptor tree"
+    (let [p (dbsp/plan '{:find [?e]
+                         :where [(or [?e :name "Ada"]
+                                     (or [?e :name "Bob"]
+                                         [?e :name "Carla"]))]})
+          pat (first (:patterns p))]
+      (is (= :or (:kind pat)))
+      (is (= 2 (count (:branch-plans pat))))
+      (is (= :triple (:kind (first (:branch-plans pat)))))
+      (let [inner (second (:branch-plans pat))]
+        (is (= :or (:kind inner)))
+        (is (= '[?e] (:out-vars inner)))
+        (is (= 2 (count (:branch-plans inner))))
+        (is (every? #(= '[?e] (:out-vars %)) (:branch-plans inner)))))))
+
+(deftest plan-or-deterministic-test
+  (let [q '{:find [?e]
+            :where [[?e :name name]
+                    (or [?e :sex :male]
+                        [?e :sex :female])]}]
+    (is (= (dbsp/plan q) (dbsp/plan q)))))
+
 (deftest plan-deterministic-test
   (let [q '{:find [?a ?d]
             :where [[?a :r ?b] [?b :s ?c] [?c :t ?d]]}]
