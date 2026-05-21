@@ -754,6 +754,75 @@
       (is (= #{[[1] 1] [[2] 1]} (set (h/consume-delta! iq)))))))
 
 ;; --------------------------------------------------------------------------
+;; End-to-end: nested :or
+;; --------------------------------------------------------------------------
+
+(defn- standard-deltas
+  "Registers [query] on a fresh node, applies [transactions] one at a time,
+  returns the per-transaction deltas as sets."
+  [query transactions]
+  (let [node (fresh-node)
+        iq (standard-q-inc node query)]
+    (mapv (fn [tx]
+            (h/transact node tx)
+            (set (h/consume-delta! iq)))
+          transactions)))
+
+(deftest e2e-nested-or-equals-flat-test
+  (testing "nested (or A (or B C)) produces the same deltas as flat (or A B C)"
+    (let [txs [[{:db/id 1 :name "Ada"}
+                {:db/id 2 :name "Bob"}
+                {:db/id 3 :name "Carla"}
+                {:db/id 4 :name "Dave"}]
+               [[:db/retract 1 :name "Ada"]
+                [:db/retract 4 :name "Dave"]]]
+          nested '{:find [?e]
+                   :where [(or [?e :name "Ada"]
+                               (or [?e :name "Bob"]
+                                   [?e :name "Carla"]))]}
+          flat   '{:find [?e]
+                   :where [(or [?e :name "Ada"]
+                               [?e :name "Bob"]
+                               [?e :name "Carla"])]}]
+      (is (= (standard-deltas flat txs)
+             (standard-deltas nested txs))))))
+
+(deftest e2e-nested-or-with-outer-join-test
+  (testing "nested :or joined with an outer triple"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [[?e :name name]
+                                            (or [?e :last-name "Lovelace"]
+                                                (or [?e :last-name "Turing"]
+                                                    [?e :last-name "Hopper"]))]})]
+      (h/transact node [{:db/id :ada    :name "Ada"    :last-name "Lovelace"}
+                        {:db/id :alan   :name "Alan"   :last-name "Turing"}
+                        {:db/id :grace  :name "Grace"  :last-name "Hopper"}
+                        {:db/id :bob    :name "Bob"    :last-name "Smith"}])
+      (is (= #{[["Ada"] 1] [["Alan"] 1] [["Grace"] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-deeply-nested-or-test
+  (testing "3-level-deep nesting (or A (or B (or C D))) matches the flat form"
+    (let [txs [[{:db/id 1 :name "Ada"}
+                {:db/id 2 :name "Bob"}
+                {:db/id 3 :name "Carla"}
+                {:db/id 4 :name "Dave"}
+                {:db/id 5 :name "Eve"}]]
+          deep '{:find [?e]
+                 :where [(or [?e :name "Ada"]
+                             (or [?e :name "Bob"]
+                                 (or [?e :name "Carla"]
+                                     [?e :name "Dave"])))]}
+          flat '{:find [?e]
+                 :where [(or [?e :name "Ada"]
+                             [?e :name "Bob"]
+                             [?e :name "Carla"]
+                             [?e :name "Dave"])]}]
+      (is (= (standard-deltas flat txs)
+             (standard-deltas deep txs))))))
+
+;; --------------------------------------------------------------------------
 ;; Cross-engine equivalence: :wcoj vs :standard produce the same deltas
 ;; --------------------------------------------------------------------------
 
