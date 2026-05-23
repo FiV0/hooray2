@@ -22,7 +22,7 @@ a formal framwork for incremental computation. We also try to combine the two.
        :where [[?e :name name]
                [?e :last-name "Lovelace"]]}
      (h/db node))
-;; => #{["Ada"]}
+;; => [["Ada"]]
 ```
 
 ### Incremental queries
@@ -43,8 +43,27 @@ a formal framwork for incremental computation. We also try to combine the two.
       (h/consume-delta! inc-q)
 
       (finally
-        (h/unregister-inc-q node inc-q)))))
+        (h/unregister-inc-q node inc-q))))
+
+        )
 ;; => ([["Ada"] 1] [["Alan"] 1] [["Adam"] -1])
+```
+
+There are currently two incremental join algorithms which I am exploring,
+`:wcoj` and `:standard`. `:standard` is a the more traditional approach to incremental queries
+as described in the DBSP paper. Binary joins and reindexing of join keys whenever two relations
+have a different subset of join keys they overlap in. The `:wcoj` options explores using
+a WCOJ per delta join term in an DBSP multi-join expansion (that is a bit of a mouthful, I know).
+These can be switched with the dynamic var `*dbsp-version*`.
+
+```clj
+(binding [h/*dbsp-version* :wcoj]
+    (let [inc-q (h/q-inc node
+                         '{:find [name]
+                           :where [[?e :name name]]})]
+
+      ...
+      ))
 ```
 
 ## Join Algorithms
