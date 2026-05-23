@@ -153,7 +153,11 @@
                     [[:constant _] [:constant _] [:constant _]] []
                     [[:constant _] [:constant _] [:variable value-var]] [value-var]
                     [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
-                    [[:variable entity-var] [:constant _] [:variable value-var]] [entity-var value-var]
+                    [[:variable entity-var] [:constant _] [:variable value-var]]
+                    (if (= entity-var value-var)
+                      (err/unsupported-ex "Hooray does not (yet) support repeated variables inside one triple pattern"
+                                          {:pattern value})
+                      [entity-var value-var])
                     [_ [:variable _] _] (err/unsupported-ex "Currently variables in attribute position are not supported")))
 
         (:or :and :not) (variable-order* value)

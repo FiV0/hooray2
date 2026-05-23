@@ -58,13 +58,6 @@
                   a* (elem a)
                   e* (elem e)
                   v* (elem v)]
-              (when-not (= :constant (:kind a*))
-                (err/unsupported-ex "Currently variables in attribute position are not supported"))
-              (when (and (= :variable (:kind e*))
-                         (= :variable (:kind v*))
-                         (= (:var e*) (:var v*)))
-                (err/unsupported-ex "DBSP-standard engine does not support repeated variables inside one triple pattern"
-                                    {:pattern pattern}))
               {:index index
                :kind :triple
                :attr a*
@@ -515,6 +508,7 @@
   "Compiles [query] into a stepping DBSP circuit, primed with the current state
   of [db]. Returns a [DbspQuery] carrying the circuit and a result queue."
   ^DbspQuery [db query]
+  {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [p (plan query)
         {:keys [circuit inputs leaves output]} (plan->circuit p)
         iq (->DbspQuery (random-uuid) query p circuit inputs leaves output
