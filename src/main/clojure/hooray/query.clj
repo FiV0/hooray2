@@ -204,7 +204,7 @@
      (doseq [[_ or-branches] ors]
        (let [or-branches-free-vars (mapv free-variables or-branches)]
          (when-not (every? #(= (first or-branches-free-vars) %) (rest or-branches-free-vars))
-           (err/incorrect-ex "Branches of `or` must have same free variables!" :db.error/invalid-query))
+           (err/incorrect-ex "Branches of `or` must have same free variables!" {} :db.error/invalid-query))
          (validate-patterns or-branches positive-vars)))
 
      (doseq [[_ and-branches] ands]
@@ -217,12 +217,12 @@
            (let [msg (format "%s not bound in `not` clause: %s"
                              (pr-str (vec unbound-vars))
                              (pr-str (s/unform ::not-pattern not-branches)))]
-             (err/incorrect-ex msg :db.error/insufficient-binding)))
+             (err/incorrect-ex msg {} :db.error/insufficient-binding)))
          (validate-patterns not-branches positive-vars))))))
 
 (defn validate-query [{:keys [where] :as conformed-query}]
   (when (> (count (select-keys conformed-query [:keys :strs :syms])) 1)
-    (err/incorrect-ex "Only one of :keys, :strs and :syms must be present!" :db.error/invalid-query))
+    (err/incorrect-ex "Only one of :keys, :strs and :syms must be present!" {} :db.error/invalid-query))
   (validate-patterns where)
   true)
 
