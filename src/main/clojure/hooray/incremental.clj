@@ -146,7 +146,8 @@
         delta (-> (.step pipeline zset-indices)
                   zset/zset->result-set)]
     (when (seq delta)
-      (swap! !queue conj delta))))
+      (swap! !queue conj delta)
+      delta)))
 
 (defrecord IncrementalQuery [id query pipeline !queue])
 

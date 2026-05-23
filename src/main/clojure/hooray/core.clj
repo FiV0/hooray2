@@ -17,7 +17,7 @@
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
 
-(defrecord Node [!dbs opts !inc-qs]
+(defrecord Node [!dbs opts !inc-qs !delta-listeners]
   Closeable
   (close [_] nil))
 
@@ -26,7 +26,11 @@
 
 (defn connect [opts]
   {:pre [(s/valid? ::conn-opts opts)]}
-  (->Node (atom [(db/->db opts)]) opts (atom {})))
+  (->Node (atom [(db/->db opts)]) opts (atom {}) (atom {})))
+
+(defn- notify-delta-listeners! [{:keys [!delta-listeners]} inc-q delta]
+  (doseq [listener (vals (get @!delta-listeners (:id inc-q)))]
+    (listener delta)))
 
 (defn transact [{:keys [!dbs !inc-qs] :as node} tx-data]
   {:pre [(node? node) (s/valid? ::t/tx-data tx-data)]}
@@ -35,9 +39,11 @@
                                      (conj dbs (db/transact db-before tx-data)))))]
     (when-let [inc-qs (seq @!inc-qs)]
       (doseq [inc-q (vals inc-qs)]
-        (if (dbsp/dbsp-query? inc-q)
-          (dbsp/compute-delta! inc-q db-before tx-data)
-          (incremental/compute-delta! inc-q db-before db-after tx-data))))))
+        (let [delta (if (dbsp/dbsp-query? inc-q)
+                      (dbsp/compute-delta! inc-q db-before tx-data)
+                      (incremental/compute-delta! inc-q db-before db-after tx-data))]
+          (when (seq delta)
+            (notify-delta-listeners! node inc-q delta)))))))
 
 (defn db [{:keys [!dbs] :as node}]
   {:pre [(node? node)]}
@@ -81,9 +87,26 @@
     (swap! !inc-qs assoc (:id inc-q) inc-q)
     inc-q))
 
-(defn unregister-inc-q [{:keys [!inc-qs] :as node} {:keys [id] :as inc-q}]
+(defn unregister-inc-q [{:keys [!inc-qs !delta-listeners] :as node} {:keys [id] :as inc-q}]
   {:pre [(node? node)]}
   (swap! !inc-qs dissoc id)
+  (swap! !delta-listeners dissoc id)
+  node)
+
+(defn- register-delta-listener! [{:keys [!delta-listeners] :as node} {:keys [id] :as _inc-q} listener]
+  {:pre [(node? node)]}
+  (let [listener-id (random-uuid)]
+    (swap! !delta-listeners update id assoc listener-id listener)
+    listener-id))
+
+(defn- unregister-delta-listener! [{:keys [!delta-listeners] :as node} {:keys [id] :as _inc-q} listener-id]
+  {:pre [(node? node)]}
+  (swap! !delta-listeners
+         (fn [listeners]
+           (let [remaining (not-empty (dissoc (get listeners id) listener-id))]
+             (if remaining
+               (assoc listeners id remaining)
+               (dissoc listeners id)))))
   node)
 
 (defn consume-delta! [inc-q]
@@ -104,23 +127,24 @@
 
 (defn delta-chan [conn query]
   (let [inc-q (q-inc conn query)
-        output-ch (async/chan 1024)]
-    (async/thread
-      (loop []
-        ;; TODO This needs new deltas to arrive to close
-        (when-let [delta (consume-delta! inc-q)]
-          (when (async/>!! output-ch delta)
-            (recur)))))
+        output-ch (async/chan 1024)
+        listener-id (atom nil)]
+    (reset! listener-id
+            (register-delta-listener!
+             conn inc-q
+             (fn [delta]
+               (when-not (async/>!! output-ch delta)
+                 (unregister-delta-listener! conn inc-q @listener-id)
+                 (unregister-inc-q conn inc-q)))))
     output-ch))
 
-(defrecord IncrementalSubscription [delta-ch]
+(defrecord IncrementalSubscription [conn inc-q listener-id]
   Closeable
-  (close [_] (async/close! delta-ch)))
+  (close [_]
+    (unregister-delta-listener! conn inc-q listener-id)
+    (unregister-inc-q conn inc-q)))
 
 (defn subscribe ^Closeable [conn query callback]
-  (let [delta-ch (delta-chan conn query)]
-    (async/go-loop []
-      (when-let [delta (async/<! delta-ch)]
-        (callback delta)
-        (recur)))
-    (->IncrementalSubscription delta-ch)))
+  (let [inc-q (q-inc conn query)
+        listener-id (register-delta-listener! conn inc-q callback)]
+    (->IncrementalSubscription conn inc-q listener-id)))
