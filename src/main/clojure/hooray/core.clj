@@ -1,5 +1,6 @@
 (ns hooray.core
   (:require [clojure.spec.alpha :as s]
+            [clojure.core.async :as async]
             [hooray.db :as db]
             [hooray.query :as query]
             [hooray.pull :as pull]
@@ -89,3 +90,37 @@
   (if (dbsp/dbsp-query? inc-q)
     (dbsp/pop-result! inc-q)
     (incremental/pop-result! inc-q)))
+
+
+(defrecord IncrementalStream [conn inc-q]
+  Closeable
+  (close [_] (unregister-inc-q conn inc-q)))
+
+(defn open-deltas ^Closeable [conn query]
+  (->IncrementalStream conn (q-inc conn query)))
+
+(defn take! [{:keys [inc-q]}]
+  (consume-delta! inc-q))
+
+(defn delta-chan [conn query]
+  (let [inc-q (q-inc conn query)
+        output-ch (async/chan 1024)]
+    (async/thread
+      (loop []
+        ;; TODO This needs new deltas to arrive to close
+        (when-let [delta (consume-delta! inc-q)]
+          (when (async/>!! output-ch delta)
+            (recur)))))
+    output-ch))
+
+(defrecord IncrementalSubscription [delta-ch]
+  Closeable
+  (close [_] (async/close! delta-ch)))
+
+(defn subscribe ^Closeable [conn query callback]
+  (let [delta-ch (delta-chan conn query)]
+    (async/go-loop []
+      (when-let [delta (async/<! delta-ch)]
+        (callback delta)
+        (recur)))
+    (->IncrementalSubscription delta-ch)))
