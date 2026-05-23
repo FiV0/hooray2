@@ -11,7 +11,7 @@
             [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t])
-  (:import (org.hooray.dbsp Circuit FilterOp MapOp IncrementalJoinOp Tuple)
+  (:import (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
@@ -32,37 +32,47 @@
   (when (= :variable (:kind el)) (:var el)))
 
 (defn compile-pattern
-  "Compiles one conformed `where` clause into a triple-pattern descriptor:
+  "Compiles one conformed `where` clause into a pattern descriptor.
 
-    {:index   <position in :where>
+  Triple descriptor:
+
+    {:index   <position in the immediate parent clause>
+     :kind    :triple
      :attr    {:kind :constant :value v}
      :entity  {:kind :constant :value v} | {:kind :variable :var s}
      :value   {:kind :constant :value v} | {:kind :variable :var s}
      :vars    [vars in entity/value encounter order]}
 
-  The DBSP-standard engine only supports triple patterns with a constant
-  attribute."
+  Or descriptor (nesting preserved, not flattened):
+
+    {:index    <position in the immediate parent clause>
+     :kind     :or
+     :branches [<descriptor> …]                 ; each :kind :triple or :kind :or
+     :vars     [vars in encounter order of the first branch]}
+
+  Other clause types (`:and`, `:not`, `:predicate`, `:fn`) are not yet
+  supported and trigger `err/unsupported-ex`."
   [index [clause-type pattern]]
   (case clause-type
     :triple (let [{:keys [e a v]} pattern
                   a* (elem a)
                   e* (elem e)
                   v* (elem v)]
-              (when-not (= :constant (:kind a*))
-                (err/unsupported-ex "Currently variables in attribute position are not supported"))
-              (when (and (= :variable (:kind e*))
-                         (= :variable (:kind v*))
-                         (= (:var e*) (:var v*)))
-                (err/unsupported-ex "DBSP-standard engine does not support repeated variables inside one triple pattern"
-                                    {:pattern pattern}))
               {:index index
+               :kind :triple
                :attr a*
                :entity e*
                :value v*
                :vars (vec (keep elem-var [e* v*]))})
 
-    (throw (ex-info  "DBSP-standard engine currently only supports triples"
-                     {:clause-type clause-type :pattern pattern}))))
+    :or (let [branches (vec (map-indexed compile-pattern pattern))]
+          {:index index
+           :kind :or
+           :branches branches
+           :vars (:vars (first branches))})
+
+    (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
+                        {:clause-type clause-type :pattern pattern})))
 
 (defn compile-patterns
   "Compiles every clause of a conformed `:where` into a vector of descriptors,
@@ -171,19 +181,34 @@
                      (order-elems descriptor order))))
 
 (defn- pattern-plan
-  "Plan for one base pattern, producing its variables in [target] order."
+  "Plan for one pattern descriptor, producing its variables in [target] order.
+
+  Triple plan:
+    {:kind :triple :descriptor … :order :aev/:ave :filter … :project …
+     :out-vars target}
+
+  Or plan (recursive — each branch plan is itself a triple or or plan with
+  the same :out-vars):
+    {:kind :or :descriptor … :branch-plans [<plan> …] :out-vars target}"
   [descriptor target]
-  (let [order (choose-order descriptor target)]
-    {:descriptor descriptor
-     ;; the order in which we are processing triples in this triple pattern
-     :order order
-     ;; the constant part of the triple pattern
-     :filter (constant-filter descriptor order)
-     ;; the projection after the filter of the constants
-     ;; for example [a(constant) e(constant) v] -> [v]
-     :project (projection descriptor order)
-     ;; the vars of this pattern
-     :out-vars (vec target)}))
+  (case (:kind descriptor)
+    :triple (let [order (choose-order descriptor target)]
+              {:kind :triple
+               :descriptor descriptor
+               ;; the order in which we are processing triples in this triple pattern
+               :order order
+               ;; the constant part of the triple pattern
+               :filter (constant-filter descriptor order)
+               ;; the projection after the filter of the constants
+               ;; for example [a(constant) e(constant) v] -> [v]
+               :project (projection descriptor order)
+               ;; the vars of this pattern
+               :out-vars (vec target)})
+
+    :or {:kind :or
+         :descriptor descriptor
+         :branch-plans (mapv #(pattern-plan % target) (:branches descriptor))
+         :out-vars (vec target)}))
 
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."
@@ -280,9 +305,9 @@
 ;; Phase 2 — circuit assembly
 ;; --------------------------------------------------------------------------
 
-(defn- assemble-pattern
-  "Wires one base pattern into [circuit]: Source -> Filter? -> Map(project).
-  Returns `{:stream <Stream> :handle <InputHandle>}`."
+(defn- assemble-triple
+  "Wires one triple pattern into [circuit]: Source -> Filter? -> Map(project).
+  Returns `{:stream <Stream> :handles [<InputHandle>] :leaves [{:order …}]}`."
   [^Circuit circuit pattern]
   (let [pair (.addInput circuit)
         source (.getFirst pair)
@@ -298,13 +323,45 @@
         projected (.addUnary circuit
                              (MapOp/permute (int-array (:project pattern)))
                              filtered)]
-    {:stream projected :handle handle}))
+    {:stream projected
+     :handles [handle]
+     :leaves [{:order (:order pattern)}]}))
+
+(declare assemble-pattern)
+
+(defn- assemble-or
+  "Wires an :or plan node into [circuit]: each branch is recursively assembled,
+  the branch streams are folded left-to-right with `PlusOp`, and the union is
+  fed into a `DistinctOp` to enforce set-union semantics. Returns
+  `{:stream <Stream> :handles […] :leaves […]}` with handles/leaves
+  concatenated across all branches in plan order."
+  [^Circuit circuit {:keys [branch-plans]}]
+  (let [wired (mapv #(assemble-pattern circuit %) branch-plans)
+        summed (reduce (fn [acc {:keys [stream]}]
+                         (.addBinary circuit (PlusOp.) acc stream))
+                       (:stream (first wired))
+                       (rest wired))
+        distinct-out (.addUnary circuit (DistinctOp.) summed)]
+    {:stream distinct-out
+     :handles (vec (mapcat :handles wired))
+     :leaves (vec (mapcat :leaves wired))}))
+
+(defn- assemble-pattern
+  "Dispatches per-pattern circuit assembly by [pattern]'s `:kind`. Returns
+  `{:stream <Stream> :handles […] :leaves […]}` — `:handles` and `:leaves` are
+  equal-length flat vectors, one entry per leaf input triple. `:or` patterns
+  return multiple entries from a single call (one per branch, recursively)."
+  [^Circuit circuit pattern]
+  (case (:kind pattern)
+    :triple (assemble-triple circuit pattern)
+    :or     (assemble-or     circuit pattern)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
 
     {:circuit <Circuit>
-     :inputs  [<InputHandle> ...]   ; parallel to (:patterns plan)
+     :inputs  [<InputHandle> ...]   ; flat, one per leaf triple
+     :leaves  [{:order …} ...]      ; parallel to :inputs
      :output  <OutputHandle>}
 
   The circuit is per-pattern `Source -> Filter? -> Map`, a left-deep chain of
@@ -332,7 +389,8 @@
         ;; wire up the find clause
         projected (.addUnary circuit (MapOp/permute (int-array final-permute)) result)]
     {:circuit circuit
-     :inputs (mapv :handle wired)
+     :inputs (vec (mapcat :handles wired))
+     :leaves (vec (mapcat :leaves wired))
      :output (.output circuit projected)}))
 
 ;; --------------------------------------------------------------------------
@@ -423,11 +481,14 @@
 ;; --------------------------------------------------------------------------
 
 (defn- push-deltas!
-  "Pushes each pattern's delta (in its planned order) onto the circuit inputs."
-  [{:keys [plan inputs]} index-deltas]
-  (doseq [[i pattern] (map-indexed vector (:patterns plan))]
+  "Pushes each leaf triple's delta (in its planned order) onto the circuit
+  inputs. `:leaves` and `:inputs` are parallel flat vectors, one entry per
+  leaf — for triple-only plans that's one entry per pattern; an `:or` block
+  contributes one entry per branch."
+  [{:keys [inputs leaves]} index-deltas]
+  (dotimes [i (count leaves)]
     (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
-           (index-delta-zset index-deltas (:order pattern)))))
+           (index-delta-zset index-deltas (:order (nth leaves i))))))
 
 (defn- zset->result-set
   "Renders an output `TupleZSet` as a seq of `[tuple-vector weight]` pairs."
@@ -437,7 +498,7 @@
            (.getValue ^IntegerWeight (.getValue entry))])
         (.entries zset)))
 
-(defrecord DbspQuery [id query plan circuit inputs output queue])
+(defrecord DbspQuery [id query plan circuit inputs leaves output queue])
 
 (defn dbsp-query?
   "True if [x] is a DBSP-standard incremental query (vs. a WCOJ one)."
@@ -447,9 +508,10 @@
   "Compiles [query] into a stepping DBSP circuit, primed with the current state
   of [db]. Returns a [DbspQuery] carrying the circuit and a result queue."
   ^DbspQuery [db query]
+  {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [p (plan query)
-        {:keys [circuit inputs output]} (plan->circuit p)
-        iq (->DbspQuery (random-uuid) query p circuit inputs output
+        {:keys [circuit inputs leaves output]} (plan->circuit p)
+        iq (->DbspQuery (random-uuid) query p circuit inputs leaves output
                         (atom clojure.lang.PersistentQueue/EMPTY))]
     ;; prime the circuit with the database's existing facts; discard the output
     (push-deltas! iq (full-db-deltas db))
