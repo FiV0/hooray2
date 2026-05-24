@@ -114,7 +114,6 @@
     (dbsp/pop-result! inc-q)
     (incremental/pop-result! inc-q)))
 
-
 (defrecord IncrementalStream [conn inc-q]
   Closeable
   (close [_] (unregister-inc-q conn inc-q)))
@@ -128,14 +127,14 @@
 (defn delta-chan [conn query]
   (let [inc-q (q-inc conn query)
         output-ch (async/chan 1024)
-        listener-id (atom nil)]
-    (reset! listener-id
-            (register-delta-listener!
-             conn inc-q
-             (fn [delta]
-               (when-not (async/>!! output-ch delta)
-                 (unregister-delta-listener! conn inc-q @listener-id)
-                 (unregister-inc-q conn inc-q)))))
+        listener-id (promise)]
+    (deliver listener-id
+             (register-delta-listener!
+              conn inc-q
+              (fn [delta]
+                (when-not (async/>!! output-ch delta)
+                  (unregister-delta-listener! conn inc-q @listener-id)
+                  (unregister-inc-q conn inc-q)))))
     output-ch))
 
 (defrecord IncrementalSubscription [conn inc-q listener-id]
