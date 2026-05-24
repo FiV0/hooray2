@@ -1,6 +1,7 @@
 (ns hooray.core
   (:require [clojure.spec.alpha :as s]
             [clojure.core.async :as async]
+            [clojure.tools.logging :as log]
             [hooray.db :as db]
             [hooray.query :as query]
             [hooray.pull :as pull]
@@ -30,7 +31,10 @@
 
 (defn- notify-delta-listeners! [{:keys [!delta-listeners]} inc-q delta]
   (doseq [listener (vals (get @!delta-listeners (:id inc-q)))]
-    (listener delta)))
+    (try
+      (listener delta)
+      (catch Throwable e
+        (log/warn e "Incremental delta listener failed")))))
 
 (defn transact [{:keys [!dbs !inc-qs] :as node} tx-data]
   {:pre [(node? node) (s/valid? ::t/tx-data tx-data)]}

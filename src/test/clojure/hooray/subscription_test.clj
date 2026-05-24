@@ -42,6 +42,16 @@
         (h/transact fix/*node* [{:db/id :anna :name "Anna"}])
         (is-delta #{[["Anna"] 1]} (deref delta 1000 ::timeout))))))
 
+(deftest subscribe-callback-failures-do-not-break-transact
+  (let [delta (promise)]
+    (with-open [_failing-subscription (h/subscribe fix/*node* names-query
+                                                   (fn [_delta]
+                                                     (throw (ex-info "boom" {}))))
+                _working-subscription (h/subscribe fix/*node* names-query
+                                                   #(deliver delta %))]
+      (is (nil? (h/transact fix/*node* [{:db/id :ivan :name "Ivan"}])))
+      (is-delta #{[["Ivan"] 1]} (deref delta 1000 ::timeout)))))
+
 
 (comment
   ;; README examples
