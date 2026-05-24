@@ -34,7 +34,7 @@
     (doseq [listener listeners]
       (try
         (listener delta)
-        (catch Throwable e
+        (catch Exception e
           (log/warn e "Incremental delta listener failed"))))
     true))
 
