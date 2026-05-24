@@ -132,6 +132,7 @@
              (register-delta-listener!
               conn inc-q
               (fn [delta]
+                ;; TODO this only unregisters if a new delta arrives
                 (when-not (async/>!! output-ch delta)
                   (unregister-delta-listener! conn inc-q @listener-id)
                   (unregister-inc-q conn inc-q)))))
