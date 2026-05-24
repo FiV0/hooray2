@@ -38,9 +38,10 @@
 
   (testing "subscribe"
     (let [delta (promise)]
-      (with-open [_subscription (h/subscribe fix/*node* names-query #(deliver delta %))]
+      (with-open [subscription (h/subscribe fix/*node* names-query #(deliver delta %))]
         (h/transact fix/*node* [{:db/id :anna :name "Anna"}])
-        (is-delta #{[["Anna"] 1]} (deref delta 1000 ::timeout))))))
+        (is-delta #{[["Anna"] 1]} (deref delta 1000 ::timeout))
+        (is (nil? (h/consume-delta! (:inc-q subscription))))))))
 
 (deftest subscribe-callback-failures-do-not-break-transact
   (let [delta (promise)]

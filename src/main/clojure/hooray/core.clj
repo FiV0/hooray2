@@ -30,11 +30,15 @@
   (->Node (atom [(db/->db opts)]) opts (atom {}) (atom {})))
 
 (defn- notify-delta-listeners! [{:keys [!delta-listeners]} inc-q delta]
-  (doseq [listener (vals (get @!delta-listeners (:id inc-q)))]
-    (try
-      (listener delta)
-      (catch Throwable e
-        (log/warn e "Incremental delta listener failed")))))
+  (when-let [listeners (seq (vals (get @!delta-listeners (:id inc-q))))]
+    (doseq [listener listeners]
+      (try
+        (listener delta)
+        (catch Throwable e
+          (log/warn e "Incremental delta listener failed"))))
+    true))
+
+(declare consume-delta!)
 
 (defn transact [{:keys [!dbs !inc-qs] :as node} tx-data]
   {:pre [(node? node) (s/valid? ::t/tx-data tx-data)]}
@@ -47,7 +51,8 @@
                       (dbsp/compute-delta! inc-q db-before tx-data)
                       (incremental/compute-delta! inc-q db-before db-after tx-data))]
           (when (seq delta)
-            (notify-delta-listeners! node inc-q delta)))))))
+            (when (notify-delta-listeners! node inc-q delta)
+              (consume-delta! inc-q))))))))
 
 (defn db [{:keys [!dbs] :as node}]
   {:pre [(node? node)]}
