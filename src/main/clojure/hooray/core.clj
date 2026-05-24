@@ -137,9 +137,11 @@
               conn inc-q
               (fn [delta]
                 ;; TODO this only unregisters if a new delta arrives
-                (when-not (async/>!! output-ch delta)
-                  (unregister-delta-listener! conn inc-q @listener-id)
-                  (unregister-inc-q conn inc-q)))))
+                (async/put! output-ch delta
+                            (fn [delivered?]
+                              (when-not delivered?
+                                (unregister-delta-listener! conn inc-q @listener-id)
+                                (unregister-inc-q conn inc-q)))))))
     output-ch))
 
 (defrecord IncrementalSubscription [conn inc-q listener-id]
