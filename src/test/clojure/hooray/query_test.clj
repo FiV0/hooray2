@@ -97,13 +97,12 @@
              (h/q '{:find [p1] :where [[p1 :name name]
                                        [p1 :last-name name]
                                        [p1 :name "Smith"]]} (h/db fix/*node*))))))
-
 #_
 (deftest test-or-branch-predicates-preserve-branch-identity
   (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
                           {:db/id "b" :name "B" :age 35}])
 
-  (is (= ["B" 35]
+  (is (= [["B" 35]]
          (h/q
           '{:find [?name ?age]
             :where
