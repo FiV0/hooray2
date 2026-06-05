@@ -4,13 +4,25 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
 
+internal fun saturatingSum(values: Iterable<Int>): Int {
+    var total = 0
+    for (value in values) {
+        if (Int.MAX_VALUE - total <= value) {
+            return Int.MAX_VALUE
+        }
+        total += value
+    }
+    return total
+}
+
 open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender {
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
     }
 
-    override fun count(prefix: Prefix) = children.sumOf { it.count(prefix) }
+    override fun count(prefix: Prefix): Int =
+        saturatingSum(children.map { it.count(prefix) })
 
     // TODO the distinct call can likely be optimized to avoid large intermediate lists
     override fun propose(prefix: Prefix) = children.flatMap { it.propose(prefix) }.distinct()
