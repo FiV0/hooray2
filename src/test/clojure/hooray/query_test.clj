@@ -622,6 +622,20 @@
                                      [(identity :optional) l]))]}
                   (h/db fix/*node*)))))
 
+#_
+(deftest test-or-bound-mentioned-example
+  (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :age 25}
+                          {:db/id :bob :name "Bob" :age 35}])
+
+  (t/is (= nil
+           (h/q '{:find [e name]
+                  :where [[e :name name]
+                          (or (and [e :name "Bob"]
+                                   [e :age age])
+                              (and [e :name "Ivan"]
+                                   [(< age 30)]))]}
+                (h/db fix/*node*)))))
+
 (t/deftest test-or-query-can-use-and
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :sex :male}
                           {:db/id :bob :name "Bob" :sex :male}
