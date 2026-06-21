@@ -157,8 +157,8 @@ For each stage:
    participant's `propose`.
 4. If the stage has multiple participants and introduces variables:
    - ask every participant for per-row counts;
-   - assign each input row to the participant with the smallest count;
-   - call that participant's `propose` for its assigned shard;
+   - group input rows by the participant with the smallest count for that row;
+   - call each participant's `propose` for only its assigned row group;
    - validate the proposed rows with every other participant;
    - concatenate the validated shards;
    - distinct full rows, not individual scalar values.
@@ -167,6 +167,31 @@ For each stage:
 This preserves the useful WCO primitive: the cheapest available pattern proposes
 candidate bindings, and all other relevant patterns validate them. Unlike the
 old generic prefix engine, the unit of data is always a binding row.
+
+The count grouping step is explicit. Given participants `P0..Pn`, the executor
+builds a logical count table over the input rows:
+
+```text
+row-index | input row | P0 count | P1 count | ... | chosen proposer
+----------+-----------+----------+----------+-----+----------------
+0         | [...]     | 12       | 3        | ... | P1
+1         | [...]     | 1        | 8        | ... | P0
+```
+
+Rows whose smallest count is zero are dropped before proposal; one participating
+pattern has proved that the row cannot produce an output for this stage. The
+remaining rows are partitioned into proposer groups:
+
+```text
+P0 shard = input rows where P0 had the smallest positive count
+P1 shard = input rows where P1 had the smallest positive count
+...
+```
+
+Each proposer expands only its shard. The executor then validates each expanded
+shard with every non-proposer participant and merges the validated shards back
+into one `BindingSet`. This is the local `BindingSet` version of Datatoad's
+"append counts, partition by best atom, propose, semijoin with others" loop.
 
 ## Pattern behavior
 
@@ -211,25 +236,52 @@ executor.
 
 ### `or`
 
-`or` is a seeded branch executor.
+`or` is a seeded branch executor. It is both a validator and a producer:
+already-bound outer variables arrive as seed columns, and variables not yet
+bound may be introduced by the branch plans.
 
 For an input `BindingSet`:
 
-1. Each branch receives the same input rows.
-2. Each branch is planned/executed independently.
-3. A branch may introduce one or more variables.
-4. Branch predicates and functions validate only that branch's rows.
-5. Each branch returns rows in the `or` pattern's output variable layout.
-6. The `or` executor unions distinct full rows across branches.
+1. Determine the seed variables: the variables already present in the input
+   `BindingSet`.
+2. Determine the OR-introduced variables: free variables of the `or` pattern
+   that are not present in the seed.
+3. Each branch receives the same seed `BindingSet`.
+4. Each branch is planned/executed independently with the seed variables treated
+   as already bound and the OR-introduced variables as required output.
+5. A branch may validate seeded variables, introduce missing OR variables, or do
+   both.
+6. Branch predicates and functions validate only that branch's rows.
+7. Each branch returns rows covering the requested target layout, normally
+   `seed variables + OR-introduced variables`.
+8. The `or` executor unions distinct full rows across branches.
 
 No branch id is exposed to users. No scalar proposal from one branch is allowed
 to satisfy a predicate from another branch without the rest of the row that made
 it valid.
 
-This directly addresses issue #14. In the motivating query, branch A may produce
-`?e = A`, but its predicate rejects `?age = 35`. Branch B may produce
-`?e = B` and accepts `?age = 35`. Because branches return full rows, branch B's
+This directly addresses issue #14. In the motivating query, the outer pattern
+`[?e :age ?age]` seeds the `or` with rows shaped like `[?e ?age]`. Branch A
+validates its copy of those seed rows with `[?e :name "A"]` and `(< ?age 30)`;
+branch B validates its separate copy with `[?e :name "B"]` and `(< ?age 40)`.
+Only branch B returns `[b 35]`. Because branches return full rows, branch B's
 predicate cannot validate branch A's entity.
+
+If an `or` branch also mentions variables that are not yet bound, the same seed
+rule applies. For example:
+
+```clojure
+[?e :age ?age]
+(or
+ (and [?e :name ?name]
+      [(= ?name "A")])
+ (and [?e :title ?name]))
+```
+
+The `or` receives seed rows over `[?e ?age]` and introduces `?name`. Each branch
+starts from the same seeded rows, extends only its own branch-local rows with
+`?name`, validates its own predicates, and emits rows over `[?e ?age ?name]`.
+Sibling branches never exchange intermediate rows.
 
 ### `not`
 
