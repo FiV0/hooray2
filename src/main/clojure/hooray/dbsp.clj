@@ -324,7 +324,12 @@
 
 (defn- assemble-triple
   "Wires one triple pattern into [circuit]: Source -> Filter? -> Map(project).
-  Returns `{:stream <Stream> :vars […] :handles [<InputHandle>] :leaves [{:order …}]}`."
+  Returns
+
+   {:stream <Stream>
+    :vars […]
+    :handles [<InputHandle>]
+    :leaves [{:order …}]}."
   [^Circuit circuit pattern]
   (let [pair (.addInput circuit)
         source (.getFirst pair)
@@ -360,8 +365,12 @@
   "Wires a :union relation node into [circuit]: each branch is recursively assembled,
   the branch streams are folded left-to-right with `PlusOp`, and the union is
   fed into a `DistinctOp` to enforce set-union semantics. Returns
-  `{:stream <Stream> :handles […] :leaves […]}` with handles/leaves
-  concatenated across all branches in plan order."
+
+   {:stream <Stream>
+    :handles […]
+    :leaves […]}
+
+  with handles/leaves concatenated across all branches in plan order."
   [^Circuit circuit {:keys [branches out-vars]}]
   (let [wired (mapv #(assemble-rel circuit %) branches)
         wired (mapv (fn [{:keys [stream vars] :as branch}]
@@ -408,9 +417,15 @@
      :leaves (vec (mapcat :leaves wired))}))
 
 (defn- assemble-rel
-  "Dispatches relation assembly by [rel]'s `:kind`. Returns
-  `{:stream <Stream> :handles […] :leaves […]}` — `:handles` and `:leaves` are
-  equal-length flat vectors, one entry per leaf input triple."
+  "Dispatches relation assembly by [rel]'s `:kind`.
+  Returns
+
+   {:stream <Stream>
+    :handles [...]
+    :leaves [...]}
+
+  `:handles` and `:leaves` are equal-length flat vectors,
+  one entry per leaf input triple."
   [^Circuit circuit rel]
   (case (:kind rel)
     :pattern (assemble-triple circuit (:pattern rel))
