@@ -1,6 +1,11 @@
 # Spec: BindingSet WCO query engine
 
-Status: **Phase 1 (Specify)** - awaiting approval before Plan.
+Status: **Phase 3 (Tasks draft)** - awaiting approval before Implement.
+Companion artifacts:
+
+- `specs/bindingset-wco-engine-plan.md`
+- `specs/bindingset-wco-engine-tasks.md`
+
 Builds on: issue #14, the current `GenericJoin` / `PrefixExtender` engine, and
 Datatoad's staged `plan_body` / `wco_join_inner` machinery.
 

@@ -102,6 +102,7 @@
   (s/unform ::fn-pattern (s/conform ::fn-pattern '[(identity ?x) ?y])))
 
 (s/def ::pattern (s/or :triple ::triple-pattern
+                       :and ::and-pattern
                        :not ::not-pattern
                        :or ::or-pattern
                        :predicate ::predicate-pattern
@@ -506,6 +507,15 @@
     (fn [row]
       (zipmap keys-in-var-order row))))
 
+(defn shape-results [rows {:keys [find keys strs syms] :as _conformed-query} vars-in-join-order]
+  (let [var->idx (zipmap vars-in-join-order (range))
+        compiled-find (compile-find find var->idx)]
+    (cond->> rows
+      true (compiled-find)
+      (seq keys) (map (zipmap-fn find keys var->idx keyword))
+      (seq strs) (map (zipmap-fn find strs var->idx str))
+      (seq syms) (map (zipmap-fn find syms var->idx symbol)))))
+
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
   (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
@@ -513,12 +523,8 @@
         var->idx (zipmap vars-in-join-order (range))
         compiled-patterns (concat (in->iterators in var->idx args opts)
                                   (map (partial compile-pattern db vars-in-join-order) where))
-        compiled-find (compile-find find var->idx)]
-    (cond->> (join compiled-patterns (count vars-in-join-order) opts)
-      true (compiled-find)
-      (seq keys) (map (zipmap-fn find keys var->idx keyword))
-      (seq strs) (map (zipmap-fn find strs var->idx str))
-      (seq syms) (map (zipmap-fn find syms var->idx symbol)))))
+        rows (join compiled-patterns (count vars-in-join-order) opts)]
+    (shape-results rows conformed-query vars-in-join-order)))
 
 (comment
   (def q '{:find [x y (count z)]
