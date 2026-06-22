@@ -18,7 +18,6 @@
     Stage
     StageExecutor
     StageKind
-    TripleIndex
     TriplePattern
     ValidatorOnlyPattern)))
 
@@ -201,21 +200,21 @@
                            (vec seed-variables))]
     (conj stages (final-branch-validation-stage target-variables patterns))))
 
-(defn- exec-or-pattern [triple-index stage participant pattern]
+(defn- exec-or-pattern [indexes stage participant pattern]
   (let [seed-variables (if (= :proposer (:role participant))
                          (vec (remove (set (:introduces stage)) (:target-variables stage)))
                          (:target-variables stage))
         branches (mapv (fn [branch]
-                         (mapv (partial exec-stage triple-index)
+                         (mapv (partial exec-stage indexes)
                                (branch-stage-maps seed-variables (:patterns branch))))
                        (:branches pattern))]
     (OrPattern. (set (:variables pattern))
                 branches
                 (= :proposer (:role participant)))))
 
-(defn- exec-not-pattern [triple-index stage pattern]
+(defn- exec-not-pattern [indexes stage pattern]
   (let [seed-variables (:target-variables stage)
-        branch (mapv (partial exec-stage triple-index)
+        branch (mapv (partial exec-stage indexes)
                      (branch-stage-maps seed-variables (:patterns pattern)))]
     (NotPattern. (set (:variables pattern)) branch)))
 
@@ -224,11 +223,13 @@
     (ValidatorOnlyPattern. exec-pattern)
     exec-pattern))
 
-(defn- exec-pattern [triple-index stage {:keys [role pattern] :as participant}]
+(defn- exec-pattern [indexes stage {:keys [role pattern] :as participant}]
   (let [{:keys [kind raw]} pattern
         executable (case kind
                      :triple (let [[_ {:keys [e a v]}] raw]
-                               (TriplePattern. triple-index
+                               (TriplePattern. (:eav indexes)
+                                               (:aev indexes)
+                                               (:ave indexes)
                                                (pattern-value e)
                                                (pattern-value a)
                                                (pattern-value v)))
@@ -242,9 +243,9 @@
                                                    ret-var
                                                    (call-function (query/resolve-fn fun))))
 
-                     :or (exec-or-pattern triple-index stage participant pattern)
+                     :or (exec-or-pattern indexes stage participant pattern)
 
-                     :not (exec-not-pattern triple-index stage pattern)
+                     :not (exec-not-pattern indexes stage pattern)
 
                      (err/unsupported-ex
                       "BindingSet internal query path does not support this pattern yet"
@@ -256,9 +257,9 @@
     :ordinary StageKind/ORDINARY
     :or-proposal-boundary StageKind/OR_PROPOSAL_BOUNDARY))
 
-(defn- exec-stage [triple-index {:keys [kind introduces participants target-variables] :as stage}]
+(defn- exec-stage [indexes {:keys [kind introduces participants target-variables] :as stage}]
   (Stage. introduces
-          (mapv (partial exec-pattern triple-index stage) participants)
+          (mapv (partial exec-pattern indexes stage) participants)
           target-variables
           (stage-kind kind)))
 
@@ -310,10 +311,12 @@
 
 (defn execute-conformed-query [db conformed-query args]
   (let [planned (plan conformed-query)
-        triple-index (TripleIndex/fromEav (:eav db))
+        indexes {:eav (:eav db)
+                 :aev (:aev db)
+                 :ave (:ave db)}
         executor (StageExecutor.)
         result (reduce (fn [bindings stage]
-                         (.execute executor (exec-stage triple-index stage) bindings))
+                         (.execute executor (exec-stage indexes stage) bindings))
                        (initial-bindings conformed-query args)
                        (:stages planned))]
     (query/shape-results (.getRows result) conformed-query (.getVariables result))))

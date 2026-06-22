@@ -1,80 +1,14 @@
 package org.hooray.engine
 
-data class Triple(
-    val entity: Any,
-    val attribute: Any,
-    val value: Any,
-)
-
-class TripleIndex private constructor(
-    private val triples: List<Triple>,
-) {
-    fun matching(
-        layout: List<Any>,
-        row: BindingRow,
-        entity: PatternValue,
-        attribute: PatternValue,
-        value: PatternValue,
-    ): List<Triple> {
-        return triples.filter { triple ->
-            val seenVariables = mutableMapOf<Any, Any>()
-            matchesSlot(entity, triple.entity, layout, row, seenVariables) &&
-                matchesSlot(attribute, triple.attribute, layout, row, seenVariables) &&
-                matchesSlot(value, triple.value, layout, row, seenVariables)
-        }
-    }
-
-    private fun matchesSlot(
-        slot: PatternValue,
-        tripleValue: Any,
-        layout: List<Any>,
-        row: BindingRow,
-        seenVariables: MutableMap<Any, Any>,
-    ): Boolean {
-        return when (slot) {
-            is PatternValue.Constant -> slot.value == tripleValue
-            is PatternValue.Variable -> {
-                val boundIndex = layout.indexOf(slot.name)
-                if (boundIndex >= 0) {
-                    row[boundIndex] == tripleValue
-                } else {
-                    val seen = seenVariables.putIfAbsent(slot.name, tripleValue)
-                    seen == null || seen == tripleValue
-                }
-            }
-        }
-    }
-
-    companion object {
-        @JvmStatic
-        fun of(vararg triples: Triple): TripleIndex = TripleIndex(triples.toList())
-
-        @JvmStatic
-        fun fromEav(eav: Map<*, *>): TripleIndex {
-            val triples = mutableListOf<Triple>()
-            for ((entity, attributesAny) in eav) {
-                val attributes = attributesAny as? Map<*, *> ?: continue
-                for ((attribute, valuesAny) in attributes) {
-                    val values = valuesAny as? Iterable<*> ?: continue
-                    for (value in values) {
-                        if (entity != null && attribute != null && value != null) {
-                            triples += Triple(entity, attribute, value)
-                        }
-                    }
-                }
-            }
-            return TripleIndex(triples)
-        }
-    }
-}
-
 sealed interface PatternValue {
     data class Variable(val name: Any) : PatternValue
     data class Constant(val value: Any) : PatternValue
 }
 
 class TriplePattern(
-    private val index: TripleIndex,
+    private val eav: Map<*, *>,
+    private val aev: Map<*, *>,
+    private val ave: Map<*, *>,
     private val entity: PatternValue,
     private val attribute: PatternValue,
     private val value: PatternValue,
@@ -91,10 +25,7 @@ class TriplePattern(
         }
 
         return input.rows.map { row ->
-            index.matching(input.variables, row, entity, attribute, value)
-                .map { triple -> introducedValues(triple, introduces) }
-                .toSet()
-                .size
+            matchingIntroductions(input.variables, row, introduces).size
         }
     }
 
@@ -109,12 +40,8 @@ class TriplePattern(
 
         val extensions = mutableListOf<RowExtension>()
         input.rows.forEachIndexed { rowIndex, row ->
-            val seenIntroductions = mutableSetOf<BindingRow>()
-            for (triple in index.matching(input.variables, row, entity, attribute, value)) {
-                val introducedValues = introducedValues(triple, introduces)
-                if (seenIntroductions.add(introducedValues)) {
-                    extensions += RowExtension(rowIndex, introducedValues)
-                }
+            for (introducedValues in matchingIntroductions(input.variables, row, introduces)) {
+                extensions += RowExtension(rowIndex, introducedValues)
             }
         }
 
@@ -123,28 +50,141 @@ class TriplePattern(
 
     override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
         val rows = input.rows.filter { row ->
-            index.matching(input.variables, row, entity, attribute, value).isNotEmpty()
+            matchingIntroductions(input.variables, row, emptyList()).isNotEmpty()
         }
         return BindingSet(input.variables, rows).reorder(targetVariables)
     }
 
-    private fun introducedValues(triple: Triple, introduces: List<Any>): BindingRow {
-        val valuesByVariable = mutableMapOf<Any, Any>()
-        recordVariableValue(entity, triple.entity, valuesByVariable)
-        recordVariableValue(attribute, triple.attribute, valuesByVariable)
-        recordVariableValue(value, triple.value, valuesByVariable)
-        return introduces.map { variable ->
-            valuesByVariable.getValue(variable)
+    private fun matchingIntroductions(
+        layout: List<Any>,
+        row: BindingRow,
+        introduces: List<Any>,
+    ): List<BindingRow> {
+        val resolvedEntity = resolve(entity, layout, row)
+        val resolvedAttribute = resolve(attribute, layout, row)
+        val resolvedValue = resolve(value, layout, row)
+        val attributeValue = when (resolvedAttribute) {
+            is ResolvedSlot.Bound -> resolvedAttribute.value
+            is ResolvedSlot.Unbound -> throw IllegalArgumentException(
+                "Triple pattern cannot use an unbound attribute variable",
+            )
+        }
+
+        val result = mutableListOf<BindingRow>()
+        val seenIntroductions = mutableSetOf<BindingRow>()
+        for (candidate in candidatePairs(resolvedEntity, attributeValue, resolvedValue)) {
+            val valuesByVariable = mutableMapOf<Any, Any>()
+            if (!recordMatchingValue(entity, candidate.entity, layout, row, valuesByVariable)) continue
+            if (!recordMatchingValue(attribute, attributeValue, layout, row, valuesByVariable)) continue
+            if (!recordMatchingValue(value, candidate.value, layout, row, valuesByVariable)) continue
+
+            val introducedValues = introduces.map { variable ->
+                valuesByVariable.getValue(variable)
+            }
+            if (seenIntroductions.add(introducedValues)) {
+                result += introducedValues
+            }
+        }
+        return result
+    }
+
+    private fun candidatePairs(
+        entity: ResolvedSlot,
+        attribute: Any,
+        value: ResolvedSlot,
+    ): List<CandidatePair> {
+        return when {
+            entity is ResolvedSlot.Bound && value is ResolvedSlot.Bound ->
+                if (containsEntityAttributeValue(entity.value, attribute, value.value)) {
+                    listOf(CandidatePair(entity.value, value.value))
+                } else {
+                    emptyList()
+                }
+
+            entity is ResolvedSlot.Bound ->
+                valuesForEntityAttribute(entity.value, attribute)
+                    .map { candidateValue -> CandidatePair(entity.value, candidateValue) }
+
+            value is ResolvedSlot.Bound ->
+                entitiesForAttributeValue(attribute, value.value)
+                    .map { candidateEntity -> CandidatePair(candidateEntity, value.value) }
+
+            else -> pairsForAttribute(attribute)
         }
     }
 
-    private fun recordVariableValue(
+    private fun containsEntityAttributeValue(entity: Any, attribute: Any, value: Any): Boolean {
+        return valuesForEntityAttribute(entity, attribute).any { it == value }
+    }
+
+    private fun valuesForEntityAttribute(entity: Any, attribute: Any): List<Any> {
+        val attributes = eav[entity] as? Map<*, *> ?: return emptyList()
+        val values = attributes[attribute] as? Iterable<*> ?: return emptyList()
+        return values.filterNotNull()
+    }
+
+    private fun entitiesForAttributeValue(attribute: Any, value: Any): List<Any> {
+        val values = ave[attribute] as? Map<*, *> ?: return emptyList()
+        val entities = values[value] as? Iterable<*> ?: return emptyList()
+        return entities.filterNotNull()
+    }
+
+    private fun pairsForAttribute(attribute: Any): List<CandidatePair> {
+        val entities = aev[attribute] as? Map<*, *> ?: return emptyList()
+        val pairs = mutableListOf<CandidatePair>()
+        for ((entity, valuesAny) in entities) {
+            if (entity == null) continue
+            val values = valuesAny as? Iterable<*> ?: continue
+            for (value in values) {
+                if (value != null) {
+                    pairs += CandidatePair(entity, value)
+                }
+            }
+        }
+        return pairs
+    }
+
+    private fun resolve(slot: PatternValue, layout: List<Any>, row: BindingRow): ResolvedSlot {
+        return when (slot) {
+            is PatternValue.Constant -> ResolvedSlot.Bound(slot.value)
+            is PatternValue.Variable -> {
+                val boundIndex = layout.indexOf(slot.name)
+                if (boundIndex >= 0) {
+                    ResolvedSlot.Bound(row[boundIndex])
+                } else {
+                    ResolvedSlot.Unbound(slot.name)
+                }
+            }
+        }
+    }
+
+    private fun recordMatchingValue(
         slot: PatternValue,
         tripleValue: Any,
+        layout: List<Any>,
+        row: BindingRow,
         valuesByVariable: MutableMap<Any, Any>,
-    ) {
-        if (slot is PatternValue.Variable) {
-            valuesByVariable[slot.name] = tripleValue
+    ): Boolean {
+        return when (slot) {
+            is PatternValue.Constant -> slot.value == tripleValue
+            is PatternValue.Variable -> {
+                val boundIndex = layout.indexOf(slot.name)
+                if (boundIndex >= 0 && row[boundIndex] != tripleValue) {
+                    return false
+                }
+                val seen = valuesByVariable.putIfAbsent(slot.name, tripleValue)
+                seen == null || seen == tripleValue
+            }
         }
+    }
+
+    private data class CandidatePair(
+        val entity: Any,
+        val value: Any,
+    )
+
+    private sealed interface ResolvedSlot {
+        data class Bound(val value: Any) : ResolvedSlot
+        data class Unbound(val variable: Any) : ResolvedSlot
     }
 }
