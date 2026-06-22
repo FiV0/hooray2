@@ -27,13 +27,27 @@
     (is (not= ::s/invalid conformed))
     conformed))
 
-(deftest planner-flattens-and-and-seeds-input-bindings
+(deftest planner-seeds-input-bindings
   (let [p (plan/plan (conform '{:find [?e]
                                 :in [?name]
-                                :where [(and [?e :name ?name]
-                                             [?e :age ?age])]}))]
+                                :where [[?e :name ?name]]}))]
     (is (= '#{?name} (:initial-bound p)))
-    (is (= [:triple :triple] (mapv :kind (:patterns p))))))
+    (is (= [:triple] (mapv :kind (:patterns p))))))
+
+(deftest planner-flattens-and-inside-or-branches
+  (let [p (plan/plan (conform '{:find [?e ?name ?age]
+                                :where [(or
+                                         (and [?e :name ?name]
+                                              [?e :age ?age])
+                                         (and [?e :name ?name]
+                                              [?e :age ?age]))]}))
+        [or-pattern] (:patterns p)]
+    (is (= :or (:kind or-pattern)))
+    (is (= [[:triple :triple]
+            [:triple :triple]]
+           (mapv (fn [branch]
+                   (mapv :kind (:patterns branch)))
+                 (:branches or-pattern))))))
 
 (deftest ordinary-stage-includes-full-and-partial-validators
   (let [p (plan/plan (conform '{:find [?e ?age]

@@ -102,7 +102,6 @@
   (s/unform ::fn-pattern (s/conform ::fn-pattern '[(identity ?x) ?y])))
 
 (s/def ::pattern (s/or :triple ::triple-pattern
-                       :and ::and-pattern
                        :not ::not-pattern
                        :or ::or-pattern
                        :predicate ::predicate-pattern
