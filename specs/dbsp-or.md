@@ -3,7 +3,7 @@
 Status: **Historical** — documents the original PR #12 implementation.
 
 Note: the current `:standard` DBSP planner now uses an explicit relation tree
-with `:pattern`, `:join`, and `:union` nodes. Sections below that describe `or`
+with `:triple`, `:join`, and `:union` nodes. Sections below that describe `or`
 as a pseudo-pattern inside top-level `:patterns` / `:joins` are retained as
 history for the original OR change, not as the current planner shape.
 Builds on: `specs/dbsp-standard.md` (PR #6, merged as 71b8964).

@@ -221,9 +221,7 @@
   "Plans one descriptor as a relation node that produces [target] variables."
   [descriptor target]
   (case (:kind descriptor)
-    :triple {:kind :pattern
-             :out-vars (vec target)
-             :pattern (triple-plan descriptor target)}
+    :triple (triple-plan descriptor target)
     :or (union-plan descriptor target)))
 
 (defn- lead-with
@@ -430,9 +428,9 @@
   one entry per leaf input triple."
   [^Circuit circuit rel]
   (case (:kind rel)
-    :pattern (assemble-triple circuit (:pattern rel))
-    :union   (assemble-union  circuit rel)
-    :join    (assemble-join   circuit rel)))
+    :triple (assemble-triple circuit rel)
+    :union  (assemble-union  circuit rel)
+    :join   (assemble-join   circuit rel)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns

@@ -193,11 +193,10 @@
 
 (deftest plan-single-pattern-test
   (let [p (dbsp/plan '{:find [name] :where [[?e :name name]]})]
-    (is (= :pattern (get-in p [:where-plan :kind])))
+    (is (= :triple (get-in p [:where-plan :kind])))
     (is (= '[?e name] (:result-vars p)))
     (is (= [1] (:final-permute p)))
-    (let [pat (get-in p [:where-plan :pattern])]
-      (is (= :triple (:kind pat)))
+    (let [pat (:where-plan p)]
       (is (= :aev (:order pat)))
       (is (= {0 :name} (:filter pat)))
       (is (= [1 2] (:project pat)))
@@ -212,8 +211,7 @@
           join (:where-plan p)]
       (is (= :join (:kind join)))
       (is (= 3 (count (:inputs join))))
-      (is (every? #(= :pattern (:kind %)) (:inputs join)))
-      (is (every? #(= :triple (:kind (:pattern %))) (:inputs join))))))
+      (is (every? #(= :triple (:kind %)) (:inputs join))))))
 
 (deftest plan-two-pattern-join-test
   (let [p (dbsp/plan '{:find [name age]
@@ -238,11 +236,11 @@
                                  [?p :age name]]})
           join (:where-plan p)
           [rel0 rel1] (:inputs join)
-          p0 (:pattern rel0)
-          p1 (:pattern rel1)]
+          p0 rel0
+          p1 rel1]
       (is (= :join (:kind join)))
-      (is (= :pattern (:kind rel0)))
-      (is (= :pattern (:kind rel1)))
+      (is (= :triple (:kind rel0)))
+      (is (= :triple (:kind rel1)))
       (is (= :ave (:order p0)))
       (is (= :ave (:order p1)))
       (is (= {0 :name} (:filter p0)))
@@ -254,17 +252,15 @@
 (deftest plan-constant-filter-test
   (testing "a constant value column becomes a Filter and is projected away"
     (let [p (dbsp/plan '{:find [?e] :where [[?e :name "Ivan"]]})
-          rel (:where-plan p)
-          pat (:pattern rel)]
-      (is (= :pattern (:kind rel)))
+          pat (:where-plan p)]
+      (is (= :triple (:kind pat)))
       (is (= {0 :name, 2 "Ivan"} (:filter pat)))
       (is (= [1] (:project pat)))
       (is (= '[?e] (:out-vars pat)))))
   (testing "a constant entity column becomes a Filter and is projected away"
     (let [p (dbsp/plan '{:find [name] :where [[1 :name name]]})
-          rel (:where-plan p)
-          pat (:pattern rel)]
-      (is (= :pattern (:kind rel)))
+          pat (:where-plan p)]
+      (is (= :triple (:kind pat)))
       (is (= {0 :name, 1 1} (:filter pat)))
       (is (= [2] (:project pat)))
       (is (= '[name] (:out-vars pat))))))
@@ -306,7 +302,7 @@
       (is (= '[?e] (:out-vars pat)))
       (is (= 2 (count (:branches pat))))
       (is (every? #(= '[?e] (:out-vars %)) (:branches pat)))
-      (is (every? #(= :pattern (:kind %)) (:branches pat)))
+      (is (every? #(= :triple (:kind %)) (:branches pat)))
       (is (= '[?e] (:result-vars p))))))
 
 (deftest plan-or-with-outer-join-test
@@ -318,7 +314,7 @@
           join (:where-plan p)
           [outer or-pat] (:inputs join)]
       (is (= :join (:kind join)))
-      (is (= :pattern (:kind outer)))
+      (is (= :triple (:kind outer)))
       (is (= :union (:kind or-pat)))
       (is (= '[?e] (:out-vars or-pat)))
       (is (every? #(= '[?e] (:out-vars %)) (:branches or-pat)))
@@ -347,7 +343,7 @@
           pat (:where-plan p)]
       (is (= :union (:kind pat)))
       (is (= 2 (count (:branches pat))))
-      (is (= :pattern (:kind (first (:branches pat)))))
+      (is (= :triple (:kind (first (:branches pat)))))
       (let [inner (second (:branches pat))]
         (is (= :union (:kind inner)))
         (is (= '[?e] (:out-vars inner)))
