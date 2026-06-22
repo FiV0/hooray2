@@ -187,7 +187,6 @@
   "Plan for one triple descriptor, producing its variables in [target] order.
 
     {:kind :triple
-     :descriptor …
      :order :aev/:ave
      :filter …
      :project …
@@ -195,7 +194,6 @@
   [descriptor target]
   (let [order (choose-order descriptor target)]
     {:kind :triple
-     :descriptor descriptor
      ;; the order in which we are processing triples in this triple pattern
      :order order
      ;; the constant part of the triple pattern
@@ -213,7 +211,6 @@
   [target] variable order so the branch streams can be unioned directly."
   [descriptor target]
   {:kind :union
-   :descriptor descriptor
    :out-vars (vec target)
    :branches (mapv #(rel-plan % target) (:branches descriptor))})
 
