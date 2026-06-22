@@ -69,9 +69,24 @@
                                             [?e :last-name ln]]}))))))
 
 (deftest rejects-unsupported-clauses-test
+  (testing "and clauses are rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/parse '{:find [?x]
+                               :where [(and [?x :name ?y]
+                                            [?x :last-name ?z])]}))))
+  (testing "not clauses are rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/parse '{:find [?x]
+                               :where [[?x :name ?y]
+                                       (not [?x :last-name "Smith"])]}))))
   (testing "predicate clauses are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?x] :where [[?x :age ?y] [(= ?y 1)]]}))))
+  (testing "function clauses are rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/parse '{:find [?s]
+                               :where [[?x :name ?n]
+                                       [(str ?n) ?s]]}))))
   (testing "repeated variables inside one triple pattern are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?x] :where [[?x :edge ?x]]})))))
@@ -178,33 +193,37 @@
 
 (deftest plan-single-pattern-test
   (let [p (dbsp/plan '{:find [name] :where [[?e :name name]]})]
-    (is (= 1 (count (:patterns p))))
-    (is (= [] (:joins p)))
+    (is (= :triple (get-in p [:where-plan :kind])))
     (is (= '[?e name] (:result-vars p)))
     (is (= [1] (:final-permute p)))
-    (let [pat (first (:patterns p))]
-      (is (= :triple (:kind pat)))
+    (let [pat (:where-plan p)]
       (is (= :aev (:order pat)))
       (is (= {0 :name} (:filter pat)))
       (is (= [1 2] (:project pat)))
       (is (= '[?e name] (:out-vars pat))))))
 
-(deftest plan-multi-pattern-kind-test
-  (testing "every pattern plan node carries :kind :triple"
+(deftest plan-multi-pattern-relation-tree-test
+  (testing "a multi-pattern query plans as a join over pattern relations"
     (let [p (dbsp/plan '{:find [?a ?d]
                          :where [[?a :r ?b]
                                  [?b :s ?c]
-                                 [?c :t ?d]]})]
-      (is (every? #(= :triple (:kind %)) (:patterns p))))))
+                                 [?c :t ?d]]})
+          join (:where-plan p)]
+      (is (= :join (:kind join)))
+      (is (= 3 (count (:inputs join))))
+      (is (every? #(= :triple (:kind %)) (:inputs join))))))
 
 (deftest plan-two-pattern-join-test
   (let [p (dbsp/plan '{:find [name age]
                        :where [[?e :name name]
-                               [?e :age age]]})]
+                               [?e :age age]]})
+        join (:where-plan p)]
+    (is (= :join (:kind join)))
     (is (= '[?e name age] (:result-vars p)))
     (is (= [1 2] (:final-permute p)))
-    (is (= 1 (count (:joins p))))
-    (let [j (first (:joins p))]
+    (is (= 2 (count (:inputs join))))
+    (is (= 1 (count (:steps join))))
+    (let [j (first (:steps join))]
       (is (= 1 (:key-arity j)))
       (is (= '[?e] (:key-vars j)))
       (is (nil? (:left-permute j)))
@@ -214,25 +233,34 @@
   (testing "a pattern joining on its value column is fed in :ave order"
     (let [p (dbsp/plan '{:find [?e ?p]
                          :where [[?e :name name]
-                                 [?p :age name]]})]
-      (is (= :ave (:order (nth (:patterns p) 0))))
-      (is (= :ave (:order (nth (:patterns p) 1))))
-      (is (= {0 :name} (:filter (nth (:patterns p) 0))))
-      (is (= [1 2] (:project (nth (:patterns p) 0))))
-      (is (= {0 :age} (:filter (nth (:patterns p) 1))))
-      (is (= [1 2] (:project (nth (:patterns p) 1))))
+                                 [?p :age name]]})
+          join (:where-plan p)
+          [rel0 rel1] (:inputs join)
+          p0 rel0
+          p1 rel1]
+      (is (= :join (:kind join)))
+      (is (= :triple (:kind rel0)))
+      (is (= :triple (:kind rel1)))
+      (is (= :ave (:order p0)))
+      (is (= :ave (:order p1)))
+      (is (= {0 :name} (:filter p0)))
+      (is (= [1 2] (:project p0)))
+      (is (= {0 :age} (:filter p1)))
+      (is (= [1 2] (:project p1)))
       (is (= '[name ?e ?p] (:result-vars p))))))
 
 (deftest plan-constant-filter-test
   (testing "a constant value column becomes a Filter and is projected away"
     (let [p (dbsp/plan '{:find [?e] :where [[?e :name "Ivan"]]})
-          pat (first (:patterns p))]
+          pat (:where-plan p)]
+      (is (= :triple (:kind pat)))
       (is (= {0 :name, 2 "Ivan"} (:filter pat)))
       (is (= [1] (:project pat)))
       (is (= '[?e] (:out-vars pat)))))
   (testing "a constant entity column becomes a Filter and is projected away"
     (let [p (dbsp/plan '{:find [name] :where [[1 :name name]]})
-          pat (first (:patterns p))]
+          pat (:where-plan p)]
+      (is (= :triple (:kind pat)))
       (is (= {0 :name, 1 1} (:filter pat)))
       (is (= [2] (:project pat)))
       (is (= '[name] (:out-vars pat))))))
@@ -242,10 +270,13 @@
     (let [p (dbsp/plan '{:find [?a ?d]
                          :where [[?a :r ?b]
                                  [?b :s ?c]
-                                 [?c :t ?d]]})]
-      (is (= 2 (count (:joins p))))
-      (is (nil? (:left-permute (nth (:joins p) 0))))
-      (is (= [2 0 1] (:left-permute (nth (:joins p) 1))))
+                                 [?c :t ?d]]})
+          join (:where-plan p)]
+      (is (= :join (:kind join)))
+      (is (= 3 (count (:inputs join))))
+      (is (= 2 (count (:steps join))))
+      (is (nil? (:left-permute (nth (:steps join) 0))))
+      (is (= [2 0 1] (:left-permute (nth (:steps join) 1))))
       (is (= '[?c ?b ?a ?d] (:result-vars p)))
       (is (= [2 3] (:final-permute p))))))
 
@@ -255,7 +286,9 @@
                          :where [[?a :r ?b]
                                  [?b :s ?c]
                                  [?c :t ?a]]})
-          closing (last (:joins p))]
+          join (:where-plan p)
+          closing (last (:steps join))]
+      (is (= :join (:kind join)))
       (is (= 2 (:key-arity closing)))
       (is (= 2 (count (set (:key-vars closing))))))))
 
@@ -264,12 +297,12 @@
     (let [p (dbsp/plan '{:find [?e]
                          :where [(or [?e :sex :male]
                                      [?e :sex :female])]})
-          pat (first (:patterns p))]
-      (is (= :or (:kind pat)))
+          pat (:where-plan p)]
+      (is (= :union (:kind pat)))
       (is (= '[?e] (:out-vars pat)))
-      (is (= 2 (count (:branch-plans pat))))
-      (is (every? #(= '[?e] (:out-vars %)) (:branch-plans pat)))
-      (is (every? #(= :triple (:kind %)) (:branch-plans pat)))
+      (is (= 2 (count (:branches pat))))
+      (is (every? #(= '[?e] (:out-vars %)) (:branches pat)))
+      (is (every? #(= :triple (:kind %)) (:branches pat)))
       (is (= '[?e] (:result-vars p))))))
 
 (deftest plan-or-with-outer-join-test
@@ -278,12 +311,14 @@
                          :where [[?e :name name]
                                  (or [?e :sex :male]
                                      [?e :sex :female])]})
-          [outer or-pat] (:patterns p)]
+          join (:where-plan p)
+          [outer or-pat] (:inputs join)]
+      (is (= :join (:kind join)))
       (is (= :triple (:kind outer)))
-      (is (= :or (:kind or-pat)))
+      (is (= :union (:kind or-pat)))
       (is (= '[?e] (:out-vars or-pat)))
-      (is (every? #(= '[?e] (:out-vars %)) (:branch-plans or-pat)))
-      (is (= 1 (count (:joins p)))))))
+      (is (every? #(= '[?e] (:out-vars %)) (:branches or-pat)))
+      (is (= 1 (count (:steps join)))))))
 
 (deftest plan-or-multi-var-test
   (testing "2-var :or joined with an outer pattern that re-orders branch columns"
@@ -291,11 +326,13 @@
                          :where [[?p :tag "x"]
                                  (or [?p :name n]
                                      [?p :age n])]})
-          [_outer or-pat] (:patterns p)]
-      (is (= :or (:kind or-pat)))
+          join (:where-plan p)
+          [_outer or-pat] (:inputs join)]
+      (is (= :join (:kind join)))
+      (is (= :union (:kind or-pat)))
       ;; the outer chain leads with ?p, so each branch is planned with target [?p n]
       (is (= '[?p n] (:out-vars or-pat)))
-      (is (every? #(= '[?p n] (:out-vars %)) (:branch-plans or-pat))))))
+      (is (every? #(= '[?p n] (:out-vars %)) (:branches or-pat))))))
 
 (deftest plan-nested-or-test
   (testing "nested :or plan preserves the descriptor tree"
@@ -303,15 +340,15 @@
                          :where [(or [?e :name "Ada"]
                                      (or [?e :name "Bob"]
                                          [?e :name "Carla"]))]})
-          pat (first (:patterns p))]
-      (is (= :or (:kind pat)))
-      (is (= 2 (count (:branch-plans pat))))
-      (is (= :triple (:kind (first (:branch-plans pat)))))
-      (let [inner (second (:branch-plans pat))]
-        (is (= :or (:kind inner)))
+          pat (:where-plan p)]
+      (is (= :union (:kind pat)))
+      (is (= 2 (count (:branches pat))))
+      (is (= :triple (:kind (first (:branches pat)))))
+      (let [inner (second (:branches pat))]
+        (is (= :union (:kind inner)))
         (is (= '[?e] (:out-vars inner)))
-        (is (= 2 (count (:branch-plans inner))))
-        (is (every? #(= '[?e] (:out-vars %)) (:branch-plans inner)))))))
+        (is (= 2 (count (:branches inner))))
+        (is (every? #(= '[?e] (:out-vars %)) (:branches inner)))))))
 
 (deftest plan-or-deterministic-test
   (let [q '{:find [?e]

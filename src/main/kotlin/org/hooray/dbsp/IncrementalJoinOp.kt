@@ -41,8 +41,8 @@ class IncrementalJoinOp(
     private var integralB: TupleZSet = emptyTupleZSet()
 
     override fun eval(left: TupleZSet, right: TupleZSet): TupleZSet {
-        val integralBNew = integralB.add(right)                // B[t]
-        val delta = join.eval(left, integralBNew)              // Δa ⋈ B[t]
+        val integralBNew = integralB.add(right)                      // B[t]
+        val delta = join.eval(left, integralBNew)             // Δa ⋈ B[t]
             .add(join.eval(integralA, right))                  // + A[t-1] ⋈ Δb
 
         integralA = integralA.add(left)                        // advance to A[t]

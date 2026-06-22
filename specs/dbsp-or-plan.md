@@ -1,7 +1,11 @@
 # Implementation Plan: DBSP-Or
 
 Companion plan for `specs/dbsp-or.md`.
-Status: **Phase 2 (Plan)** — awaiting approval before Tasks/Implement.
+Status: **Historical** — documents the original PR #12 task plan.
+
+Note: the current `:standard` DBSP planner now uses an explicit relation tree
+with `:triple`, `:join`, and `:union` nodes. This task plan is retained as
+history for the original OR implementation, not as the current planner shape.
 
 ## Overview
 
