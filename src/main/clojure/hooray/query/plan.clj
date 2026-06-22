@@ -10,6 +10,7 @@
     BindingSet
     FunctionPattern
     InputPattern
+    NotPattern
     OrPattern
     PatternValue$Constant
     PatternValue$Variable
@@ -70,7 +71,13 @@
            :kind :or
            :variables (descriptor-variables pattern)
            :branches branches
-           :raw pattern})))
+           :raw pattern})
+
+    :not {:id index
+          :kind :not
+          :variables (descriptor-variables pattern)
+          :patterns (compile-patterns (flatten-and clause))
+          :raw pattern}))
 
 (defn- compile-patterns [patterns]
   (->> patterns
@@ -101,9 +108,9 @@
   (let [new-bound (set/union bound (set introduces))]
     (and (overlaps? introduces pattern)
          (case (:kind pattern)
-           (:triple :input :or) true
-           (:predicate :function) (set/subset? (pattern-vars pattern) new-bound)
-           false))))
+          (:triple :input :or) true
+          (:predicate :function :not) (set/subset? (pattern-vars pattern) new-bound)
+          false))))
 
 (defn- participant [role pattern]
   {:id (:id pattern)
@@ -206,6 +213,12 @@
                 branches
                 (= :proposer (:role participant)))))
 
+(defn- exec-not-pattern [triple-index stage pattern]
+  (let [seed-variables (:target-variables stage)
+        branch (mapv (partial exec-stage triple-index)
+                     (branch-stage-maps seed-variables (:patterns pattern)))]
+    (NotPattern. (set (:variables pattern)) branch)))
+
 (defn- role-pattern [role exec-pattern]
   (if (= :validator role)
     (ValidatorOnlyPattern. exec-pattern)
@@ -230,6 +243,8 @@
                                                    (call-function (query/resolve-fn fun))))
 
                      :or (exec-or-pattern triple-index stage participant pattern)
+
+                     :not (exec-not-pattern triple-index stage pattern)
 
                      (err/unsupported-ex
                       "BindingSet internal query path does not support this pattern yet"

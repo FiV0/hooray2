@@ -147,3 +147,13 @@
                (or [?e :age 35]
                    [?e :age 40])]}
             [])))))
+
+(deftest internal-binding-set-query-supports-not-antijoin
+  (let [node (fresh-node)
+        q '{:find [?e]
+            :where [[?e :name ?name]
+                    (not [?e :age 40])]}]
+    (h/transact node [{:db/id "a" :name "A" :age 35}
+                      {:db/id "b" :name "B" :age 40}])
+    (is (= (h/q q (h/db node))
+           (plan/execute-query (h/db node) q [])))))
