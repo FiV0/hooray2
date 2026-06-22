@@ -180,35 +180,44 @@
   (vec (keep-indexed (fn [i el] (when (variable? el) i))
                      (order-elems descriptor order))))
 
-(defn- pattern-plan
-  "Plan for one pattern descriptor, producing its variables in [target] order.
+(defn- triple-plan
+  "Plan for one triple descriptor, producing its variables in [target] order.
 
-  Triple plan:
     {:kind :triple :descriptor … :order :aev/:ave :filter … :project …
-     :out-vars target}
+     :out-vars target}"
+  [descriptor target]
+  (let [order (choose-order descriptor target)]
+    {:kind :triple
+     :descriptor descriptor
+     ;; the order in which we are processing triples in this triple pattern
+     :order order
+     ;; the constant part of the triple pattern
+     :filter (constant-filter descriptor order)
+     ;; the projection after the filter of the constants
+     ;; for example [a(constant) e(constant) v] -> [v]
+     :project (projection descriptor order)
+     ;; the vars of this pattern
+     :out-vars (vec target)}))
 
-  Or plan (recursive — each branch plan is itself a triple or or plan with
-  the same :out-vars):
-    {:kind :or :descriptor … :branch-plans [<plan> …] :out-vars target}"
+(declare rel-plan)
+
+(defn- union-plan
+  "Relation plan for an `or` descriptor. Every branch is planned with the same
+  [target] variable order so the branch streams can be unioned directly."
+  [descriptor target]
+  {:kind :union
+   :descriptor descriptor
+   :out-vars (vec target)
+   :branches (mapv #(rel-plan % target) (:branches descriptor))})
+
+(defn- rel-plan
+  "Plans one descriptor as a relation node that produces [target] variables."
   [descriptor target]
   (case (:kind descriptor)
-    :triple (let [order (choose-order descriptor target)]
-              {:kind :triple
-               :descriptor descriptor
-               ;; the order in which we are processing triples in this triple pattern
-               :order order
-               ;; the constant part of the triple pattern
-               :filter (constant-filter descriptor order)
-               ;; the projection after the filter of the constants
-               ;; for example [a(constant) e(constant) v] -> [v]
-               :project (projection descriptor order)
-               ;; the vars of this pattern
-               :out-vars (vec target)})
-
-    :or {:kind :or
-         :descriptor descriptor
-         :branch-plans (mapv #(pattern-plan % target) (:branches descriptor))
-         :out-vars (vec target)}))
+    :triple {:kind :pattern
+             :out-vars (vec target)
+             :pattern (triple-plan descriptor target)}
+    :or (union-plan descriptor target)))
 
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."
@@ -232,34 +241,15 @@
             (err/unsupported-ex "DBSP-standard engine does not support aggregates yet" {:find-element [t v]})))
         conformed-find))
 
-(defn plan
-  "Builds the full circuit plan for [query]:
-
-    {:find          [find vars]
-     :patterns      [{:descriptor :order :filter :project :out-vars} ...]  ; join order
-     :joins         [{:key-arity :key-vars :left-permute :out-vars} ...]   ; one per join
-     :result-vars   [layout after the last join]
-     :final-permute [columns of :result-vars projected to :find]}
-
-  `:joins` has one entry per pattern after the first; join `i` joins the
-  accumulated result with `:patterns[i]`. `:left-permute` is nil when the
-  accumulated result already leads with the join key (always so for the first
-  join), otherwise the column order the intermediate Map must produce."
-  [query]
-  (let [{:keys [find patterns]} (parse query)
-        ordered (left-deep-order patterns)
-        fvars (find-vars find)]
-
+(defn- plan-inputs
+  "Plans descriptors as one relation tree. Multiple descriptors become a
+  left-deep `:join` node whose inputs are themselves relation nodes."
+  [descriptors]
+  (let [ordered (left-deep-order descriptors)]
     (when (empty? ordered)
-      (throw (ex-info "query has no patterns" {:query query})))
-
+      (throw (ex-info "query has no patterns" {})))
     (if (= 1 (count ordered))
-      (let [pp (pattern-plan (first ordered) (:vars (first ordered)))]
-        {:find fvars
-         :patterns [pp]
-         :joins []
-         :result-vars (:out-vars pp)
-         :final-permute (indices-of (:out-vars pp) fvars)})
+      (rel-plan (first ordered) (:vars (first ordered)))
       (let [var-sets (mapv #(set (:vars %)) ordered)
             ;; keys*[i-1] is the variable set joining the accumulated result
             ;; with ordered[i].
@@ -269,37 +259,57 @@
                       (recur (inc i)
                              (set/union accset (nth var-sets i))
                              (conj ks (set/intersection accset (nth var-sets i))))))
-            pp0 (pattern-plan (first ordered)
-                              (lead-with (first keys*) (:vars (first ordered))))]
+            first-input (rel-plan (first ordered)
+                                  (lead-with (first keys*) (:vars (first ordered))))]
         ;; Single left-to-right pass: each join's key column *order* is fixed by
-        ;; the accumulated (left) layout, and the right pattern is arranged to
+        ;; the accumulated (left) layout, and the right relation is arranged to
         ;; that same key order so both sides' leading columns line up.
         (loop [i 1
-               acc (:out-vars pp0)
-               pattern-plans [pp0]
-               joins []]
+               acc (:out-vars first-input)
+               inputs [first-input]
+               steps []]
           (if (>= i (count ordered))
-            {:find fvars
-             :patterns pattern-plans
-             :joins joins
-             :result-vars acc
-             :final-permute (indices-of acc fvars)}
+            {:kind :join
+             :out-vars acc
+             :inputs inputs
+             :steps steps}
             (let [ki (nth keys* (dec i))
                   qi (nth ordered i)
                   key-order (vec (filter ki acc))
                   left-needed (into key-order (remove ki acc))
                   permute (indices-of acc left-needed)
                   qi-target (into key-order (remove ki (:vars qi)))
+                  right-input (rel-plan qi qi-target)
                   out-vars (into left-needed (remove ki (:vars qi)))]
               (recur (inc i)
                      out-vars
-                     (conj pattern-plans (pattern-plan qi qi-target))
-                     (conj joins {:key-arity (count ki)
+                     (conj inputs right-input)
+                     (conj steps {:right-input-index i
+                                  :left-vars left-needed
+                                  :right-vars (:out-vars right-input)
+                                  :key-arity (count ki)
                                   :key-vars key-order
                                   :left-permute (when (not= permute
                                                             (vec (range (count acc))))
                                                   permute)
                                   :out-vars out-vars})))))))))
+
+(defn plan
+  "Builds the full circuit plan for [query]:
+
+    {:find          [find vars]
+     :where-plan    <relation plan>
+     :result-vars   [layout produced by :where-plan]
+     :final-permute [columns of :result-vars projected to :find]}"
+  [query]
+  (let [{:keys [find patterns]} (parse query)
+        fvars (find-vars find)
+        where-plan (plan-inputs patterns)
+        result-vars (:out-vars where-plan)]
+    {:find fvars
+     :where-plan where-plan
+     :result-vars result-vars
+     :final-permute (indices-of result-vars fvars)}))
 
 ;; --------------------------------------------------------------------------
 ;; Phase 2 — circuit assembly
@@ -307,7 +317,7 @@
 
 (defn- assemble-triple
   "Wires one triple pattern into [circuit]: Source -> Filter? -> Map(project).
-  Returns `{:stream <Stream> :handles [<InputHandle>] :leaves [{:order …}]}`."
+  Returns `{:stream <Stream> :vars […] :handles [<InputHandle>] :leaves [{:order …}]}`."
   [^Circuit circuit pattern]
   (let [pair (.addInput circuit)
         source (.getFirst pair)
@@ -324,37 +334,81 @@
                              (MapOp/permute (int-array (:project pattern)))
                              filtered)]
     {:stream projected
+     :vars (:out-vars pattern)
      :handles [handle]
      :leaves [{:order (:order pattern)}]}))
 
-(declare assemble-pattern)
+(defn- project-stream
+  "Projects or reorders [stream] from [source-vars] to [target-vars]."
+  [^Circuit circuit stream source-vars target-vars]
+  (if (= (vec source-vars) (vec target-vars))
+    stream
+    (.addUnary circuit
+               (MapOp/permute (int-array (indices-of source-vars target-vars)))
+               stream)))
 
-(defn- assemble-or
-  "Wires an :or plan node into [circuit]: each branch is recursively assembled,
+(declare assemble-rel)
+
+(defn- assemble-union
+  "Wires a :union relation node into [circuit]: each branch is recursively assembled,
   the branch streams are folded left-to-right with `PlusOp`, and the union is
   fed into a `DistinctOp` to enforce set-union semantics. Returns
   `{:stream <Stream> :handles […] :leaves […]}` with handles/leaves
   concatenated across all branches in plan order."
-  [^Circuit circuit {:keys [branch-plans]}]
-  (let [wired (mapv #(assemble-pattern circuit %) branch-plans)
+  [^Circuit circuit {:keys [branches out-vars]}]
+  (let [wired (mapv #(assemble-rel circuit %) branches)
+        wired (mapv (fn [{:keys [stream vars] :as branch}]
+                      (assoc branch :stream (project-stream circuit stream vars out-vars)
+                                    :vars out-vars))
+                    wired)
         summed (reduce (fn [acc {:keys [stream]}]
                          (.addBinary circuit (PlusOp.) acc stream))
                        (:stream (first wired))
                        (rest wired))
         distinct-out (.addUnary circuit (DistinctOp.) summed)]
     {:stream distinct-out
+     :vars out-vars
      :handles (vec (mapcat :handles wired))
      :leaves (vec (mapcat :leaves wired))}))
 
-(defn- assemble-pattern
-  "Dispatches per-pattern circuit assembly by [pattern]'s `:kind`. Returns
+(defn- assemble-join
+  "Wires a :join relation node into [circuit]. Inputs are assembled recursively,
+  then joined left-to-right according to the planned join steps."
+  [^Circuit circuit {:keys [inputs steps out-vars]}]
+  (let [wired (mapv #(assemble-rel circuit %) inputs)
+        result (loop [i 1
+                      acc (:stream (first wired))]
+                 (if (>= i (count inputs))
+                   acc
+                   (let [join (nth steps (dec i))
+                         right (nth wired (:right-input-index join))
+                         left (if-let [lp (:left-permute join)]
+                                (.addUnary circuit (MapOp/permute (int-array lp)) acc)
+                                acc)
+                         right-stream (project-stream circuit
+                                                      (:stream right)
+                                                      (:vars right)
+                                                      (:right-vars join))
+                         joined (.addBinary circuit
+                                            (IncrementalJoinOp. (int (:key-arity join))
+                                                                "incremental-join")
+                                            left
+                                            right-stream)]
+                     (recur (inc i) joined))))]
+    {:stream result
+     :vars out-vars
+     :handles (vec (mapcat :handles wired))
+     :leaves (vec (mapcat :leaves wired))}))
+
+(defn- assemble-rel
+  "Dispatches relation assembly by [rel]'s `:kind`. Returns
   `{:stream <Stream> :handles […] :leaves […]}` — `:handles` and `:leaves` are
-  equal-length flat vectors, one entry per leaf input triple. `:or` patterns
-  return multiple entries from a single call (one per branch, recursively)."
-  [^Circuit circuit pattern]
-  (case (:kind pattern)
-    :triple (assemble-triple circuit pattern)
-    :or     (assemble-or     circuit pattern)))
+  equal-length flat vectors, one entry per leaf input triple."
+  [^Circuit circuit rel]
+  (case (:kind rel)
+    :pattern (assemble-triple circuit (:pattern rel))
+    :union   (assemble-union  circuit rel)
+    :join    (assemble-join   circuit rel)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
@@ -364,33 +418,16 @@
      :leaves  [{:order …} ...]      ; parallel to :inputs
      :output  <OutputHandle>}
 
-  The circuit is per-pattern `Source -> Filter? -> Map`, a left-deep chain of
-  `IncrementalJoin`s (each non-first join preceded by a permuting `Map` when the
-  plan calls for one), and a final `Map` projecting to `:find`."
-  [{:keys [patterns joins final-permute]}]
+  The circuit is per-leaf `Source -> Filter? -> Map`, recursive relation assembly,
+  and a final `Map` projecting to `:find`."
+  [{:keys [where-plan final-permute]}]
   (let [circuit (Circuit.)
-        ;; wire up the base patterns
-        wired (mapv #(assemble-pattern circuit %) patterns)
-        ;; wire up the left-deep join
-        result (loop [i 1
-                      acc (:stream (first wired))]
-                 (if (>= i (count patterns))
-                   acc
-                   (let [join (nth joins (dec i))
-                         left (if-let [lp (:left-permute join)]
-                                (.addUnary circuit (MapOp/permute (int-array lp)) acc)
-                                acc)
-                         joined (.addBinary circuit
-                                            (IncrementalJoinOp. (int (:key-arity join))
-                                                                "incremental-join")
-                                            left
-                                            (:stream (nth wired i)))]
-                     (recur (inc i) joined))))
+        wired (assemble-rel circuit where-plan)
         ;; wire up the find clause
-        projected (.addUnary circuit (MapOp/permute (int-array final-permute)) result)]
+        projected (.addUnary circuit (MapOp/permute (int-array final-permute)) (:stream wired))]
     {:circuit circuit
-     :inputs (vec (mapcat :handles wired))
-     :leaves (vec (mapcat :leaves wired))
+     :inputs (:handles wired)
+     :leaves (:leaves wired)
      :output (.output circuit projected)}))
 
 ;; --------------------------------------------------------------------------
