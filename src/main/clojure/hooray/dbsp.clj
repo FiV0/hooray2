@@ -291,9 +291,7 @@
               (recur (inc i)
                      out-vars
                      (conj inputs right-input)
-                     (conj steps {:right-input-index i
-                                  :left-vars left-needed
-                                  :right-vars (:out-vars right-input)
+                     (conj steps {:right-vars (:out-vars right-input)
                                   :key-arity (count ki)
                                   :key-vars key-order
                                   :left-permute (when (not= permute
@@ -373,6 +371,8 @@
   with handles/leaves concatenated across all branches in plan order."
   [^Circuit circuit {:keys [branches out-vars]}]
   (let [wired (mapv #(assemble-rel circuit %) branches)
+        ;; union-plan targets each branch at out-vars, so this is normally a no-op.
+        ;; Keep the projection here as an assembly boundary guard.
         wired (mapv (fn [{:keys [stream vars] :as branch}]
                       (assoc branch :stream (project-stream circuit stream vars out-vars)
                                     :vars out-vars))
@@ -397,10 +397,12 @@
                  (if (>= i (count inputs))
                    acc
                    (let [join (nth steps (dec i))
-                         right (nth wired (:right-input-index join))
+                         right (nth wired i)
                          left (if-let [lp (:left-permute join)]
                                 (.addUnary circuit (MapOp/permute (int-array lp)) acc)
                                 acc)
+                         ;; plan-inputs targets each right input at :right-vars, so this is
+                         ;; normally a no-op. Keep it as an assembly boundary guard.
                          right-stream (project-stream circuit
                                                       (:stream right)
                                                       (:vars right)
