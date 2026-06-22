@@ -90,6 +90,30 @@
     (is (= (h/q q (h/db node))
            (plan/execute-query (h/db node) q [])))))
 
+(deftest internal-binding-set-query-supports-scalar-in-binding
+  (let [node (fresh-node)
+        q '{:find [?e]
+            :in [?name]
+            :where [[?e :name ?name]]}]
+    (h/transact node [{:db/id "a" :name "A" :age 35}
+                      {:db/id "b" :name "B" :age 40}])
+    (is (= (h/q q (h/db node) "A")
+           (plan/execute-query (h/db node) q ["A"])))))
+
+(deftest internal-binding-set-query-preserves-relation-in-correlation
+  (let [node (fresh-node)
+        q '{:find [?e]
+            :in [[[?name ?age]]]
+            :where [[?e :name ?name]
+                    [?e :age ?age]]}
+        input [["A" 35]
+               ["B" 40]]]
+    (h/transact node [{:db/id "a" :name "A" :age 35}
+                      {:db/id "b" :name "A" :age 40}
+                      {:db/id "c" :name "B" :age 40}])
+    (is (= (h/q q (h/db node) input)
+           (plan/execute-query (h/db node) q [input])))))
+
 (deftest internal-binding-set-query-preserves-or-branch-predicate-identity
   (let [node (fresh-node)]
     (h/transact node [{:db/id "a" :name "A" :age 35}

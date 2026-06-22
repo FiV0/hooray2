@@ -9,6 +9,7 @@
    (org.hooray.engine
     BindingSet
     FunctionPattern
+    InputPattern
     OrPattern
     PatternValue$Constant
     PatternValue$Variable
@@ -246,12 +247,51 @@
           target-variables
           (stage-kind kind)))
 
+(defn- input-relation [[binding-type binding] arg]
+  (case binding-type
+    :scale-binding {:variables [binding]
+                    :rows [[arg]]}
+
+    :collection-binding {:variables [binding]
+                         :rows (mapv vector arg)}
+
+    :tuple-binding (do
+                     (when-not (= (count binding) (count arg))
+                       (throw (IllegalArgumentException.
+                               (format ":tuple %s and args %s must have same length!"
+                                       (pr-str binding)
+                                       (pr-str arg)))))
+                     {:variables binding
+                      :rows [(vec arg)]})
+
+    :relation-binding (let [variables (first binding)
+                            rows (mapv vec arg)]
+                        (doseq [row rows]
+                          (when-not (= (count variables) (count row))
+                            (throw (IllegalArgumentException.
+                                    (format ":relation tuple %s and binding %s must have same length!"
+                                            (pr-str row)
+                                            (pr-str variables))))))
+                        {:variables variables
+                         :rows rows})))
+
+(defn- apply-input-relation [^BindingSet bindings {:keys [variables rows]}]
+  (let [bound-vars (vec (.getVariables bindings))
+        introduces (vec (remove (set bound-vars) variables))
+        target-vars (vec (distinct (concat bound-vars variables)))
+        pattern (InputPattern/relation variables rows)]
+    (if (seq introduces)
+      (.propose pattern bindings introduces target-vars)
+      (.validate pattern bindings target-vars))))
+
 (defn- initial-bindings [conformed-query args]
-  (when (seq (:in conformed-query))
-    (err/unsupported-ex
-     "BindingSet internal query path does not support :in bindings yet"
-     {:in (:in conformed-query) :args args}))
-  (BindingSet. [] [[]]))
+  (let [in (:in conformed-query)]
+    (when-not (= (count in) (count args))
+      (throw (IllegalArgumentException.
+              (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
+    (reduce apply-input-relation
+            (BindingSet. [] [[]])
+            (map input-relation in args))))
 
 (defn execute-conformed-query [db conformed-query args]
   (let [planned (plan conformed-query)
