@@ -114,8 +114,10 @@ each row in a multi-participant stage, following the shape of Datatoad's
 
 `ExecPattern.propose` expands rows with introduced variables.
 
-`ExecPattern.validate` is a semijoin/filter over rows that already contain the
-pattern's required variables.
+`ExecPattern.validate` is a semijoin/filter over rows that contain at least the
+variables this stage is constraining. If all pattern variables are present it is
+ordinary validation; if only some are present it is an existential semijoin that
+keeps rows with at least one completion.
 
 ## Planning semantics
 
@@ -133,8 +135,9 @@ Planning rules:
 4. Allow a stage to introduce multiple variables when one pattern naturally
    produces them together. Example: `[?e :name ?name]` can introduce both `?e`
    and `?name` from an empty binding set.
-5. Include patterns whose variables become fully covered as validators in that
-   stage.
+5. Include patterns that can constrain the newly introduced variables in that
+   stage. This includes both fully covered validators and partially covered
+   semijoin validators whose variables overlap the newly introduced variables.
 6. Flatten `and` during planning. It is grouping syntax, not a runtime pattern.
 7. Treat `or` as a first-class plan pattern with two planned roles. In ordinary
    mixed stages, `or` is a validator only: it keeps a row when at least one
@@ -228,7 +231,9 @@ Triple patterns use the existing `eav`, `ave`, and `aev` indexes.
   bound variables and constants.
 - `count` estimates the number of matching rows for each input row.
 - `propose` extends each input row with one or more triple variables.
-- `validate` checks that the row's triple exists.
+- `validate` checks that the row's triple exists when all triple variables are
+  present, or that the row has at least one indexed completion when only a
+  subset of triple variables is present.
 
 Constants are constraints, not variables.
 
