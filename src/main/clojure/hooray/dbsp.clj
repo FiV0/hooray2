@@ -3,8 +3,7 @@
 
   Compiles a conjunctive Datalog query of standard triple patterns into a
   circuit of unary/binary operators (see `org.hooray.dbsp`), modelled on the
-  Feldera `dbsp` crate. This is the `:standard` engine. The WCOJ engine in
-  `hooray.incremental` uses a different approach."
+  Feldera `dbsp` crate. This is the `:standard` engine."
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
@@ -47,7 +46,7 @@
 
     {:index    <position in the immediate parent clause>
      :kind     :or
-     :branches [<descriptor> …]                 ; each :kind :triple or :kind :or
+     :branches [<descriptor> …]
      :vars     [vars in encounter order of the first branch]}
 
   Other clause types (`:and`, `:not`, `:predicate`, `:fn`) are not yet
@@ -97,8 +96,8 @@
   "Orders [patterns] (a vector of descriptors) into a left-deep join sequence.
 
   Starts from the first pattern and repeatedly appends the remaining pattern
-  that shares the most variables with the patterns chosen so far; ties — and
-  fully disconnected patterns, which become Cartesian joins — are broken by
+  that shares the most variables with the patterns chosen so far; ties and
+  fully disconnected patterns, which become Cartesian joins, are broken by
   lowest original index. Deterministic: the same input always yields the same
   order."
   [patterns]
@@ -119,8 +118,12 @@
                  (vec (remove #(= (:index %) (:index best)) remaining))))))))
 
 (defn parse
-  "Conforms a raw query and returns `{:find <conformed find> :patterns
-  <descriptors>}`. Throws on unsupported clauses."
+  "Conforms a raw query and returns
+
+    {:find <conformed find>
+     :patterns <descriptors>}.
+
+   Throws on unsupported clauses."
   [query]
   (let [conformed (s/conform ::query/query query)]
     (when (= ::s/invalid conformed)
@@ -183,7 +186,11 @@
 (defn- triple-plan
   "Plan for one triple descriptor, producing its variables in [target] order.
 
-    {:kind :triple :descriptor … :order :aev/:ave :filter … :project …
+    {:kind :triple
+     :descriptor …
+     :order :aev/:ave
+     :filter …
+     :project …
      :out-vars target}"
   [descriptor target]
   (let [order (choose-order descriptor target)]
