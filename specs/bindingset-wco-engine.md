@@ -17,8 +17,10 @@ The central behavior change is:
 - One or more executable patterns participate in the stage.
 - A proposer expands the current binding rows with the introduced variables.
 - The remaining participants semijoin/filter the expanded rows.
-- `or` branches execute as isolated seeded subplans and union full binding rows,
-  not scalar extensions.
+- `or` follows the Datatoad-style conservative rule: it does not compete as a
+  proposer in mixed outer WCO stages. It validates rows proposed by outer
+  patterns, and only proposes in a dedicated OR boundary when it is the only
+  pattern that can introduce the missing OR variables.
 
 This intentionally replaces the current `GenericJoin` core. The scalar
 `PrefixExtender` API is not expressive enough for branch-local identity because
@@ -134,9 +136,18 @@ Planning rules:
 5. Include patterns whose variables become fully covered as validators in that
    stage.
 6. Flatten `and` during planning. It is grouping syntax, not a runtime pattern.
-7. Treat `or` as a first-class plan pattern. It reports the branch-free
-   variables it can produce and compiles to a seeded branch executor.
-8. Keep all variables through the stage pipeline in v1. The only required
+7. Treat `or` as a first-class plan pattern with two planned roles. In ordinary
+   mixed stages, `or` is a validator only: it keeps a row when at least one
+   branch has a completion consistent with the row's currently bound OR
+   variables.
+8. Exclude `or` from count-based proposer selection when any outer non-OR
+   pattern can propose the stage variables. This follows the Datatoad instinct:
+   an OR/view-like pattern can constrain rows, but it should not act as the
+   cheapest proposer in a mixed outer WCO join.
+9. If `or` is the only pattern that can introduce the missing OR variables, plan
+   a dedicated OR proposal boundary. That boundary proposes all still-unbound
+   variables the OR participates in, not one variable at a time.
+10. Keep all variables through the stage pipeline in v1. The only required
    projection is the final `:find` extraction.
 
 The last point is intentional. Datatoad's `Salad` aggressively prunes columns
@@ -149,6 +160,14 @@ performance reason.
 Stage execution is the local, list-backed equivalent of Datatoad's
 `wco_join_inner`.
 
+This section describes ordinary stages and branch-internal stages. An `or` can
+participate in an ordinary mixed stage as a validator, but it is not part of the
+count-based proposer contest for that stage. If `or` is the only pattern that
+can introduce its missing variables, the outer executor enters a dedicated OR
+proposal boundary once with the current seed `BindingSet`, lets each branch run
+its own internal stages to completion for all unbound OR variables, and resumes
+outer execution with the unioned branch rows.
+
 For each stage:
 
 1. Receive an input `BindingSet`.
@@ -156,7 +175,7 @@ For each stage:
 3. If the stage has one participant and introduces variables, call that
    participant's `propose`.
 4. If the stage has multiple participants and introduces variables:
-   - ask every participant for per-row counts;
+   - ask every proposer-eligible participant for per-row counts;
    - group input rows by the participant with the smallest count for that row;
    - call each participant's `propose` for only its assigned row group;
    - validate the proposed rows with every other participant;
@@ -168,8 +187,14 @@ This preserves the useful WCO primitive: the cheapest available pattern proposes
 candidate bindings, and all other relevant patterns validate them. Unlike the
 old generic prefix engine, the unit of data is always a binding row.
 
-The count grouping step is explicit. Given participants `P0..Pn`, the executor
-builds a logical count table over the input rows:
+In mixed stages, OR validators are not proposer-eligible participants. They do
+not appear in the count table, and they validate the rows proposed by ordinary
+patterns. A stage whose only possible proposer is OR is not an ordinary count
+grouping stage; the planner emits the dedicated OR proposal boundary described
+below.
+
+The count grouping step is explicit. Given proposer-eligible participants
+`P0..Pn`, the executor builds a logical count table over the input rows:
 
 ```text
 row-index | input row | P0 count | P1 count | ... | chosen proposer
@@ -236,29 +261,53 @@ executor.
 
 ### `or`
 
-`or` is a seeded branch executor. It is both a validator and a producer:
-already-bound outer variables arrive as seed columns, and variables not yet
-bound may be introduced by the branch plans.
+`or` has two planned roles: validator and dedicated proposer. In v1 it never
+competes as a normal proposer in a mixed outer WCO stage. This mirrors the
+Datatoad approach where view-like patterns are useful as seeded subplans and
+validators, but are not treated as cheap index atoms during mixed proposer
+selection.
 
-For an input `BindingSet`:
+In validator mode:
+
+1. The input `BindingSet` already contains the variables being checked at this
+   point in the outer plan.
+2. Each branch receives the same input rows as seed rows.
+3. For each row, the OR keeps the row if at least one branch has a completion
+   consistent with all currently bound OR variables in that row.
+4. The OR does not need to remember which branch validated the row earlier,
+   because each validation asks the complete branch question again for the
+   current row shape.
+
+This mode may run level by level with the outer WCO executor. It is safe because
+it is a branch-complete existential semijoin, not a scalar per-level child
+filter.
+
+In dedicated proposer mode:
 
 1. Determine the seed variables: the variables already present in the input
    `BindingSet`.
-2. Determine the OR-introduced variables: free variables of the `or` pattern
+2. Require that no outer non-OR pattern can propose the missing OR variables for
+   this stage.
+3. Determine the OR output variables: all free variables of the `or` pattern
    that are not present in the seed.
-3. Each branch receives the same seed `BindingSet`.
-4. Each branch is planned/executed independently with the seed variables treated
-   as already bound and the OR-introduced variables as required output.
-5. A branch may validate seeded variables, introduce missing OR variables, or do
+4. Each branch receives the same seed `BindingSet`.
+5. Each branch is planned/executed independently with the seed variables treated
+   as already bound and the OR output variables as required output.
+6. Inside a branch, the normal staged WCO executor can still introduce variables
+   level by level and prune early.
+7. A branch may validate seeded variables, introduce missing OR variables, or do
    both.
-6. Branch predicates and functions validate only that branch's rows.
-7. Each branch returns rows covering the requested target layout, normally
-   `seed variables + OR-introduced variables`.
-8. The `or` executor unions distinct full rows across branches.
+8. Branch predicates and functions validate only that branch's rows.
+9. Each branch returns rows covering the requested target layout, normally
+   `seed variables + OR output variables`.
+10. The `or` executor unions distinct full rows across branches.
 
 No branch id is exposed to users. No scalar proposal from one branch is allowed
 to satisfy a predicate from another branch without the rest of the row that made
-it valid.
+it valid. The implementation also does not carry hidden branch ids in the outer
+`BindingSet`; instead, branch-local identity is preserved either by asking the
+complete branch-existence question in validator mode or by completing the branch
+plan before a dedicated OR proposal boundary returns.
 
 This directly addresses issue #14. In the motivating query, the outer pattern
 `[?e :age ?age]` seeds the `or` with rows shaped like `[?e ?age]`. Branch A
@@ -278,10 +327,47 @@ rule applies. For example:
  (and [?e :title ?name]))
 ```
 
-The `or` receives seed rows over `[?e ?age]` and introduces `?name`. Each branch
-starts from the same seeded rows, extends only its own branch-local rows with
-`?name`, validates its own predicates, and emits rows over `[?e ?age ?name]`.
-Sibling branches never exchange intermediate rows.
+The `or` receives seed rows over `[?e ?age]` and has `?name` as an OR output
+variable. Each branch starts from the same seeded rows, extends only its own
+branch-local rows with `?name`, validates its own predicates, and emits rows
+over `[?e ?age ?name]`. Sibling branches never exchange intermediate rows.
+
+If OR is the only pattern that can propose its variables, it proposes all of
+them inside the same OR boundary. For example:
+
+```clojure
+(or
+ (and [?a :r ?x]
+      [?x :p ?c])
+ (and [?a :s ?x]
+      [?x :q ?c]))
+```
+
+If no outer pattern can introduce `?x` or `?c`, the outer executor must not ask
+the OR to propose `?x`, union `[?a ?x]` rows back into the top-level
+`BindingSet`, and later ask the same OR to propose `?c`. That would lose which
+branch produced each `?x`, allowing the second branch to continue a row produced
+by the first branch. Instead, the dedicated OR proposal boundary runs each
+branch to completion for `[?x ?c]`:
+
+```text
+seed [?a]
+  branch 1 internally introduces ?x, then ?c
+  branch 2 internally introduces ?x, then ?c
+union complete [?a ?x ?c] rows
+return to outer plan
+```
+
+This may materialize a larger result at the OR boundary than a fully interleaved
+outer generic join would, but only when OR is the only available proposer. If
+another outer pattern introduces `?x` and later `?c`, the OR validates each
+stage level by level by checking whether a single branch has a completion for
+the current row.
+
+Future work may relax this rule and allow OR to act as a mixed-stage proposer
+when it also participates in joins with outer patterns. That requires more
+sophisticated join machinery than v1, because the executor would need to avoid
+splitting branch-local continuation state across outer stages.
 
 ### `not`
 
@@ -338,7 +424,10 @@ Required coverage:
   - triple stages can introduce multiple variables;
   - predicates become validators, not proposers;
   - `and` is flattened;
-  - `or` becomes a seeded branch pattern;
+  - `or` has explicit validator and proposer modes;
+  - validating `or` can participate in ordinary staged semijoin;
+  - proposing `or` with multiple unbound output variables is planned as one
+    boundary, not split across several outer stages;
   - `:in` relation bindings preserve tuple correlation.
 - Engine tests:
   - single-participant proposing stage;
@@ -351,6 +440,10 @@ Required coverage:
   - issue #14 branch isolation;
   - overlapping `or` branches deduplicate full rows;
   - predicates and functions inside `or` branches validate branch-local rows;
+  - validating `or` can safely run level by level when other patterns introduce
+    the variables;
+  - proposing `or` cannot let later output variables be satisfied by a sibling
+    branch after an earlier output variable was produced;
   - `not` remains an antijoin validator once all variables are bound.
 
 Motivating regression:
@@ -416,7 +509,8 @@ Never:
 - Issue #14 passes because `or` branches execute in isolation and union complete
   binding rows.
 - Existing generic query behavior remains compatible.
-- A pattern can introduce one or more variables in a single stage.
+- A pattern can introduce one or more variables in a single stage, but a
+  proposing `or` boundary is never split across several outer stages.
 - Other patterns validate proposed rows through semijoin-style filtering.
 - The implementation has an explicit planner namespace and a separate
   relation-shaped execution core.
