@@ -374,7 +374,18 @@
       (is (= '[?e name] (:out-vars and-branch)))
       (is (= '[?e name] (:out-vars or-pat)))
       (is (= '[?e name] (:right-vars (first (:steps join)))))
-      (is (not= :and (:kind and-branch))))))
+      (is (not= :and (:kind and-branch)))))
+
+  (testing ":and branch is finally permuted when its natural join order differs"
+    (let [p (dbsp/plan '{:find [?x ?y]
+                         :where [(or [?x :edge ?y]
+                                     (and [?y :name ?x]
+                                          [?y :edge ?x]))]})
+          or-pat (:where-plan p)
+          and-branch (second (:branches or-pat))]
+      (is (= :join (:kind and-branch)))
+      (is (= '[?x ?y] (:out-vars and-branch)))
+      (is (= [1 0] (:final-permute and-branch))))))
 
 (deftest plan-nested-or-inside-and-test
   (testing "nested :or inside an :and branch keeps branch output aligned"
@@ -858,6 +869,18 @@
                         {:db/id :petr :name "Petr" :last-name "Ivanov"}
                         {:db/id :ivana :name "Ivana" :last-name "Ivanova"}])
       (is (= #{[["Ivan"] 1] [["Ivana"] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-or-and-branch-final-permute-test
+  (testing ":and branch results are emitted in the parent :or column order"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [?x ?y]
+                                    :where [(or [?x :edge ?y]
+                                                (and [?y :name ?x]
+                                                     [?y :edge ?x]))]})]
+      (h/transact node [{:db/id "node" :name "mirror" :edge "mirror"}])
+      (is (= #{[["node" "mirror"] 1]
+               [["mirror" "node"] 1]}
              (set (h/consume-delta! iq)))))))
 
 ;; --------------------------------------------------------------------------
