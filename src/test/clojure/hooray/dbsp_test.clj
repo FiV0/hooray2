@@ -69,11 +69,6 @@
                                             [?e :last-name ln]]}))))))
 
 (deftest rejects-unsupported-clauses-test
-  (testing "and clauses are rejected"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (dbsp/parse '{:find [?x]
-                               :where [(and [?x :name ?y]
-                                            [?x :last-name ?z])]}))))
   (testing "not clauses are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?x]
@@ -144,12 +139,16 @@
                                       [?e :sex :other])]})]
       (is (= [0 1 2] (mapv :index (:branches p))))))
 
-  (testing "rejects :and branch inside or"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (dbsp/parse '{:find [?e]
-                               :where [(or [?e :name "Ada"]
-                                           (and [?e :name "Bob"]
-                                                [?e :age 30]))]}))))
+  (testing "allows :and branch inside or"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or [?e :name "Ada"]
+                                      (and [?e :name "Bob"]
+                                           [?e :age 30]))]})]
+      (is (= :or (:kind p)))
+      (is (= :and (:kind (second (:branches p)))))
+      (is (= '[?e] (:vars (second (:branches p)))))
+      (is (= [:triple :triple]
+             (mapv :kind (:children (second (:branches p))))))))
 
   (testing "rejects :not branch inside or"
     (is (thrown? clojure.lang.ExceptionInfo
@@ -157,6 +156,16 @@
                                :where [[?e :name n]
                                        (or [?e :name "Ada"]
                                            (not [?e :name "Bob"]))]})))))
+
+  (testing "nested :or inside :and is preserved"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or (and [?e :sex :male]
+                                           (or [?e :name "Ivan"]
+                                               [?e :name "Bob"]))
+                                      [?e :sex :female])]})]
+      (is (= :and (:kind (first (:branches p)))))
+      (is (= [:triple :or]
+             (mapv :kind (:children (first (:branches p))))))))
 
 ;; --------------------------------------------------------------------------
 ;; Left-deep join order
@@ -350,6 +359,49 @@
         (is (= 2 (count (:branches inner))))
         (is (every? #(= '[?e] (:out-vars %)) (:branches inner)))))))
 
+(deftest plan-and-inside-or-test
+  (testing ":and branch inside :or lowers to an existing :join relation"
+    (let [p (dbsp/plan '{:find [name]
+                         :where [[?e :name name]
+                                 (or [?e :last-name name]
+                                     (and [?e :sex :male]
+                                          [?e :name name]))]})
+          join (:where-plan p)
+          [_outer or-pat] (:inputs join)
+          and-branch (second (:branches or-pat))]
+      (is (= :union (:kind or-pat)))
+      (is (= :join (:kind and-branch)))
+      (is (= '[?e name] (:out-vars and-branch)))
+      (is (= '[?e name] (:out-vars or-pat)))
+      (is (= '[?e name] (:right-vars (first (:steps join)))))))
+
+  (testing ":and branch is finally permuted when its natural join order differs"
+    (let [p (dbsp/plan '{:find [?x ?y]
+                         :where [(or [?x :edge ?y]
+                                     (and [?y :name ?x]
+                                          [?y :edge ?x]))]})
+          or-pat (:where-plan p)
+          and-branch (second (:branches or-pat))]
+      (is (= :join (:kind and-branch)))
+      (is (= '[?x ?y] (:out-vars and-branch)))
+      (is (= [1 0] (:final-permute and-branch))))))
+
+(deftest plan-nested-or-inside-and-test
+  (testing "nested :or inside an :and branch keeps branch output aligned"
+    (let [p (dbsp/plan '{:find [?e]
+                         :where [(or (and [?e :sex :male]
+                                          (or [?e :name "Ivan"]
+                                              [?e :name "Bob"]))
+                                     [?e :sex :female])]})
+          or-pat (:where-plan p)
+          and-branch (first (:branches or-pat))
+          nested-or (second (:inputs and-branch))]
+      (is (= :union (:kind or-pat)))
+      (is (= :join (:kind and-branch)))
+      (is (= :union (:kind nested-or)))
+      (is (= '[?e] (:out-vars and-branch)))
+      (is (= '[?e] (:out-vars nested-or))))))
+
 (deftest plan-or-deterministic-test
   (let [q '{:find [?e]
             :where [[?e :name name]
@@ -482,6 +534,20 @@
       ;; two :or nodes -> two plus, two distinct
       (is (= 2 (count (filter #(= "plus" %) ops))))
       (is (= 2 (count (filter #(= "distinct" %) ops)))))))
+
+(deftest assemble-and-inside-or-test
+  (testing ":and inside :or contributes its leaf triples and uses existing join"
+    (let [{:keys [circuit inputs leaves]} (assemble
+                                           '{:find [?e]
+                                             :where [(or [?e :sex :female]
+                                                         (and [?e :sex :male]
+                                                              [?e :name "Ivan"]))]})
+          ops (vec (.operatorNames circuit))]
+      (is (= 3 (count inputs)))
+      (is (= 3 (count leaves)))
+      (is (= 1 (count (filter #(= "incremental-join" %) ops))))
+      (is (= 1 (count (filter #(= "plus" %) ops))))
+      (is (= 1 (count (filter #(= "distinct" %) ops)))))))
 
 ;; --------------------------------------------------------------------------
 ;; Per-pattern delta construction
@@ -789,6 +855,32 @@
                         {:db/id 2 :name "Bob"}
                         {:db/id 3 :name "Dave"}])
       (is (= #{[[1] 1] [[2] 1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-or-branch-can-use-and-test
+  (testing ":standard supports existing query grammar where :or branches contain :and"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [[e :name name]
+                                            (or [e :last-name "Ivanova"]
+                                                (and [e :last-name "Ivanov"]
+                                                     [e :name "Ivan"]))]})]
+      (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                        {:db/id :petr :name "Petr" :last-name "Ivanov"}
+                        {:db/id :ivana :name "Ivana" :last-name "Ivanova"}])
+      (is (= #{[["Ivan"] 1] [["Ivana"] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-or-and-branch-final-permute-test
+  (testing ":and branch results are emitted in the parent :or column order"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [?x ?y]
+                                    :where [(or [?x :edge ?y]
+                                                (and [?y :name ?x]
+                                                     [?y :edge ?x]))]})]
+      (h/transact node [{:db/id "node" :name "mirror" :edge "mirror"}])
+      (is (= #{[["node" "mirror"] 1]
+               [["mirror" "node"] 1]}
+             (set (h/consume-delta! iq)))))))
 
 ;; --------------------------------------------------------------------------
 ;; End-to-end: nested :or
