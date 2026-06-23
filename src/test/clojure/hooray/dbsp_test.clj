@@ -373,8 +373,7 @@
       (is (= :join (:kind and-branch)))
       (is (= '[?e name] (:out-vars and-branch)))
       (is (= '[?e name] (:out-vars or-pat)))
-      (is (= '[?e name] (:right-vars (first (:steps join)))))
-      (is (not= :and (:kind and-branch)))))
+      (is (= '[?e name] (:right-vars (first (:steps join)))))))
 
   (testing ":and branch is finally permuted when its natural join order differs"
     (let [p (dbsp/plan '{:find [?x ?y]
