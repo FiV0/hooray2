@@ -38,14 +38,14 @@ class OrPattern @JvmOverloads constructor(
         return BindingSet(targetVariables, rows).distinctRows()
     }
 
-    override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
+    override fun validate(input: BindingSet): BindingSet {
         val rows = input.rows.filter { row ->
             val seededRow = BindingSet(input.variables, listOf(row))
             branches.any { branch ->
                 runBranch(seededRow, branch).rows.isNotEmpty()
             }
         }
-        return BindingSet(input.variables, rows).reorder(targetVariables)
+        return BindingSet(input.variables, rows)
     }
 
     private fun runBranch(seed: BindingSet, branch: List<Stage>): BindingSet {

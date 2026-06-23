@@ -54,11 +54,11 @@ class InputPattern private constructor(
         return input.extend(introduces, extensions).reorder(targetVariables)
     }
 
-    override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
+    override fun validate(input: BindingSet): BindingSet {
         val rows = input.rows.filter { row ->
             matchingRows(input.variables, row).isNotEmpty()
         }
-        return BindingSet(input.variables, rows).reorder(targetVariables)
+        return BindingSet(input.variables, rows)
     }
 
     private fun matchingRows(layout: List<Any>, row: BindingRow): List<BindingRow> {

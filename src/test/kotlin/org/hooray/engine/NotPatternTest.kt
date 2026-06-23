@@ -26,7 +26,7 @@ class NotPatternTest {
             ),
         )
 
-        val result = pattern.validate(input, listOf("?e"))
+        val result = pattern.validate(input)
 
         assertEquals(listOf(listOf("b")), result.rows)
     }
@@ -37,7 +37,7 @@ class NotPatternTest {
         override val variables: Set<Any> = emptySet()
         override val proposerEligible: Boolean = false
 
-        override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
+        override fun validate(input: BindingSet): BindingSet {
             return BindingSet(input.variables, input.rows.filter(keep))
         }
     }

@@ -102,10 +102,7 @@ interface ExecPattern {
         targetVariables: List<Any>
     ): BindingSet
 
-    fun validate(
-        input: BindingSet,
-        targetVariables: List<Any>
-    ): BindingSet
+    fun validate(input: BindingSet): BindingSet
 }
 ```
 
@@ -119,10 +116,11 @@ each row in a multi-participant stage, following the shape of Datatoad's
 
 `ExecPattern.propose` expands rows with introduced variables.
 
-`ExecPattern.validate` is a semijoin/filter over rows that contain at least the
-variables this stage is constraining. If all pattern variables are present it is
-ordinary validation; if only some are present it is an existential semijoin that
-keeps rows with at least one completion.
+`ExecPattern.validate` is a semijoin/filter over the current row layout. It does
+not introduce variables or choose a new layout. If all pattern variables are
+present it is ordinary validation; if only some are present it is an existential
+semijoin that keeps rows with at least one completion. The stage executor
+normalizes the final stage output to `targetVariables`.
 
 ## Planning semantics
 

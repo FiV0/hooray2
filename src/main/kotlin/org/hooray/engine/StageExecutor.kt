@@ -43,7 +43,7 @@ class StageExecutor {
     ): BindingSet {
         var current = input
         for (validator in validators) {
-            current = validator.validate(current, targetVariables)
+            current = validator.validate(current)
         }
         return current.reorder(targetVariables)
     }

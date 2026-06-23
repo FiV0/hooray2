@@ -73,7 +73,7 @@ class TriplePatternTest {
             ),
         )
 
-        val result = pattern.validate(input, listOf("?e", "?age"))
+        val result = pattern.validate(input)
 
         assertEquals(
             listOf(
@@ -102,7 +102,7 @@ class TriplePatternTest {
             ),
         )
 
-        val result = pattern.validate(input, listOf("?e"))
+        val result = pattern.validate(input)
 
         assertEquals(listOf(listOf("a")), result.rows)
     }

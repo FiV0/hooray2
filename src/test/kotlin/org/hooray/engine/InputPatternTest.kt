@@ -91,7 +91,7 @@ class InputPatternTest {
             ),
         )
 
-        val result = pattern.validate(input, listOf("?e", "?age"))
+        val result = pattern.validate(input)
 
         assertEquals(
             listOf(

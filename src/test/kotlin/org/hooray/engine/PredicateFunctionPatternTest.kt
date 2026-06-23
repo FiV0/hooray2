@@ -20,7 +20,7 @@ class PredicateFunctionPatternTest {
             ),
         )
 
-        val result = pattern.validate(input, listOf("?age"))
+        val result = pattern.validate(input)
 
         assertEquals(listOf(listOf(35)), result.rows)
     }
@@ -37,7 +37,7 @@ class PredicateFunctionPatternTest {
         )
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            pattern.validate(input, listOf("?e"))
+            pattern.validate(input)
         }
 
         assertEquals("Predicate variables must be bound before validation", error.message)
@@ -81,7 +81,7 @@ class PredicateFunctionPatternTest {
             ),
         )
 
-        val result = pattern.validate(input, listOf("?age", "?next"))
+        val result = pattern.validate(input)
 
         assertEquals(listOf(listOf(34, 35)), result.rows)
     }

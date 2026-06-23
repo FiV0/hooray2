@@ -6,7 +6,7 @@ class ValidatorOnlyPattern(
     override val variables: Set<Any> = delegate.variables
     override val proposerEligible: Boolean = false
 
-    override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
-        return delegate.validate(input, targetVariables)
+    override fun validate(input: BindingSet): BindingSet {
+        return delegate.validate(input)
     }
 }

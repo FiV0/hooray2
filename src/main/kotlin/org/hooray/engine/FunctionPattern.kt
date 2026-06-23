@@ -39,13 +39,13 @@ class FunctionPattern(
         return input.extend(introduces, extensions).reorder(targetVariables)
     }
 
-    override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
+    override fun validate(input: BindingSet): BindingSet {
         requireVariablesBound(input.variables, variables, "Function variables must be bound before validation")
 
         val returnIndex = input.columnIndex(returnVariable)
         val rows = input.rows.filter { row ->
             function.apply(arguments.map { argument -> argument.value(input.variables, row) }) == row[returnIndex]
         }
-        return BindingSet(input.variables, rows).reorder(targetVariables)
+        return BindingSet(input.variables, rows)
     }
 }

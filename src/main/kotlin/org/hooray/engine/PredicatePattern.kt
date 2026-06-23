@@ -9,12 +9,12 @@ class PredicatePattern(
     override val variables: Set<Any> = arguments.variables()
     override val proposerEligible: Boolean = false
 
-    override fun validate(input: BindingSet, targetVariables: List<Any>): BindingSet {
+    override fun validate(input: BindingSet): BindingSet {
         requireVariablesBound(input.variables, variables, "Predicate variables must be bound before validation")
 
         val rows = input.rows.filter { row ->
             predicate.apply(arguments.map { argument -> argument.value(input.variables, row) })
         }
-        return BindingSet(input.variables, rows).reorder(targetVariables)
+        return BindingSet(input.variables, rows)
     }
 }

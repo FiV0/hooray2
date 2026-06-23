@@ -16,8 +16,5 @@ interface ExecPattern {
         throw UnsupportedOperationException("Pattern is not proposer-eligible")
     }
 
-    fun validate(
-        input: BindingSet,
-        targetVariables: List<Any>,
-    ): BindingSet
+    fun validate(input: BindingSet): BindingSet
 }

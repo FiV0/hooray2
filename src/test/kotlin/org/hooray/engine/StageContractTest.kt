@@ -97,9 +97,6 @@ class StageContractTest {
             targetVariables: List<Any>,
         ): BindingSet = input
 
-        override fun validate(
-            input: BindingSet,
-            targetVariables: List<Any>,
-        ): BindingSet = input
+        override fun validate(input: BindingSet): BindingSet = input
     }
 }
