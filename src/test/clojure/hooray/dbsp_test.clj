@@ -435,10 +435,10 @@
           diff (:where-plan p)]
       (is (= :difference (:kind diff)))
       (is (= '[?e] (:key-vars diff)))
-      (is (nil? (:positive-permute diff)))
+      (is (not (contains? diff :positive-permute)))
       (is (= '[?e name] (:out-vars diff)))))
 
-  (testing "not records a positive permutation when the anti key is not leading"
+  (testing "not records the keyed positive shape when the anti key is not leading"
     (let [p (dbsp/plan '{:find [name city]
                          :where [[?e :name name]
                                  [name :city city]
@@ -448,7 +448,14 @@
       (is (= '[?e] (:key-vars diff)))
       (is (= '[name ?e city] (:out-vars diff)))
       (is (= '[?e name city] (:keyed-vars diff)))
-      (is (= [1 0 2] (:positive-permute diff))))))
+      (is (not (contains? diff :positive-permute)))))
+
+  (testing "bare not branch inside or parses but is rejected by planning"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [?e]
+                              :where [[?e :name n]
+                                      (or [?e :name "Ada"]
+                                          (not [?e :name "Bob"]))]})))))
 
 (deftest plan-or-deterministic-test
   (let [q '{:find [?e]

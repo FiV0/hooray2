@@ -10,7 +10,7 @@
             [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t])
-  (:import (org.hooray.dbsp Circuit DifferenceOp DistinctOp FilterOp IncrementalJoinOp MapOp PlusOp Tuple)
+  (:import (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp MinusOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
@@ -300,16 +300,13 @@
                        :positive-vars positive-vars
                        :missing-vars (vec missing-vars)})))
     (let [key-vars (vec (filter (set negative-vars) positive-vars))
-          keyed-vars (lead-with (set key-vars) positive-vars)
-          positive-permute (indices-of positive-vars keyed-vars)]
-      (cond-> {:kind :difference
-               :positive positive
-               :negative (plan-inputs (:children descriptor) key-vars)
-               :key-vars key-vars
-               :keyed-vars keyed-vars
-               :out-vars positive-vars}
-        (not= positive-permute (vec (range (count positive-vars))))
-        (assoc :positive-permute positive-permute)))))
+          keyed-vars (lead-with (set key-vars) positive-vars)]
+      {:kind :difference
+       :positive positive
+       :negative (plan-inputs (:children descriptor) key-vars)
+       :key-vars key-vars
+       :keyed-vars keyed-vars
+       :out-vars positive-vars})))
 
 (defn- apply-not-plans [positive nots]
   (reduce anti-difference-plan positive nots))
@@ -519,7 +516,7 @@
                                                      "incremental-join")
                                  positive-keyed
                                  distinct-negative-keys)
-        difference (.addBinary circuit (DifferenceOp.) positive-keyed matched-left)
+        difference (.addBinary circuit (MinusOp. "difference") positive-keyed matched-left)
         result (project-stream circuit difference keyed-vars out-vars)]
     {:stream result
      :vars out-vars
