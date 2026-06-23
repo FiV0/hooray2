@@ -49,7 +49,14 @@
      :branches [<descriptor> …]
      :vars     [vars in encounter order of the first branch]}
 
-  Other clause types (`:and`, `:not`, `:predicate`, `:fn`) are not yet
+  And descriptor:
+
+    {:index    <position in the immediate parent clause>
+     :kind     :and
+     :children [<descriptor> …]
+     :vars     [vars in encounter order across all children]}
+
+  Other clause types (`:not`, `:predicate`, `:fn`) are not yet
   supported and trigger `err/unsupported-ex`."
   [index [clause-type pattern]]
   (case clause-type
@@ -69,6 +76,12 @@
            :kind :or
            :branches branches
            :vars (:vars (first branches))})
+
+    :and (let [children (vec (map-indexed compile-pattern pattern))]
+           {:index index
+            :kind :and
+            :children children
+            :vars (vec (distinct (mapcat :vars children)))})
 
     (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
                         {:clause-type clause-type :pattern pattern})))
@@ -205,6 +218,7 @@
      :out-vars (vec target)}))
 
 (declare rel-plan)
+(declare plan-inputs)
 
 (defn- union-plan
   "Relation plan for an `or` descriptor. Every branch is planned with the same
@@ -214,12 +228,19 @@
    :out-vars (vec target)
    :branches (mapv #(rel-plan % target) (:branches descriptor))})
 
+(defn- and-plan
+  "Relation plan for an `and` descriptor. `and` is ordinary conjunction, so it
+  lowers directly to the existing join planner over its child relations."
+  [descriptor target]
+  (plan-inputs (:children descriptor) (vec target)))
+
 (defn- rel-plan
   "Plans one descriptor as a relation node that produces [target] variables."
   [descriptor target]
   (case (:kind descriptor)
     :triple (triple-plan descriptor target)
-    :or (union-plan descriptor target)))
+    :or (union-plan descriptor target)
+    :and (and-plan descriptor target)))
 
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."
@@ -246,53 +267,59 @@
 (defn- plan-inputs
   "Plans descriptors as one relation tree. Multiple descriptors become a
   left-deep `:join` node whose inputs are themselves relation nodes."
-  [descriptors]
-  (let [ordered (left-deep-order descriptors)]
-    (when (empty? ordered)
-      (throw (ex-info "query has no patterns" {})))
-    (if (= 1 (count ordered))
-      (rel-plan (first ordered) (:vars (first ordered)))
-      (let [var-sets (mapv #(set (:vars %)) ordered)
-            ;; keys*[i-1] is the variable set joining the accumulated result
-            ;; with ordered[i].
-            keys* (loop [i 1, accset (first var-sets), ks []]
-                    (if (>= i (count ordered))
-                      ks
-                      (recur (inc i)
-                             (set/union accset (nth var-sets i))
-                             (conj ks (set/intersection accset (nth var-sets i))))))
-            first-input (rel-plan (first ordered)
-                                  (lead-with (first keys*) (:vars (first ordered))))]
-        ;; Single left-to-right pass: each join's key column *order* is fixed by
-        ;; the accumulated (left) layout, and the right relation is arranged to
-        ;; that same key order so both sides' leading columns line up.
-        (loop [i 1
-               acc (:out-vars first-input)
-               inputs [first-input]
-               steps []]
-          (if (>= i (count ordered))
-            {:kind :join
-             :out-vars acc
-             :inputs inputs
-             :steps steps}
-            (let [ki (nth keys* (dec i))
-                  qi (nth ordered i)
-                  key-order (vec (filter ki acc))
-                  left-needed (into key-order (remove ki acc))
-                  permute (indices-of acc left-needed)
-                  qi-target (into key-order (remove ki (:vars qi)))
-                  right-input (rel-plan qi qi-target)
-                  out-vars (into left-needed (remove ki (:vars qi)))]
-              (recur (inc i)
-                     out-vars
-                     (conj inputs right-input)
-                     (conj steps {:right-vars (:out-vars right-input)
-                                  :key-arity (count ki)
-                                  :key-vars key-order
-                                  :left-permute (when (not= permute
-                                                            (vec (range (count acc))))
-                                                  permute)
-                                  :out-vars out-vars})))))))))
+  ([descriptors] (plan-inputs descriptors nil))
+  ([descriptors target]
+   (let [ordered (left-deep-order descriptors)
+         target* (some-> target vec)]
+     (when (empty? ordered)
+       (throw (ex-info "query has no patterns" {})))
+     (if (= 1 (count ordered))
+       (rel-plan (first ordered) (or target* (:vars (first ordered))))
+       (let [var-sets (mapv #(set (:vars %)) ordered)
+             ;; keys*[i-1] is the variable set joining the accumulated result
+             ;; with ordered[i].
+             keys* (loop [i 1, accset (first var-sets), ks []]
+                     (if (>= i (count ordered))
+                       ks
+                       (recur (inc i)
+                              (set/union accset (nth var-sets i))
+                              (conj ks (set/intersection accset (nth var-sets i))))))
+             first-input (rel-plan (first ordered)
+                                   (lead-with (first keys*) (:vars (first ordered))))]
+         ;; Single left-to-right pass: each join's key column *order* is fixed by
+         ;; the accumulated (left) layout, and the right relation is arranged to
+         ;; that same key order so both sides' leading columns line up.
+         (loop [i 1
+                acc (:out-vars first-input)
+                inputs [first-input]
+                steps []]
+           (if (>= i (count ordered))
+             (let [out-vars (or target* acc)
+                   final-permute (when (and target* (not= acc target*))
+                                   (indices-of acc target*))]
+               (cond-> {:kind :join
+                        :out-vars out-vars
+                        :inputs inputs
+                        :steps steps}
+                 final-permute (assoc :final-permute final-permute)))
+             (let [ki (nth keys* (dec i))
+                   qi (nth ordered i)
+                   key-order (vec (filter ki acc))
+                   left-needed (into key-order (remove ki acc))
+                   permute (indices-of acc left-needed)
+                   qi-target (into key-order (remove ki (:vars qi)))
+                   right-input (rel-plan qi qi-target)
+                   out-vars (into left-needed (remove ki (:vars qi)))]
+               (recur (inc i)
+                      out-vars
+                      (conj inputs right-input)
+                      (conj steps {:right-vars (:out-vars right-input)
+                                   :key-arity (count ki)
+                                   :key-vars key-order
+                                   :left-permute (when (not= permute
+                                                             (vec (range (count acc))))
+                                                   permute)
+                                   :out-vars out-vars}))))))))))
 
 (defn plan
   "Builds the full circuit plan for [query]:
@@ -385,9 +412,9 @@
 (defn- assemble-join
   "Wires a :join relation node into [circuit]. Inputs are assembled recursively,
   then joined left-to-right according to the planned join steps."
-  [^Circuit circuit {:keys [inputs steps out-vars]}]
+  [^Circuit circuit {:keys [inputs steps out-vars final-permute]}]
   (let [wired (mapv #(assemble-rel circuit %) inputs)
-        result (loop [i 1
+        joined (loop [i 1
                       acc (:stream (first wired))]
                  (if (>= i (count inputs))
                    acc
@@ -407,7 +434,10 @@
                                                                 "incremental-join")
                                             left
                                             right-stream)]
-                     (recur (inc i) joined))))]
+                     (recur (inc i) joined))))
+        result (if final-permute
+                 (.addUnary circuit (MapOp/permute (int-array final-permute)) joined)
+                 joined)]
     {:stream result
      :vars out-vars
      :handles (vec (mapcat :handles wired))
