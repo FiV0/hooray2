@@ -69,11 +69,6 @@
                                             [?e :last-name ln]]}))))))
 
 (deftest rejects-unsupported-clauses-test
-  (testing "not clauses are rejected"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (dbsp/parse '{:find [?x]
-                               :where [[?x :name ?y]
-                                       (not [?x :last-name "Smith"])]}))))
   (testing "predicate clauses are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?x] :where [[?x :age ?y] [(= ?y 1)]]}))))
@@ -150,12 +145,30 @@
       (is (= [:triple :triple]
              (mapv :kind (:children (second (:branches p))))))))
 
-  (testing "rejects :not branch inside or"
+  (testing "allows :not branch inside or"
+    (let [[_outer p] (patterns '{:find [?e]
+                                 :where [[?e :name n]
+                                         (or [?e :name "Ada"]
+                                             (not [?e :name "Bob"]))]})]
+      (is (= :or (:kind p)))
+      (is (= :not (:kind (second (:branches p)))))
+      (is (= '[?e] (:vars (second (:branches p))))))))
+
+(deftest compile-pattern-not-test
+  (testing "not descriptor carries child descriptors and free variables"
+    (let [[_outer p] (patterns '{:find [?e]
+                                 :where [[?e :name name]
+                                         (not [?e :last-name "Smith"])]})]
+      (is (= :not (:kind p)))
+      (is (= '[?e] (:vars p)))
+      (is (= 1 (count (:children p))))
+      (is (= :triple (:kind (first (:children p)))))))
+
+  (testing "not with unbound variables is rejected by query validation"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?e]
-                               :where [[?e :name n]
-                                       (or [?e :name "Ada"]
-                                           (not [?e :name "Bob"]))]})))))
+                               :where [[?e :name name]
+                                       (not [?other :last-name "Smith"])]})))))
 
   (testing "nested :or inside :and is preserved"
     (let [[p] (patterns '{:find [?e]
@@ -402,6 +415,41 @@
       (is (= '[?e] (:out-vars and-branch)))
       (is (= '[?e] (:out-vars nested-or))))))
 
+(deftest plan-not-test
+  (testing "not plans as anti-semijoin difference after the positive relation"
+    (let [p (dbsp/plan '{:find [name]
+                         :where [[?e :name name]
+                                 (not [?e :last-name "Smith"])]})
+          diff (:where-plan p)]
+      (is (= :difference (:kind diff)))
+      (is (= '[?e name] (:result-vars p)))
+      (is (= '[?e name] (:out-vars diff)))
+      (is (= '[?e] (:key-vars diff)))
+      (is (= :triple (:kind (:positive diff))))
+      (is (= :triple (:kind (:negative diff))))))
+
+  (testing "not keeps the positive side as-is when the anti key is already leading"
+    (let [p (dbsp/plan '{:find [name ?e]
+                         :where [[?e :name name]
+                                 (not [?e :last-name "Smith"])]})
+          diff (:where-plan p)]
+      (is (= :difference (:kind diff)))
+      (is (= '[?e] (:key-vars diff)))
+      (is (nil? (:positive-permute diff)))
+      (is (= '[?e name] (:out-vars diff)))))
+
+  (testing "not records a positive permutation when the anti key is not leading"
+    (let [p (dbsp/plan '{:find [name city]
+                         :where [[?e :name name]
+                                 [name :city city]
+                                 (not [?e :last-name "Smith"])]})
+          diff (:where-plan p)]
+      (is (= :difference (:kind diff)))
+      (is (= '[?e] (:key-vars diff)))
+      (is (= '[name ?e city] (:out-vars diff)))
+      (is (= '[?e name city] (:keyed-vars diff)))
+      (is (= [1 0 2] (:positive-permute diff))))))
+
 (deftest plan-or-deterministic-test
   (let [q '{:find [?e]
             :where [[?e :name name]
@@ -548,6 +596,19 @@
       (is (= 1 (count (filter #(= "incremental-join" %) ops))))
       (is (= 1 (count (filter #(= "plus" %) ops))))
       (is (= 1 (count (filter #(= "distinct" %) ops)))))))
+
+(deftest assemble-not-test
+  (testing "not assembles as distinct negative keys, semijoin, and difference"
+    (let [{:keys [circuit inputs leaves]} (assemble
+                                           '{:find [name]
+                                             :where [[?e :name name]
+                                                     (not [?e :last-name "Smith"])]})
+          ops (vec (.operatorNames circuit))]
+      (is (= 2 (count inputs)))
+      (is (= 2 (count leaves)))
+      (is (= 1 (count (filter #(= "distinct" %) ops))))
+      (is (= 1 (count (filter #(= "incremental-join" %) ops))))
+      (is (= 1 (count (filter #(= "difference" %) ops)))))))
 
 ;; --------------------------------------------------------------------------
 ;; Per-pattern delta construction
@@ -880,6 +941,57 @@
       (h/transact node [{:db/id "node" :name "mirror" :edge "mirror"}])
       (is (= #{[["node" "mirror"] 1]
                [["mirror" "node"] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-not-antijoin-test
+  (testing "adding a negative fact retracts matching positive rows"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [[e :name name]
+                                            (not [e :last-name "Smith"])]})]
+      (h/transact node [{:db/id 1 :name "Alice"}
+                        {:db/id 2 :name "Bob" :last-name "Smith"}])
+      (is (= #{[["Alice"] 1]}
+             (set (h/consume-delta! iq))))
+      (h/transact node [{:db/id 1 :last-name "Smith"}])
+      (is (= #{[["Alice"] -1]}
+             (set (h/consume-delta! iq))))))
+
+  (testing "retracting a negative fact re-adds matching positive rows"
+    (let [node (fresh-node)]
+      (h/transact node [{:db/id 1 :name "Alice" :last-name "Smith"}])
+      (let [iq (standard-q-inc node '{:find [name]
+                                      :where [[e :name name]
+                                              (not [e :last-name "Smith"])]})]
+        (h/transact node [[:db/retract 1 :last-name "Smith"]])
+        (is (= #{[["Alice"] 1]}
+               (set (h/consume-delta! iq)))))))
+
+  (testing "duplicate right-side keys do not multiply the retraction"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [[e :name name]
+                                            (not (or [e :last-name "Blocked"]
+                                                     [e :city "Blocked"]))]})]
+      (h/transact node [{:db/id 1 :name "Alice" :last-name "Blocked" :city "Blocked"}])
+      (is (nil? (h/consume-delta! iq)))
+      (h/transact node [[:db/retract 1 :last-name "Blocked"]])
+      (is (nil? (h/consume-delta! iq)))
+      (h/transact node [[:db/retract 1 :city "Blocked"]])
+      (is (= #{[["Alice"] 1]}
+             (set (h/consume-delta! iq))))))
+
+  (testing "not composes inside an and branch under or"
+    (let [node (fresh-node)
+          iq (standard-q-inc node '{:find [name]
+                                    :where [(or (and [e :name name]
+                                                     [e :last-name "Fallback"])
+                                                (and [e :name name]
+                                                     (not [e :last-name "Smith"])))]})]
+      (h/transact node [{:db/id 1 :name "Alice"}
+                        {:db/id 2 :name "Bob" :last-name "Smith"}
+                        {:db/id 3 :name "Fallback" :last-name "Fallback"}])
+      (is (= #{[["Alice"] 1] [["Fallback"] 1]}
              (set (h/consume-delta! iq)))))))
 
 ;; --------------------------------------------------------------------------

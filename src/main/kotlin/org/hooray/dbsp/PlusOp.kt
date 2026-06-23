@@ -18,3 +18,10 @@ class MinusOp(override val name: String = "minus") :
 
     override fun eval(left: TupleZSet, right: TupleZSet): TupleZSet = left.subtract(right)
 }
+
+/** Difference over z-set streams: `eval(a, b) = a - b`. */
+class DifferenceOp(override val name: String = "difference") :
+    BinaryOperator<TupleZSet, TupleZSet, TupleZSet> {
+
+    override fun eval(left: TupleZSet, right: TupleZSet): TupleZSet = left.subtract(right)
+}

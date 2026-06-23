@@ -42,6 +42,15 @@ class PrimitiveOpsTest {
     }
 
     @Test
+    fun `difference subtracts pointwise`() {
+        val difference = DifferenceOp()
+        assertEquals(
+            zset(a to 1, b to 1, c to -1),
+            difference.eval(zset(a to 1, b to 2), zset(b to 1, c to 1)),
+        )
+    }
+
+    @Test
     fun `D after I is the identity`() {
         val i = IntegrateOp()
         val d = DifferentiateOp()
