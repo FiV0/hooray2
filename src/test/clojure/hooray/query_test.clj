@@ -97,25 +97,8 @@
              (h/q '{:find [p1] :where [[p1 :name name]
                                        [p1 :last-name name]
                                        [p1 :name "Smith"]]} (h/db fix/*node*))))))
-#_
+
 (deftest test-or-branch-predicates-preserve-branch-identity
-  (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
-                          {:db/id "b" :name "B" :age 35}])
-
-  (is (= [["B" 35]]
-         (h/q
-          '{:find [?name ?age]
-            :where
-            [[?e :age ?age]
-             (or
-              (and [?e :name "A"]
-                   [(< ?age 30)])
-              (and [?e :name "B"]
-                   [(< ?age 40)]))
-             [?e :name ?name]]}
-          (h/db fix/*node*)))))
-
-(deftest binding-set-wco-or-branch-predicates-preserve-branch-identity
   (when (= :binding-set-wco (:algo fix/*opts*))
     (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
                             {:db/id "b" :name "B" :age 35}])
