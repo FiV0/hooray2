@@ -146,13 +146,16 @@
           (recur (set/union bound (set (:introduces stage)))
                  (conj stages stage)))))))
 
+(declare append-final-branch-validation-stage)
+
 (defn plan [conformed-query]
   (let [initial-bound (set (in->variables (:in conformed-query)))
         variable-order (query/query->variable-order conformed-query)
-        patterns (compile-patterns (:where conformed-query))]
+        patterns (compile-patterns (:where conformed-query))
+        stages (plan-stages initial-bound variable-order patterns)]
     {:initial-bound initial-bound
      :patterns patterns
-     :stages (plan-stages initial-bound variable-order patterns)}))
+     :stages (append-final-branch-validation-stage stages variable-order patterns)}))
 
 (defn- pattern-value [[value-type value]]
   (case value-type

@@ -43,7 +43,7 @@
 (create-ns 'tpch)
 (alias 'tpch 'tpch)
 
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
+(t/use-fixtures :each fix/with-each-query-engine fix/with-node fix/with-people-schema)
 
 (deftest test-sanity-check
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])
@@ -114,6 +114,24 @@
                    [(< ?age 40)]))
              [?e :name ?name]]}
           (h/db fix/*node*)))))
+
+(deftest binding-set-wco-or-branch-predicates-preserve-branch-identity
+  (when (= :binding-set-wco (:algo fix/*opts*))
+    (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
+                            {:db/id "b" :name "B" :age 35}])
+
+    (is (= [["B" 35]]
+           (h/q
+            '{:find [?name ?age]
+              :where
+              [[?e :age ?age]
+               (or
+                (and [?e :name "A"]
+                     [(< ?age 30)])
+                (and [?e :name "B"]
+                     [(< ?age 40)]))
+               [?e :name ?name]]}
+            (h/db fix/*node*))))))
 
 (deftest test-and-predicate-after-terminal-triple-does-not-over-index
   (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
@@ -651,14 +669,14 @@
                                             (or [e :sex :female]
                                                 (and [e :sex :male]
                                                      [e :name "Ivan"]))])))
-  (t/is (= [["Ivana"]
-            ["Ivan"]]
-           (h/q '{:find [name]
-                  :where [[e :name name]
-                          (or [e :sex :female]
-                              (and [e :sex :male]
-                                   [e :name "Ivan"]))]}
-                (h/db fix/*node*))))
+  (t/is (= #{["Ivana"]
+             ["Ivan"]}
+           (set (h/q '{:find [name]
+                       :where [[e :name name]
+                               (or [e :sex :female]
+                                   (and [e :sex :male]
+                                        [e :name "Ivan"]))]}
+                     (h/db fix/*node*)))))
 
   (t/is (= [[:ivan]]
            (h/q '{:find [e]

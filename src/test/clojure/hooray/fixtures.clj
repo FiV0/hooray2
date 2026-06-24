@@ -7,7 +7,13 @@
 (def ^:dynamic *opts* {:type :mem :storage :hash :algo :generic})
 (def ^:dynamic *node* nil)
 
+(def ^:private query-engines [:generic :binding-set-wco])
 (def ^:private dbsp-versions [:wcoj :standard])
+
+(defn with-each-query-engine [f]
+  (doseq [engine query-engines]
+    (binding [*opts* (assoc *opts* :algo engine)]
+      (f))))
 
 (defn with-each-dbsp-version [f]
   (doseq [version dbsp-versions]
