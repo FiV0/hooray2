@@ -17,9 +17,7 @@
     PredicatePattern
     Stage
     StageExecutor
-    StageKind
-    TriplePattern
-    ValidatorOnlyPattern)))
+    TriplePattern)))
 
 (defn- in->variables [in]
   (->> in
@@ -90,85 +88,71 @@
 (defn- overlaps? [introduces pattern]
   (seq (set/intersection (set introduces) (pattern-vars pattern))))
 
-(defn- ordinary-proposer [bound patterns]
-  (first
-   (filter
-    (fn [pattern]
-      (let [vars (pattern-vars pattern)
-            unbound (seq (remove bound (:variables pattern)))]
-        (case (:kind pattern)
-          (:triple :input) unbound
-          :function (and (not (contains? bound (:return-variable pattern)))
+(defn- groundable [bound pattern]
+  (let [vars (pattern-vars pattern)]
+    (case (:kind pattern)
+      (:triple :input :or) (set/difference vars bound)
+      :function (if (and (not (contains? bound (:return-variable pattern)))
                          (set/subset? (disj vars (:return-variable pattern)) bound))
-          false)))
-    patterns)))
+                  #{(:return-variable pattern)}
+                  #{})
+      (:predicate :not) #{})))
+
+(defn- groundable? [bound variable pattern]
+  (contains? (groundable bound pattern) variable))
+
+(defn- non-or-grounder? [bound variable pattern]
+  (and (not= :or (:kind pattern))
+       (groundable? bound variable pattern)))
 
 (defn- participant? [bound introduces pattern]
-  (let [new-bound (set/union bound (set introduces))]
-    (and (overlaps? introduces pattern)
-         (case (:kind pattern)
-          (:triple :input :or) true
-          (:predicate :function :not) (set/subset? (pattern-vars pattern) new-bound)
-          false))))
-
-(defn- participant [role pattern]
-  {:id (:id pattern)
-   :kind (:kind pattern)
-   :role role
-   :variables (:variables pattern)
-   :pattern pattern})
+  (let [vars (pattern-vars pattern)
+        new-bound (set/union bound (set introduces))
+        newly-covered? (and (set/subset? vars new-bound)
+                            (not (set/subset? vars bound)))]
+    (case (:kind pattern)
+      (:triple :input :or) (overlaps? introduces pattern)
+      (:predicate :function :not) newly-covered?
+      false)))
 
 (defn- stage-target [bound introduces]
   (vec (distinct (concat bound introduces))))
 
-(defn- ordinary-stage [bound patterns proposer]
-  (let [introduces (vec (remove bound (:variables proposer)))
-        participants (->> patterns
-                          (filter #(or (= (:id %) (:id proposer))
-                                       (participant? bound introduces %)))
-                          (mapv #(participant (if (= (:id %) (:id proposer))
-                                                :proposer
-                                                :validator)
-                                              %)))]
-    {:kind :ordinary
-     :introduces introduces
+(defn- stage [bound patterns introduces]
+  (let [participants (filterv #(participant? bound introduces %) patterns)]
+    {:introduces introduces
      :participants participants
      :target-variables (stage-target bound introduces)}))
 
-(defn- or-proposal-stage [bound patterns]
-  (let [or-patterns (filter #(= :or (:kind %)) patterns)
-        proposer (first (filter #(seq (remove bound (:variables %))) or-patterns))
-        introduces (vec (remove bound (:variables proposer)))
-        participants (->> or-patterns
-                          (filter #(or (= (:id %) (:id proposer))
-                                       (participant? bound introduces %)))
-                          (mapv #(participant (if (= (:id %) (:id proposer))
-                                                :proposer
-                                                :validator)
-                                              %)))]
-    {:kind :or-proposal-boundary
-     :introduces introduces
-     :participants participants
-     :target-variables (stage-target bound introduces)}))
+(defn- stage-for-variable [bound patterns variable]
+  (if (some #(non-or-grounder? bound variable %) patterns)
+    (stage bound patterns [variable])
+    (if-let [or-pattern (first (filter #(and (= :or (:kind %))
+                                             (groundable? bound variable %))
+                                       patterns))]
+      (stage bound patterns (vec (groundable bound or-pattern)))
+      (err/unsupported-ex
+       "BindingSet planner cannot ground variable"
+       {:variable variable :bound bound}))))
 
-(defn- plan-stages [initial-bound patterns]
+(defn- plan-stages [initial-bound variable-order patterns]
   (loop [bound (set initial-bound)
          stages []]
-    (let [all-vars (set (mapcat :variables patterns))]
-      (if (set/subset? all-vars bound)
+    (let [required-vars (set variable-order)]
+      (if (set/subset? required-vars bound)
         stages
-        (let [stage (if-let [proposer (ordinary-proposer bound patterns)]
-                      (ordinary-stage bound patterns proposer)
-                      (or-proposal-stage bound patterns))]
+        (let [variable (first (remove bound variable-order))
+              stage (stage-for-variable bound patterns variable)]
           (recur (set/union bound (set (:introduces stage)))
                  (conj stages stage)))))))
 
 (defn plan [conformed-query]
   (let [initial-bound (set (in->variables (:in conformed-query)))
+        variable-order (query/query->variable-order conformed-query)
         patterns (compile-patterns (:where conformed-query))]
     {:initial-bound initial-bound
      :patterns patterns
-     :stages (plan-stages initial-bound patterns)}))
+     :stages (plan-stages initial-bound variable-order patterns)}))
 
 (defn- pattern-value [[value-type value]]
   (case value-type
@@ -188,46 +172,80 @@
       (boolean (apply f args)))))
 
 (defn- final-branch-validation-stage [target-variables patterns]
-  {:kind :ordinary
-   :introduces []
-   :participants (mapv #(participant :validator %) patterns)
+  {:introduces []
+   :participants (filterv #(set/subset? (pattern-vars %) (set target-variables))
+                          patterns)
    :target-variables target-variables})
 
+(defn- append-final-branch-validation-stage [stages target-variables patterns]
+  (let [stage (final-branch-validation-stage target-variables patterns)]
+    (if (seq (:participants stage))
+      (conj stages stage)
+      stages)))
+
 (defn- branch-stage-maps [seed-variables patterns]
-  (let [stages (plan-stages (set seed-variables) patterns)
+  (let [variable-order (vec (distinct (concat seed-variables (mapcat :variables patterns))))
+        stages (plan-stages (set seed-variables) variable-order patterns)
         target-variables (if (seq stages)
                            (:target-variables (last stages))
                            (vec seed-variables))]
-    (conj stages (final-branch-validation-stage target-variables patterns))))
+    (append-final-branch-validation-stage stages target-variables patterns)))
 
-(defn- exec-or-pattern [indexes stage participant pattern]
-  (let [seed-variables (if (= :proposer (:role participant))
-                         (vec (remove (set (:introduces stage)) (:target-variables stage)))
-                         (:target-variables stage))
-        branches (mapv (fn [branch]
-                         (mapv (partial exec-stage indexes)
-                               (branch-stage-maps seed-variables (:patterns branch))))
-                       (:branches pattern))]
-    (OrPattern. (set (:variables pattern))
-                branches
-                (= :proposer (:role participant)))))
+(defn- groundable-closure [seed-variables patterns]
+  (loop [bound (set seed-variables)]
+    (let [next-bound (reduce set/union bound (map #(groundable bound %) patterns))]
+      (if (= bound next-bound)
+        bound
+        (recur next-bound)))))
 
-(defn- exec-not-pattern [indexes stage pattern]
+(defn- branch-validation-stage-maps [seed-variables patterns]
+  (let [closed-vars (groundable-closure seed-variables patterns)
+        variable-order (->> (concat seed-variables (mapcat :variables patterns))
+                            distinct
+                            (filter closed-vars)
+                            vec)
+        stages (plan-stages (set seed-variables) variable-order patterns)
+        target-variables (if (seq stages)
+                           (:target-variables (last stages))
+                           (vec seed-variables))]
+    (append-final-branch-validation-stage stages target-variables patterns)))
+
+(defn- exec-or-pattern [indexes stage idx pattern]
+  (let [proposal-seed-variables (vec (remove (set (:introduces stage))
+                                             (:target-variables stage)))
+        validation-seed-variables (:target-variables stage)
+        proposal-branches (when (set/subset? (pattern-vars pattern)
+                                             (set (:target-variables stage)))
+                            (try
+                              (mapv (fn [branch]
+                                      (mapv (partial exec-stage indexes)
+                                            (branch-stage-maps proposal-seed-variables
+                                                               (:patterns branch))))
+                                    (:branches pattern))
+                              (catch clojure.lang.ExceptionInfo _ nil)))
+        validation-branches (mapv (fn [branch]
+                                    (mapv (partial exec-stage indexes)
+                                          (branch-validation-stage-maps validation-seed-variables
+                                                                        (:patterns branch))))
+                                  (:branches pattern))]
+    (OrPattern. idx
+                (set (:variables pattern))
+                (or proposal-branches [])
+                validation-branches
+                (boolean proposal-branches))))
+
+(defn- exec-not-pattern [indexes stage idx pattern]
   (let [seed-variables (:target-variables stage)
         branch (mapv (partial exec-stage indexes)
                      (branch-stage-maps seed-variables (:patterns pattern)))]
-    (NotPattern. (set (:variables pattern)) branch)))
+    (NotPattern. idx (set (:variables pattern)) branch)))
 
-(defn- role-pattern [role exec-pattern]
-  (if (= :validator role)
-    (ValidatorOnlyPattern. exec-pattern)
-    exec-pattern))
-
-(defn- exec-pattern [indexes stage {:keys [role pattern] :as participant}]
+(defn- exec-pattern [indexes stage idx pattern]
   (let [{:keys [kind raw]} pattern
         executable (case kind
                      :triple (let [[_ {:keys [e a v]}] raw]
-                               (TriplePattern. (:eav indexes)
+                               (TriplePattern. idx
+                                               (:eav indexes)
                                                (:aev indexes)
                                                (:ave indexes)
                                                (pattern-value e)
@@ -235,33 +253,32 @@
                                                (pattern-value v)))
 
                      :predicate (let [[_ {:keys [predicate args]}] raw]
-                                  (PredicatePattern. (mapv pattern-value args)
+                                  (PredicatePattern. idx
+                                                     (mapv pattern-value args)
                                                      (call-predicate (query/resolve-fn predicate))))
 
                      :function (let [[_ [{:keys [fun args]} ret-var]] raw]
-                                 (FunctionPattern. (mapv pattern-value args)
+                                 (FunctionPattern. idx
+                                                   (mapv pattern-value args)
                                                    ret-var
                                                    (call-function (query/resolve-fn fun))))
 
-                     :or (exec-or-pattern indexes stage participant pattern)
+                     :or (exec-or-pattern indexes stage idx pattern)
 
-                     :not (exec-not-pattern indexes stage pattern)
+                     :not (exec-not-pattern indexes stage idx pattern)
 
                      (err/unsupported-ex
                       "BindingSet internal query path does not support this pattern yet"
-                      {:kind kind :pattern pattern :role role}))]
-    (role-pattern role executable)))
+                      {:kind kind :pattern pattern}))]
+    executable))
 
-(defn- stage-kind [kind]
-  (case kind
-    :ordinary StageKind/ORDINARY
-    :or-proposal-boundary StageKind/OR_PROPOSAL_BOUNDARY))
-
-(defn- exec-stage [indexes {:keys [kind introduces participants target-variables] :as stage}]
+(defn- exec-stage [indexes {:keys [introduces participants target-variables] :as stage}]
   (Stage. introduces
-          (mapv (partial exec-pattern indexes stage) participants)
-          target-variables
-          (stage-kind kind)))
+          (mapv (fn [idx pattern]
+                  (exec-pattern indexes stage idx pattern))
+                (range)
+                participants)
+          target-variables))
 
 (defn- input-relation [[binding-type binding] arg]
   (case binding-type
@@ -295,10 +312,10 @@
   (let [bound-vars (vec (.getVariables bindings))
         introduces (vec (remove (set bound-vars) variables))
         target-vars (vec (distinct (concat bound-vars variables)))
-        pattern (InputPattern/relation variables rows)]
+        pattern (InputPattern/relation 0 variables rows)]
     (if (seq introduces)
       (.propose pattern bindings introduces target-vars)
-      (.validate pattern bindings target-vars))))
+      (.validate pattern bindings))))
 
 (defn- initial-bindings [conformed-query args]
   (let [in (:in conformed-query)]

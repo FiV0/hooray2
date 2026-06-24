@@ -1,6 +1,7 @@
 package org.hooray.engine
 
 class InputPattern private constructor(
+    override val idx: Int,
     private val orderedVariables: List<Any>,
     private val bindingRows: List<BindingRow>,
 ) : ExecPattern {
@@ -16,19 +17,23 @@ class InputPattern private constructor(
     }
 
     override val variables: Set<Any> = orderedVariables.toSet()
-    override val proposerEligible: Boolean = true
 
-    override fun count(input: BindingSet, introduces: List<Any>): List<Int> {
-        require(variables.containsAll(introduces)) {
-            "Input pattern cannot introduce variables it does not contain"
+    override fun count(
+        input: BindingSet,
+        introduces: List<Any>,
+        proposals: List<Proposal>,
+    ): List<Proposal> {
+        if (!variables.containsAll(introduces)) {
+            return proposals
         }
 
-        return input.rows.map { row ->
+        val counts = input.rows.map { row ->
             matchingRows(input.variables, row)
                 .map { bindingRow -> introducedValues(bindingRow, introduces) }
                 .toSet()
                 .size
         }
+        return updateProposals(idx, proposals, counts)
     }
 
     override fun propose(
@@ -81,8 +86,9 @@ class InputPattern private constructor(
 
     companion object {
         @JvmStatic
-        fun scalar(variable: Any, values: List<Any>): InputPattern {
+        fun scalar(idx: Int, variable: Any, values: List<Any>): InputPattern {
             return relation(
+                idx = idx,
                 variables = listOf(variable),
                 rows = values.map { value -> listOf(value) },
             )
@@ -90,8 +96,9 @@ class InputPattern private constructor(
 
         @JvmStatic
         fun relation(
+            idx: Int,
             variables: List<Any>,
             rows: List<BindingRow>,
-        ): InputPattern = InputPattern(variables, rows)
+        ): InputPattern = InputPattern(idx, variables, rows)
     }
 }

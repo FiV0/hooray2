@@ -54,13 +54,16 @@
                                 :where [[?e :age ?age]
                                         [(< ?age 40)]
                                         [?e :name ?name]]}))
-        [stage] (:stages p)]
-    (is (= :ordinary (:kind stage)))
-    (is (= '[?e ?age] (:introduces stage)))
-    (is (= [[:triple :proposer]
-            [:predicate :validator]
-            [:triple :validator]]
-           (mapv (juxt :kind :role) (:participants stage))))))
+        [entity-stage age-stage name-stage] (:stages p)]
+    (is (= '[?e] (:introduces entity-stage)))
+    (is (= [:triple :triple]
+           (mapv :kind (:participants entity-stage))))
+    (is (= '[?age] (:introduces age-stage)))
+    (is (= [:triple :predicate]
+           (mapv :kind (:participants age-stage))))
+    (is (= '[?name] (:introduces name-stage)))
+    (is (= [:triple]
+           (mapv :kind (:participants name-stage))))))
 
 (deftest or-validates-when-an-ordinary-pattern-proposes-overlapping-variables
   (let [p (plan/plan (conform '{:find [?e ?age]
@@ -68,23 +71,20 @@
                                         (or [?e :name "A"]
                                             [?e :title "A"])]}))
         [stage] (:stages p)]
-    (is (= :ordinary (:kind stage)))
-    (is (= [[:triple :proposer]
-            [:or :validator]]
-           (mapv (juxt :kind :role) (:participants stage))))))
+    (is (= '[?e] (:introduces stage)))
+    (is (= [:triple :or]
+           (mapv :kind (:participants stage))))))
 
-(deftest or-only-query-uses-dedicated-or-proposal-boundary
+(deftest or-only-query-introduces-all-or-variables-together
   (let [p (plan/plan (conform '{:find [?a ?x]
                                 :where [(or [?a :r ?x]
                                             [?a :s ?x])
                                         (or [?a :p ?x]
                                             [?a :q ?x])]}))
         [stage] (:stages p)]
-    (is (= :or-proposal-boundary (:kind stage)))
     (is (= '[?a ?x] (:introduces stage)))
-    (is (= [[:or :proposer]
-            [:or :validator]]
-           (mapv (juxt :kind :role) (:participants stage))))))
+    (is (= [:or :or]
+           (mapv :kind (:participants stage))))))
 
 (deftest internal-binding-set-query-runs-all-triple-query
   (let [node (fresh-node)

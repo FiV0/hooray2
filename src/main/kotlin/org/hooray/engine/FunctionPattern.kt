@@ -3,6 +3,7 @@ package org.hooray.engine
 import java.util.function.Function
 
 class FunctionPattern(
+    override val idx: Int,
     private val arguments: List<PatternValue>,
     private val returnVariable: Any,
     private val function: Function<List<Any>, Any>,
@@ -10,14 +11,19 @@ class FunctionPattern(
     private val argumentVariables = arguments.variables()
 
     override val variables: Set<Any> = argumentVariables + returnVariable
-    override val proposerEligible: Boolean = true
 
-    override fun count(input: BindingSet, introduces: List<Any>): List<Int> {
-        require(introduces == listOf(returnVariable)) {
-            "Function pattern can only introduce its return variable"
+    override fun count(
+        input: BindingSet,
+        introduces: List<Any>,
+        proposals: List<Proposal>,
+    ): List<Proposal> {
+        if (introduces != listOf(returnVariable)) {
+            return proposals
         }
-        requireVariablesBound(input.variables, argumentVariables, "Function input variables must be bound before proposal")
-        return List(input.rowCount) { 1 }
+        if (!input.variables.containsAll(argumentVariables)) {
+            return proposals
+        }
+        return updateProposals(idx, proposals, List(input.rowCount) { 1 })
     }
 
     override fun propose(

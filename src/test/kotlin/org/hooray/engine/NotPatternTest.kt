@@ -10,11 +10,12 @@ class NotPatternTest {
         val branch = listOf(
             Stage(
                 introduces = emptyList(),
-                participants = listOf(FilteringPattern { row -> row[0] == "a" }),
+                participants = listOf(FilteringPattern(idx = 0) { row -> row[0] == "a" }),
                 targetVariables = listOf("?e"),
             ),
         )
         val pattern = NotPattern(
+            idx = 0,
             variables = setOf("?e"),
             branch = branch,
         )
@@ -32,10 +33,10 @@ class NotPatternTest {
     }
 
     private class FilteringPattern(
+        override val idx: Int,
         private val keep: (BindingRow) -> Boolean,
     ) : ExecPattern {
         override val variables: Set<Any> = emptySet()
-        override val proposerEligible: Boolean = false
 
         override fun validate(input: BindingSet): BindingSet {
             return BindingSet(input.variables, input.rows.filter(keep))

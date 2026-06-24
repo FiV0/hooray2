@@ -9,6 +9,7 @@ class PredicateFunctionPatternTest {
     @Test
     fun `predicate validates bound argument rows`() {
         val pattern = PredicatePattern(
+            idx = 0,
             arguments = listOf(PatternValue.Variable("?age"), PatternValue.Constant(40)),
             predicate = { args -> (args[0] as Int) < (args[1] as Int) },
         )
@@ -28,6 +29,7 @@ class PredicateFunctionPatternTest {
     @Test
     fun `predicate validation requires variable arguments to be bound`() {
         val pattern = PredicatePattern(
+            idx = 0,
             arguments = listOf(PatternValue.Variable("?age")),
             predicate = { true },
         )
@@ -46,6 +48,7 @@ class PredicateFunctionPatternTest {
     @Test
     fun `function proposes return variable from bound inputs`() {
         val pattern = FunctionPattern(
+            idx = 0,
             arguments = listOf(PatternValue.Variable("?age")),
             returnVariable = "?next",
             function = { args -> (args[0] as Int) + 1 },
@@ -55,7 +58,10 @@ class PredicateFunctionPatternTest {
             rows = listOf(listOf(34)),
         )
 
-        assertEquals(listOf(1), pattern.count(input, listOf("?next")))
+        assertEquals(
+            listOf(Proposal(0, 1)),
+            pattern.count(input, listOf("?next"), initialProposals(input)),
+        )
 
         val result = pattern.propose(
             input = input,
@@ -69,6 +75,7 @@ class PredicateFunctionPatternTest {
     @Test
     fun `function validates already bound return variable`() {
         val pattern = FunctionPattern(
+            idx = 0,
             arguments = listOf(PatternValue.Variable("?age")),
             returnVariable = "?next",
             function = { args -> (args[0] as Int) + 1 },
@@ -85,4 +92,7 @@ class PredicateFunctionPatternTest {
 
         assertEquals(listOf(listOf(34, 35)), result.rows)
     }
+
+    private fun initialProposals(input: BindingSet): List<Proposal> =
+        List(input.rowCount) { Proposal(NO_PROPOSAL, Int.MAX_VALUE) }
 }

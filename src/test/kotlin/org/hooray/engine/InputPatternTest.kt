@@ -7,10 +7,13 @@ class InputPatternTest {
 
     @Test
     fun `scalar input proposes one variable`() {
-        val pattern = InputPattern.scalar("?e", listOf("a", "b"))
+        val pattern = InputPattern.scalar(0, "?e", listOf("a", "b"))
         val input = BindingSet(variables = emptyList(), rows = listOf(emptyList()))
 
-        assertEquals(listOf(2), pattern.count(input, listOf("?e")))
+        assertEquals(
+            listOf(Proposal(0, 2)),
+            pattern.count(input, listOf("?e"), initialProposals(input)),
+        )
 
         val result = pattern.propose(
             input = input,
@@ -24,6 +27,7 @@ class InputPatternTest {
     @Test
     fun `relation input proposes correlated tuples`() {
         val pattern = InputPattern.relation(
+            idx = 0,
             variables = listOf("?e", "?age"),
             rows = listOf(
                 listOf("a", 35),
@@ -50,6 +54,7 @@ class InputPatternTest {
     @Test
     fun `input proposal respects already bound variables`() {
         val pattern = InputPattern.relation(
+            idx = 0,
             variables = listOf("?e", "?age"),
             rows = listOf(
                 listOf("a", 35),
@@ -76,6 +81,7 @@ class InputPatternTest {
     @Test
     fun `input validation filters existing rows`() {
         val pattern = InputPattern.relation(
+            idx = 0,
             variables = listOf("?e", "?age"),
             rows = listOf(
                 listOf("a", 35),
@@ -101,4 +107,7 @@ class InputPatternTest {
             result.rows,
         )
     }
+
+    private fun initialProposals(input: BindingSet): List<Proposal> =
+        List(input.rowCount) { Proposal(NO_PROPOSAL, Int.MAX_VALUE) }
 }

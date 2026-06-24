@@ -37,6 +37,7 @@ class StageExecutorTest {
             ),
         )
         val proposer = MapProposer(
+            idx = 0,
             variables = setOf("?e", "?age"),
             proposedValues = mapOf(
                 listOf("a") to listOf(listOf(35)),
@@ -67,6 +68,7 @@ class StageExecutorTest {
             ),
         )
         val proposerA = MapProposer(
+            idx = 0,
             variables = setOf("?e", "?x"),
             counts = mapOf(
                 listOf("a") to 5,
@@ -78,6 +80,7 @@ class StageExecutorTest {
             ),
         )
         val proposerB = MapProposer(
+            idx = 1,
             variables = setOf("?e", "?x"),
             counts = mapOf(
                 listOf("a") to 1,
@@ -100,8 +103,8 @@ class StageExecutorTest {
         assertEquals(listOf(listOf("a")), proposerB.proposedInputs)
         assertEquals(
             listOf(
-                listOf("b", 20),
                 listOf("a", 10),
+                listOf("b", 20),
             ),
             result.rows,
         )
@@ -118,6 +121,7 @@ class StageExecutorTest {
             ),
         )
         val proposer = MapProposer(
+            idx = 0,
             variables = setOf("?e", "?x"),
             proposedValues = mapOf(
                 listOf("a") to listOf(listOf(10)),
@@ -137,10 +141,10 @@ class StageExecutorTest {
     }
 
     private class FilteringPattern(
+        override val idx: Int = 99,
         private val keep: (BindingRow) -> Boolean,
     ) : ExecPattern {
         override val variables: Set<Any> = emptySet()
-        override val proposerEligible: Boolean = false
 
         override fun validate(input: BindingSet): BindingSet {
             return BindingSet(input.variables, input.rows.filter(keep))
@@ -148,17 +152,22 @@ class StageExecutorTest {
     }
 
     private class MapProposer(
+        override val idx: Int,
         override val variables: Set<Any>,
         private val counts: Map<BindingRow, Int> = emptyMap(),
         private val proposedValues: Map<BindingRow, List<BindingRow>>,
     ) : ExecPattern {
-        override val proposerEligible: Boolean = true
         val proposedInputs = mutableListOf<BindingRow>()
 
-        override fun count(input: BindingSet, introduces: List<Any>): List<Int> {
-            return input.rows.map { row ->
+        override fun count(
+            input: BindingSet,
+            introduces: List<Any>,
+            proposals: List<Proposal>,
+        ): List<Proposal> {
+            val counts = input.rows.map { row ->
                 counts[row] ?: (proposedValues[row]?.size ?: 0)
             }
+            return updateProposals(idx, proposals, counts)
         }
 
         override fun propose(

@@ -1,7 +1,6 @@
 package org.hooray.engine
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -10,8 +9,8 @@ class StageContractTest {
 
     @Test
     fun `stage records introduced variables participants and target layout`() {
-        val proposer = RecordingPattern(variables = setOf("?e"), proposerEligible = true)
-        val validator = RecordingPattern(variables = setOf("?e", "?age"), proposerEligible = false)
+        val proposer = RecordingPattern(idx = 0, variables = setOf("?e"))
+        val validator = RecordingPattern(idx = 1, variables = setOf("?e", "?age"))
 
         val stage = Stage(
             introduces = listOf("?e"),
@@ -22,15 +21,12 @@ class StageContractTest {
         assertEquals(listOf("?e"), stage.introduces)
         assertEquals(listOf(proposer, validator), stage.participants)
         assertEquals(listOf("?e"), stage.targetVariables)
-        assertEquals(StageKind.ORDINARY, stage.kind)
         assertTrue(stage.introducesVariables)
-        assertTrue(proposer.proposerEligible)
-        assertFalse(validator.proposerEligible)
     }
 
     @Test
     fun `zero introduce validation stage is representable`() {
-        val validator = RecordingPattern(variables = setOf("?e"), proposerEligible = false)
+        val validator = RecordingPattern(idx = 0, variables = setOf("?e"))
 
         val stage = Stage(
             introduces = emptyList(),
@@ -38,24 +34,8 @@ class StageContractTest {
             targetVariables = listOf("?e"),
         )
 
-        assertFalse(stage.introducesVariables)
-        assertEquals(StageKind.ORDINARY, stage.kind)
-        assertEquals(listOf(validator), stage.validatorOnlyParticipants)
-    }
-
-    @Test
-    fun `dedicated or proposal boundary is explicit`() {
-        val orPattern = RecordingPattern(variables = setOf("?x", "?c"), proposerEligible = true)
-
-        val stage = Stage(
-            introduces = listOf("?x", "?c"),
-            participants = listOf(orPattern),
-            targetVariables = listOf("?a", "?x", "?c"),
-            kind = StageKind.OR_PROPOSAL_BOUNDARY,
-        )
-
-        assertEquals(StageKind.OR_PROPOSAL_BOUNDARY, stage.kind)
-        assertTrue(stage.introducesVariables)
+        assertEquals(emptyList<Any>(), stage.introduces)
+        assertEquals(listOf(validator), stage.participants)
     }
 
     @Test
@@ -63,7 +43,7 @@ class StageContractTest {
         val error = assertThrows(IllegalArgumentException::class.java) {
             Stage(
                 introduces = listOf("?x", "?x"),
-                participants = listOf(RecordingPattern(variables = setOf("?x"), proposerEligible = true)),
+                participants = listOf(RecordingPattern(idx = 0, variables = setOf("?x"))),
                 targetVariables = listOf("?x"),
             )
         }
@@ -76,7 +56,7 @@ class StageContractTest {
         val error = assertThrows(IllegalArgumentException::class.java) {
             Stage(
                 introduces = listOf("?x"),
-                participants = listOf(RecordingPattern(variables = setOf("?x"), proposerEligible = true)),
+                participants = listOf(RecordingPattern(idx = 0, variables = setOf("?x"))),
                 targetVariables = listOf("?a"),
             )
         }
@@ -84,12 +64,31 @@ class StageContractTest {
         assertEquals("Stage target variables must contain introduced variables", error.message)
     }
 
+    @Test
+    fun `stage rejects duplicate participant indexes`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            Stage(
+                introduces = listOf("?x"),
+                participants = listOf(
+                    RecordingPattern(idx = 0, variables = setOf("?x")),
+                    RecordingPattern(idx = 0, variables = setOf("?x")),
+                ),
+                targetVariables = listOf("?x"),
+            )
+        }
+
+        assertEquals("Stage participant indexes must be distinct", error.message)
+    }
+
     private data class RecordingPattern(
+        override val idx: Int,
         override val variables: Set<Any>,
-        override val proposerEligible: Boolean,
     ) : ExecPattern {
-        override fun count(input: BindingSet, introduces: List<Any>): List<Int> =
-            List(input.rowCount) { 1 }
+        override fun count(
+            input: BindingSet,
+            introduces: List<Any>,
+            proposals: List<Proposal>,
+        ): List<Proposal> = updateProposals(idx, proposals, List(input.rowCount) { 1 })
 
         override fun propose(
             input: BindingSet,

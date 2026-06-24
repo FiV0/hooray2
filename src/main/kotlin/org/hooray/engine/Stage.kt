@@ -1,15 +1,9 @@
 package org.hooray.engine
 
-enum class StageKind {
-    ORDINARY,
-    OR_PROPOSAL_BOUNDARY,
-}
-
 data class Stage(
     val introduces: List<Any>,
     val participants: List<ExecPattern>,
     val targetVariables: List<Any>,
-    val kind: StageKind = StageKind.ORDINARY,
 ) {
     init {
         require(introduces.toSet().size == introduces.size) {
@@ -24,14 +18,11 @@ data class Stage(
         require(participants.isNotEmpty()) {
             "Stage must have at least one participant"
         }
+        require(participants.map { it.idx }.toSet().size == participants.size) {
+            "Stage participant indexes must be distinct"
+        }
     }
 
     val introducesVariables: Boolean
         get() = introduces.isNotEmpty()
-
-    val proposerEligibleParticipants: List<ExecPattern>
-        get() = participants.filter { it.proposerEligible }
-
-    val validatorOnlyParticipants: List<ExecPattern>
-        get() = participants.filterNot { it.proposerEligible }
 }

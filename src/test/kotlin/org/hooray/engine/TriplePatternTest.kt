@@ -16,7 +16,10 @@ class TriplePatternTest {
         )
         val input = BindingSet(variables = emptyList(), rows = listOf(emptyList()))
 
-        assertEquals(listOf(1), pattern.count(input, listOf("?age")))
+        assertEquals(
+            listOf(Proposal(0, 1)),
+            pattern.count(input, listOf("?age"), initialProposals(input)),
+        )
 
         val result = pattern.propose(
             input = input,
@@ -115,6 +118,7 @@ class TriplePatternTest {
     ): TriplePattern {
         val indexes = indexes(*triples)
         return TriplePattern(
+            idx = 0,
             eav = indexes.eav,
             aev = indexes.aev,
             ave = indexes.ave,
@@ -165,4 +169,7 @@ class TriplePatternTest {
         val aev: Map<Any, Map<Any, Set<Any>>>,
         val ave: Map<Any, Map<Any, Set<Any>>>,
     )
+
+    private fun initialProposals(input: BindingSet): List<Proposal> =
+        List(input.rowCount) { Proposal(NO_PROPOSAL, Int.MAX_VALUE) }
 }

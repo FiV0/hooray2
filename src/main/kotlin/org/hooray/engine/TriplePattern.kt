@@ -6,6 +6,7 @@ sealed interface PatternValue {
 }
 
 class TriplePattern(
+    override val idx: Int,
     private val eav: Map<*, *>,
     private val aev: Map<*, *>,
     private val ave: Map<*, *>,
@@ -17,16 +18,19 @@ class TriplePattern(
         .mapNotNull { slot -> (slot as? PatternValue.Variable)?.name }
         .toSet()
 
-    override val proposerEligible: Boolean = true
-
-    override fun count(input: BindingSet, introduces: List<Any>): List<Int> {
-        require(variables.containsAll(introduces)) {
-            "Triple pattern cannot introduce variables it does not contain"
+    override fun count(
+        input: BindingSet,
+        introduces: List<Any>,
+        proposals: List<Proposal>,
+    ): List<Proposal> {
+        if (!variables.containsAll(introduces)) {
+            return proposals
         }
 
-        return input.rows.map { row ->
+        val counts = input.rows.map { row ->
             matchingIntroductions(input.variables, row, introduces).size
         }
+        return updateProposals(idx, proposals, counts)
     }
 
     override fun propose(

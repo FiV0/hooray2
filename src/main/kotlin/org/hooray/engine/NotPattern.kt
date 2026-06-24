@@ -1,12 +1,11 @@
 package org.hooray.engine
 
 class NotPattern @JvmOverloads constructor(
+    override val idx: Int,
     override val variables: Set<Any>,
     private val branch: List<Stage>,
     private val executor: StageExecutor = StageExecutor(),
 ) : ExecPattern {
-    override val proposerEligible: Boolean = false
-
     override fun validate(input: BindingSet): BindingSet {
         val rows = input.rows.filter { row ->
             val seededRow = BindingSet(input.variables, listOf(row))
