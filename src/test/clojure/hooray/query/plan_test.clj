@@ -6,7 +6,7 @@
    [hooray.query :as query]
    [hooray.query.plan :as plan]))
 
-(def ^:private opts {:type :mem :storage :hash :algo :generic})
+(def ^:private opts {:type :mem :storage :hash :algo :binding-set-wco})
 
 (def ^:private schema
   [{:db/id -1
@@ -86,35 +86,35 @@
     (is (= [:or :or]
            (mapv :kind (:participants stage))))))
 
-(deftest internal-binding-set-query-runs-all-triple-query
+(deftest binding-set-wco-query-runs-all-triple-query
   (let [node (fresh-node)
         q '{:find [?age]
             :where [["a" :age ?age]]}]
     (h/transact node [{:db/id "a" :name "A" :age 35}
                       {:db/id "b" :name "B" :age 40}])
     (is (= [[35]]
-           (plan/execute-query (h/db node) q [])))))
+           (h/q q (h/db node))))))
 
-(deftest internal-binding-set-query-reuses-final-result-shaping
+(deftest binding-set-wco-query-reuses-final-result-shaping
   (let [node (fresh-node)
         q '{:find [?age]
             :keys [age]
             :where [["a" :age ?age]]}]
     (h/transact node [{:db/id "a" :name "A" :age 35}])
-    (is (= (h/q q (h/db node))
-           (plan/execute-query (h/db node) q [])))))
+    (is (= [{:age 35}]
+           (h/q q (h/db node))))))
 
-(deftest internal-binding-set-query-supports-scalar-in-binding
+(deftest binding-set-wco-query-supports-scalar-in-binding
   (let [node (fresh-node)
         q '{:find [?e]
             :in [?name]
             :where [[?e :name ?name]]}]
     (h/transact node [{:db/id "a" :name "A" :age 35}
                       {:db/id "b" :name "B" :age 40}])
-    (is (= (h/q q (h/db node) "A")
-           (plan/execute-query (h/db node) q ["A"])))))
+    (is (= [["a"]]
+           (h/q q (h/db node) "A")))))
 
-(deftest internal-binding-set-query-preserves-relation-in-correlation
+(deftest binding-set-wco-query-preserves-relation-in-correlation
   (let [node (fresh-node)
         q '{:find [?e]
             :in [[[?name ?age]]]
@@ -125,49 +125,45 @@
     (h/transact node [{:db/id "a" :name "A" :age 35}
                       {:db/id "b" :name "A" :age 40}
                       {:db/id "c" :name "B" :age 40}])
-    (is (= (h/q q (h/db node) input)
-           (plan/execute-query (h/db node) q [input])))))
+    (is (= [["a"] ["c"]]
+           (h/q q (h/db node) input)))))
 
-(deftest internal-binding-set-query-preserves-or-branch-predicate-identity
+(deftest binding-set-wco-query-preserves-or-branch-predicate-identity
   (let [node (fresh-node)]
     (h/transact node [{:db/id "a" :name "A" :age 35}
                       {:db/id "b" :name "B" :age 35}])
     (is (= [["B" 35]]
-           (plan/execute-query
-            (h/db node)
-            '{:find [?name ?age]
-              :where
-              [[?e :age ?age]
-               (or
-                (and [?e :name "A"]
-                     [(< ?age 30)])
-                (and [?e :name "B"]
-                     [(< ?age 40)]))
-               [?e :name ?name]]}
-            [])))))
+           (h/q '{:find [?name ?age]
+                  :where
+                  [[?e :age ?age]
+                   (or
+                    (and [?e :name "A"]
+                         [(< ?age 30)])
+                    (and [?e :name "B"]
+                         [(< ?age 40)]))
+                   [?e :name ?name]]}
+                (h/db node))))))
 
-(deftest internal-binding-set-query-validates-or-only-intersections
+(deftest binding-set-wco-query-validates-or-only-intersections
   (let [node (fresh-node)]
     (h/transact node [{:db/id "a" :name "A" :age 35}
                       {:db/id "b" :name "B" :age 40}
                       {:db/id "c" :name "A" :age 50}])
     (is (= [["a"] ["b"]]
-           (plan/execute-query
-            (h/db node)
-            '{:find [?e]
-              :where
-              [(or [?e :name "A"]
-                   [?e :name "B"])
-               (or [?e :age 35]
-                   [?e :age 40])]}
-            [])))))
+           (h/q '{:find [?e]
+                  :where
+                  [(or [?e :name "A"]
+                       [?e :name "B"])
+                   (or [?e :age 35]
+                       [?e :age 40])]}
+                (h/db node))))))
 
-(deftest internal-binding-set-query-supports-not-antijoin
+(deftest binding-set-wco-query-supports-not-antijoin
   (let [node (fresh-node)
         q '{:find [?e]
             :where [[?e :name ?name]
                     (not [?e :age 40])]}]
     (h/transact node [{:db/id "a" :name "A" :age 35}
                       {:db/id "b" :name "B" :age 40}])
-    (is (= (h/q q (h/db node))
-           (plan/execute-query (h/db node) q [])))))
+    (is (= [["a"]]
+           (h/q q (h/db node))))))

@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [hooray.db :as db]
             [hooray.query :as query]
+            [hooray.query.plan :as query-plan]
             [hooray.pull :as pull]
             [hooray.transact :as t]
             [hooray.incremental :as incremental]
@@ -14,7 +15,7 @@
 
 (s/def ::type #{:mem})
 (s/def ::storage #{:hash :avl :btree})
-(s/def ::algo #{:hash :leapfrog :generic :combi})
+(s/def ::algo #{:hash :leapfrog :generic :combi :binding-set-wco})
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
 
@@ -69,7 +70,9 @@
 
 (defn q [query db & args]
   {:pre [(db/db? db)]}
-  (query/query db query args))
+  (case (get-in db [:opts :algo])
+    :binding-set-wco (query-plan/execute-query db query args)
+    (query/query db query args)))
 
 (comment
   (def test-db (db (connect {:type :mem :storage :hash :algo :generic})))

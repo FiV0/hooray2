@@ -11,10 +11,10 @@ Datatoad's staged `plan_body` / `wco_join_inner` machinery.
 
 ## Objective
 
-Replace the generic scalar-prefix query engine with a relation-shaped engine
-that evaluates query stages over a `BindingSet`. The engine should stay close to
-Datatoad's staged WCO join model, but without Datatoad's `FactLSM`, `Forest`,
-distributed `Comms`, or recursive rule lifecycle.
+Add a relation-shaped query engine that evaluates query stages over a
+`BindingSet`. The engine should stay close to Datatoad's staged WCO join model,
+but without Datatoad's `FactLSM`, `Forest`, distributed `Comms`, or recursive
+rule lifecycle.
 
 The central behavior change is:
 
@@ -24,20 +24,23 @@ The central behavior change is:
 - The remaining participants semijoin/filter the expanded rows.
 - `or` follows the Datatoad-style conservative rule: it does not compete as a
   proposer in mixed outer WCO stages. It validates rows proposed by outer
-  patterns, and only proposes in a dedicated OR boundary when it is the only
-  pattern that can introduce the missing OR variables.
+  patterns, and only proposes when the stage introduces all missing variables
+  needed to cover the OR.
 
-This intentionally replaces the current `GenericJoin` core. The scalar
-`PrefixExtender` API is not expressive enough for branch-local identity because
-it can only carry the next scalar extension, not the row correlations that
-created that extension.
+The first integration keeps the current `:generic` path on `GenericJoin` and
+wires this engine behind a separate `:binding-set-wco` algorithm keyword. The
+scalar `PrefixExtender` API is not expressive enough for branch-local identity
+because it can only carry the next scalar extension, not the row correlations
+that created that extension.
 
 ## Assumptions and scope
 
 - Public query shape stays unchanged: `h/q`, `:find`, `:where`, `:in`, triples,
   `and`, `or`, `not`, predicates, and functions keep their existing surface
   syntax.
-- This spec targets the current `:generic` query path first.
+- This spec targets the new `:binding-set-wco` query path first.
+- The current `:generic` query path remains on the existing `GenericJoin`
+  implementation for now.
 - The `:leapfrog` path and DBSP incremental paths are out of scope for the first
   implementation, except that they must keep compiling.
 - The new planner lives in an explicit namespace, for example
@@ -396,10 +399,10 @@ adds a proven-safe liveness analysis.
 
 ## Compatibility with the current engine
 
-The old `PrefixExtender` hierarchy may remain temporarily as an adapter or as
-legacy code, but it should no longer define the generic engine semantics.
+The old `PrefixExtender` hierarchy remains the implementation of `:generic` for
+now.
 
-The replacement path should be wired so that `:generic` queries use:
+The new path should be wired so that `:binding-set-wco` queries use:
 
 ```text
 conformed query
@@ -439,7 +442,7 @@ Required coverage:
   - distinct full-row union;
   - target variable reordering.
 - Query-level tests:
-  - existing generic static query parity;
+  - public `h/q` execution through the `:binding-set-wco` keyword;
   - issue #14 branch isolation;
   - overlapping `or` branches deduplicate full rows;
   - predicates and functions inside `or` branches validate branch-local rows;
@@ -493,6 +496,7 @@ Always:
 - Preserve branch-local row correlation for `or`.
 - Keep `BindingSet` simple and list-backed in v1.
 - Keep unsupported cases explicit.
+- Keep the existing `:generic` path on `GenericJoin` for now.
 - Keep unrelated `:leapfrog` and DBSP behavior compiling.
 
 Ask before:
@@ -507,7 +511,6 @@ Never:
 
 - Expose branch ids in query results.
 - Fix `or` by weakening predicate validation.
-- Preserve scalar `GenericJoin` as the semantic center of the generic engine.
 - Commit unrelated local working-tree changes as part of this spec.
 
 ## Success criteria
@@ -522,5 +525,5 @@ Never:
 - Other patterns validate proposed rows through semijoin-style filtering.
 - The implementation has an explicit planner namespace and a separate
   relation-shaped execution core.
-- The generic engine no longer depends on scalar `PrefixExtender` as its core
+- `:binding-set-wco` no longer depends on scalar `PrefixExtender` as its core
   abstraction.
