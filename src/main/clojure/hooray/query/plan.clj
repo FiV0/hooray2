@@ -242,36 +242,35 @@
     (NotPattern. idx (set (:variables pattern)) branch)))
 
 (defn- exec-pattern [indexes stage idx pattern]
-  (let [{:keys [kind raw]} pattern
-        executable (case kind
-                     :triple (let [[_ {:keys [e a v]}] raw]
-                               (TriplePattern. idx
-                                               (:eav indexes)
-                                               (:aev indexes)
-                                               (:ave indexes)
-                                               (pattern-value e)
-                                               (pattern-value a)
-                                               (pattern-value v)))
+  (let [{:keys [kind raw]} pattern]
+    (case kind
+      :triple (let [[_ {:keys [e a v]}] raw]
+                (TriplePattern. idx
+                                (:eav indexes)
+                                (:aev indexes)
+                                (:ave indexes)
+                                (pattern-value e)
+                                (pattern-value a)
+                                (pattern-value v)))
 
-                     :predicate (let [[_ {:keys [predicate args]}] raw]
-                                  (PredicatePattern. idx
-                                                     (mapv pattern-value args)
-                                                     (call-predicate (query/resolve-fn predicate))))
+      :predicate (let [[_ {:keys [predicate args]}] raw]
+                   (PredicatePattern. idx
+                                      (mapv pattern-value args)
+                                      (call-predicate (query/resolve-fn predicate))))
 
-                     :function (let [[_ [{:keys [fun args]} ret-var]] raw]
-                                 (FunctionPattern. idx
-                                                   (mapv pattern-value args)
-                                                   ret-var
-                                                   (call-function (query/resolve-fn fun))))
+      :function (let [[_ [{:keys [fun args]} ret-var]] raw]
+                  (FunctionPattern. idx
+                                    (mapv pattern-value args)
+                                    ret-var
+                                    (call-function (query/resolve-fn fun))))
 
-                     :or (exec-or-pattern indexes stage idx pattern)
+      :or (exec-or-pattern indexes stage idx pattern)
 
-                     :not (exec-not-pattern indexes stage idx pattern)
+      :not (exec-not-pattern indexes stage idx pattern)
 
-                     (err/unsupported-ex
-                      "BindingSet internal query path does not support this pattern yet"
-                      {:kind kind :pattern pattern}))]
-    executable))
+      (err/unsupported-ex
+       "BindingSet internal query path does not support this pattern yet"
+       {:kind kind :pattern pattern}))))
 
 (defn- exec-stage [indexes {:keys [introduces participants target-variables] :as stage}]
   (Stage. introduces
