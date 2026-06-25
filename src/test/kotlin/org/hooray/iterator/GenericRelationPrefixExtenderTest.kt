@@ -109,6 +109,22 @@ class GenericRelationPrefixExtenderTest {
     }
 
     @Test
+    fun `counts non contiguous prefixes before the last participating level`() {
+        val extender = GenericRelationPrefixExtender(
+            listOf(0, 2),
+            listOf(
+                listOf("a", "b"),
+                listOf("a", "c")
+            )
+        )
+
+        val prefix = listOf("a", "ignored")
+
+        assertEquals(2, extender.propose(prefix).size)
+        assertEquals(2, extender.count(prefix))
+    }
+
+    @Test
     fun `proposes values for matching non contiguous prefixes`() {
         val extender = GenericRelationPrefixExtender(
             listOf(0, 2),

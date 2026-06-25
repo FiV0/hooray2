@@ -50,7 +50,7 @@ class GenericRelationPrefixExtender(
     override fun count(prefix: Prefix): Int {
         val node = trieNodeFor(prefix) ?: return 0
         // There can only be a single match
-        if (prefix.size >= levels.size)  return  1
+        if (prefix.size > levels.last()) return 1
         return node.children.size
     }
 
