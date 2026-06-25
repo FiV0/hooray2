@@ -11,6 +11,8 @@ data class BindingSet(
     val variables: List<Any>,
     val rows: List<BindingRow>,
 ) {
+    val columnIndexes: Map<Any, Int>
+
     init {
         require(variables.toSet().size == variables.size) {
             "BindingSet variables must be distinct"
@@ -20,6 +22,7 @@ data class BindingSet(
                 "Row $index has arity ${row.size}, expected ${variables.size}"
             }
         }
+        columnIndexes = variables.mapIndexed { index, variable -> variable to index }.toMap()
     }
 
     val rowCount: Int
@@ -30,7 +33,7 @@ data class BindingSet(
     }
 
     fun columnIndex(variable: Any): Int {
-        val index = variables.indexOf(variable)
+        val index = columnIndexes[variable] ?: -1
         require(index >= 0) { "Unknown variable $variable" }
         return index
     }
