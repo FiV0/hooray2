@@ -11,7 +11,7 @@ class GenericRelationPrefixExtender(
 ) : PrefixExtender {
 
     private class TrieNode {
-        val children: MutableMap<Any, TrieNode> = linkedMapOf()
+        val children: MutableMap<Any, TrieNode> = hashMapOf()
     }
 
     private val levelSet: Set<Int>
@@ -53,7 +53,7 @@ class GenericRelationPrefixExtender(
         trieNodeFor(prefix)?.children?.keys?.toList() ?: emptyList()
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
-        val validExtensions = trieNodeFor(prefix)?.children?.keys ?: return emptyList()
+        val validExtensions = trieNodeFor(prefix)?.children ?: return emptyList()
         return extensions.filter { validExtensions.contains(it) }
     }
 
