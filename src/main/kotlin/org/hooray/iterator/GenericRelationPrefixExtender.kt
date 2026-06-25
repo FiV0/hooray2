@@ -19,6 +19,7 @@ class GenericRelationPrefixExtender(
 
     init {
         require(levels.isNotEmpty()) { "At least one level is required" }
+        require(levels == levels.sorted()) { "Levels must be sorted ascending" }
         require(levels.toSet().size == levels.size) { "Levels must be unique" }
         require(relation.all { it.size == levels.size }) {
             "Every relation tuple must have the same size as levels"
@@ -46,8 +47,12 @@ class GenericRelationPrefixExtender(
         return node
     }
 
-    override fun count(prefix: Prefix): Int =
-        trieNodeFor(prefix)?.children?.size ?: 0
+    override fun count(prefix: Prefix): Int {
+        val node = trieNodeFor(prefix) ?: return 0
+        // There can only be a single match
+        if (prefix.size >= levels.size)  return  1
+        return node.children.size
+    }
 
     override fun propose(prefix: Prefix): List<Extension> =
         trieNodeFor(prefix)?.children?.keys?.toList() ?: emptyList()

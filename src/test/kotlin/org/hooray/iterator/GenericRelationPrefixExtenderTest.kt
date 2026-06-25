@@ -90,6 +90,60 @@ class GenericRelationPrefixExtenderTest {
     }
 
     @Test
+    fun `counts matching prefixes including terminal matches`() {
+        val extender = GenericRelationPrefixExtender(
+            listOf(0, 2),
+            listOf(
+                listOf("a", "b"),
+                listOf("x", "y")
+            )
+        )
+
+        assertEquals(2, extender.count(emptyList()))
+        assertEquals(1, extender.count(listOf("a")))
+        assertEquals(1, extender.count(listOf("x")))
+        assertEquals(0, extender.count(listOf("z")))
+        assertEquals(1, extender.count(listOf("a", "anything", "b")))
+        assertEquals(1, extender.count(listOf("x", "anything", "y")))
+        assertEquals(0, extender.count(listOf("a", "anything", "y")))
+    }
+
+    @Test
+    fun `proposes values for matching non contiguous prefixes`() {
+        val extender = GenericRelationPrefixExtender(
+            listOf(0, 2),
+            listOf(
+                listOf("a", "b"),
+                listOf("x", "y")
+            )
+        )
+
+        assertEquals(listOf("a", "x"), extender.propose(emptyList()))
+        assertEquals(listOf("b"), extender.propose(listOf("a")))
+        assertEquals(listOf("y"), extender.propose(listOf("x")))
+        assertEquals(emptyList<Any>(), extender.propose(listOf("z")))
+        assertEquals(listOf("b"), extender.propose(listOf("a", "anything")))
+    }
+
+    @Test
+    fun `intersects values for matching non contiguous prefixes`() {
+        val extender = GenericRelationPrefixExtender(
+            listOf(0, 2),
+            listOf(
+                listOf("a", "b"),
+                listOf("x", "y")
+            )
+        )
+
+        assertEquals(listOf("a", "x"), extender.intersect(emptyList(), listOf("a", "x", "z")))
+        assertEquals(listOf("a"), extender.intersect(emptyList(), listOf("a", "z")))
+        assertEquals(emptyList<Any>(), extender.intersect(emptyList(), listOf("z", "w")))
+        assertEquals(listOf("b"), extender.intersect(listOf("a"), listOf("b", "y", "z")))
+        assertEquals(listOf("y"), extender.intersect(listOf("x"), listOf("b", "y", "z")))
+        assertEquals(emptyList<Any>(), extender.intersect(listOf("z"), listOf("a", "b", "x", "y")))
+    }
+
+    @Test
     fun `constrains GenericJoin to relation backed combinations`() {
         val level0Extender = PrefixExtender.createSingleLevel(listOf("Ivan", "Petr", "Bob"), 0)
         val level1Extender = PrefixExtender.createSingleLevel(listOf("Ivanov", "Petrov", "Smith"), 1)
