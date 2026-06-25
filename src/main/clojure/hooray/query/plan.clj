@@ -1,23 +1,21 @@
 (ns hooray.query.plan
-  (:require
-   [clojure.spec.alpha :as s]
-   [clojure.set :as set]
-   [hooray.error :as err]
-   [hooray.query :as query])
-  (:import
-   (java.util.function Function)
-   (org.hooray.engine
-    BindingSet
-    FunctionPattern
-    InputPattern
-    NotPattern
-    OrPattern
-    PatternValue$Constant
-    PatternValue$Variable
-    PredicatePattern
-    Stage
-    StageExecutor
-    TriplePattern)))
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
+            [hooray.error :as err]
+            [hooray.query :as query])
+  (:import (java.util.function Function)
+           (org.hooray.engine
+            BindingSet
+            FunctionPattern
+            InputPattern
+            NotPattern
+            OrPattern
+            PatternValue$Constant
+            PatternValue$Variable
+            PredicatePattern
+            Stage
+            StageExecutor
+            TriplePattern)))
 
 (defn- in->variables [in]
   (->> in
