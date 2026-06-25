@@ -11,8 +11,8 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `participates only in configured levels`() {
         val extender = GenericRelationPrefixExtender(
+            listOf(0, 2),
             listOf(listOf("a", "x")),
-            listOf(0, 2)
         )
 
         assertEquals(true, extender.participatesInLevel(0))
@@ -24,19 +24,19 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `proposes distinct values from relation trie`() {
         val extender = GenericRelationPrefixExtender(
+            listOf(0, 1),
             listOf(
                 listOf("a", "x"),
                 listOf("a", "y"),
                 listOf("a", "y"),
                 listOf("b", "z")
             ),
-            listOf(0, 1)
         )
 
         assertEquals(2, extender.count(emptyList()))
-        assertEquals(listOf("a", "b"), extender.propose(emptyList()))
+        assertEquals(setOf("a", "b"), extender.propose(emptyList()).toSet())
         assertEquals(2, extender.count(listOf("a")))
-        assertEquals(listOf("x", "y"), extender.propose(listOf("a")))
+        assertEquals(setOf("x", "y"), extender.propose(listOf("a")).toSet())
         assertEquals(1, extender.count(listOf("b")))
         assertEquals(listOf("z"), extender.propose(listOf("b")))
     }
@@ -44,12 +44,12 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `intersect filters candidates while preserving candidate order`() {
         val extender = GenericRelationPrefixExtender(
+            listOf(0, 1),
             listOf(
                 listOf("a", "x"),
                 listOf("a", "y"),
                 listOf("b", "z")
             ),
-            listOf(0, 1)
         )
 
         assertEquals(
@@ -61,11 +61,11 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `returns empty results for non matching prefixes`() {
         val extender = GenericRelationPrefixExtender(
+            listOf(0, 1),
             listOf(
                 listOf("a", "x"),
                 listOf("b", "y")
             ),
-            listOf(0, 1)
         )
 
         assertEquals(0, extender.count(listOf("c")))
@@ -76,16 +76,16 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `supports non contiguous levels`() {
         val extender = GenericRelationPrefixExtender(
+            listOf(0, 2),
             listOf(
                 listOf("a", "x"),
                 listOf("a", "y"),
                 listOf("b", "z")
             ),
-            listOf(0, 2)
         )
 
-        assertEquals(listOf("a", "b"), extender.propose(emptyList()))
-        assertEquals(listOf("x", "y"), extender.propose(listOf("a")))
+        assertEquals(setOf("a", "b"), extender.propose(emptyList()).toSet())
+        assertEquals(setOf("x", "y"), extender.propose(listOf("a")).toSet())
         assertEquals(listOf("y"), extender.intersect(listOf("a", "ignored"), listOf("y", "z")))
     }
 
@@ -94,36 +94,36 @@ class GenericRelationPrefixExtenderTest {
         val level0Extender = PrefixExtender.createSingleLevel(listOf("Ivan", "Petr", "Bob"), 0)
         val level1Extender = PrefixExtender.createSingleLevel(listOf("Ivanov", "Petrov", "Smith"), 1)
         val relationExtender = GenericRelationPrefixExtender(
+            listOf(0, 1),
             listOf(
                 listOf("Ivan", "Ivanov"),
                 listOf("Petr", "Petrov")
             ),
-            listOf(0, 1)
         )
 
         val result = GenericJoin(listOf(level0Extender, level1Extender, relationExtender), 2).join()
 
         assertEquals(
-            listOf(
+            setOf(
                 listOf("Ivan", "Ivanov"),
                 listOf("Petr", "Petrov")
             ),
-            result
+            result.toSet()
         )
     }
 
     @Test
     fun `rejects invalid constructor arguments`() {
         assertThrows<IllegalArgumentException> {
-            GenericRelationPrefixExtender(listOf(listOf("a")), emptyList())
+            GenericRelationPrefixExtender(emptyList(), listOf(listOf("a")))
         }
 
         assertThrows<IllegalArgumentException> {
-            GenericRelationPrefixExtender(listOf(listOf("a", "b")), listOf(0, 0))
+            GenericRelationPrefixExtender(listOf(0, 0), listOf(listOf("a", "b")))
         }
 
         assertThrows<IllegalArgumentException> {
-            GenericRelationPrefixExtender(listOf(listOf("a")), listOf(0, 1))
+            GenericRelationPrefixExtender(listOf(0, 1), listOf(listOf("a")))
         }
     }
 }

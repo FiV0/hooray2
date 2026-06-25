@@ -6,8 +6,8 @@ import org.hooray.algo.PrefixExtender
 import org.hooray.algo.ResultTuple
 
 class GenericRelationPrefixExtender(
-    relation: List<ResultTuple>,
-    private val levels: List<Int>
+    private val levels: List<Int>,
+    relation: List<ResultTuple>
 ) : PrefixExtender {
 
     private class TrieNode {
