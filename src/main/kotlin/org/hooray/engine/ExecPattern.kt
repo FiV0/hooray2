@@ -28,15 +28,8 @@ interface ExecPattern {
     fun validate(input: BindingSet): BindingSet
 }
 
-internal fun updateProposals(
-    idx: Int,
-    proposals: List<Proposal>,
-    counts: List<Int>,
-): List<Proposal> {
-    require(proposals.size == counts.size) {
-        "Pattern count returned ${counts.size} rows, expected ${proposals.size}"
-    }
-    return proposals.mapIndexed { rowIndex, proposal ->
+internal fun updateProposals( idx: Int, proposals: List<Proposal>, counts: List<Int>): List<Proposal> =
+    proposals.mapIndexed { rowIndex, proposal ->
         val count = counts[rowIndex]
         if (count > 0 && count < proposal.count) {
             Proposal(idx, count)
@@ -44,4 +37,3 @@ internal fun updateProposals(
             proposal
         }
     }
-}
