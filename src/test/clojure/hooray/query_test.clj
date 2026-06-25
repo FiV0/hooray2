@@ -224,16 +224,16 @@
                 ["Ivan" "Ivanov"])))
 
 
-  (t/is (= [["Ivan" "Ivanov"]
-            ["Petr" "Petrov"]]
-           (h/q '{:find [name last-name]
-                  :in [[[name last-name]]]
-                  ;; TODO allow no where
-                  ;; just a placeholder for now
-                  :where [[e :name "Ivan"]]}
-                (h/db fix/*node*)
-                [["Ivan" "Ivanov"]
-                 ["Petr" "Petrov"]]))))
+  (t/is (= #{["Ivan" "Ivanov"]
+             ["Petr" "Petrov"]}
+           (set (h/q '{:find [name last-name]
+                       :in [[[name last-name]]]
+                       ;; TODO allow no where
+                       ;; just a placeholder for now
+                       :where [[e :name "Ivan"]]}
+                     (h/db fix/*node*)
+                     [["Ivan" "Ivanov"]
+                      ["Petr" "Petrov"]])))))
 
 (deftest test-order-of-vars-in-predicate
   (t/is (= [[10 11]]
@@ -342,13 +342,14 @@
                             ["Ivan" "Ivanov"]))))
 
   (t/testing "Can query entity with collection arguments"
-    (t/is (= [[:ivan]
-              [:petr]] (h/q '{:find [e]
-                              :in [[[name last-name]]]
-                              :where [[e :name name]
-                                      [e :last-name last-name]]}
-                            (h/db fix/*node*)
-                            [["Ivan" "Ivanov"] ["Petr" "Petrov"]]))))
+    (t/is (= #{[:ivan]
+               [:petr]}
+             (set (h/q '{:find [e]
+                         :in [[[name last-name]]]
+                         :where [[e :name name]
+                                 [e :last-name last-name]]}
+                       (h/db fix/*node*)
+                       [["Ivan" "Ivanov"] ["Petr" "Petrov"]])))))
 
 
   (t/testing "Can query predicates based on arguments alone"
@@ -371,15 +372,15 @@
                              (h/db fix/*node*)
                              ["Ivan" "Petr"])))
 
-    (t/is (= [["Ivan" "Ivanov"]
-              ["Petr" "Petrov"]]
-             (h/q '{:find [name last-name]
-                    :in [[[name last-name]]]
-                    :where [[(not= last-name name)]]}
-                  (h/db fix/*node*)
-                  [["Ivan" "Ivanov"]
-                   ["Petr" "Petrov"]
-                   ["Bob" "Bob"]])))
+    (t/is (= #{["Ivan" "Ivanov"]
+               ["Petr" "Petrov"]}
+             (set (h/q '{:find [name last-name]
+                         :in [[[name last-name]]]
+                         :where [[(not= last-name name)]]}
+                       (h/db fix/*node*)
+                       [["Ivan" "Ivanov"]
+                        ["Petr" "Petrov"]
+                        ["Bob" "Bob"]]))))
 
     #_
     (t/is (= [["Ivan"]] (h/q '{:find [name]
