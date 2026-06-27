@@ -63,14 +63,14 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
         return currentIndex
     }
 
-    override open fun count(prefix: Prefix) =
+    override fun count(prefix: Prefix) =
         when (val index= indexFromPrefix(prefix)) {
             null -> 0
             is SealedIndex.MapIndex -> index.map.size
             is SealedIndex.SetIndex -> index.set.size
         }
 
-    override open fun propose(prefix: Prefix)  =
+    override fun propose(prefix: Prefix)  =
         when (val index= indexFromPrefix(prefix)) {
             null -> emptyList()
             // we don't just use keys, as that does not preserve order in case of sorted collections
@@ -80,7 +80,7 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
 
     // This is WCO as we start with the smallest extension list so
     // extensions.size <= map.size or set.size
-    override open fun intersect(prefix: Prefix, extensions: List<Extension>) =
+    override fun intersect(prefix: Prefix, extensions: List<Extension>) =
         when (val index = indexFromPrefix(prefix)) {
             null -> emptyList()
             is SealedIndex.MapIndex -> extensions.filter { ext -> index.map.containsKey(ext) }
