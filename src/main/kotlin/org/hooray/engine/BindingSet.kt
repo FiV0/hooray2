@@ -67,6 +67,10 @@ data class BindingSet(
     }
 
     fun reorder(targetVariables: List<Any>): BindingSet {
+        if (targetVariables == variables) {
+            return this
+        }
+
         require(targetVariables.toSet().size == targetVariables.size) {
             "Target layout variables must be distinct"
         }
