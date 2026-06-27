@@ -34,7 +34,6 @@ dependencies {
     implementation("org.clojure", "spec.alpha", "0.5.238")
     implementation("org.clojure", "core.match","1.1.0")
     implementation("org.clojure", "math.combinatorics", "0.3.0")
-    implementation("org.clojure", "core.async", "1.9.865")
     implementation("com.cognitect", "anomalies", "0.1.12")
 
     // logging

@@ -1,7 +1,5 @@
 (ns hooray.core
   (:require [clojure.spec.alpha :as s]
-            [clojure.core.async :as async]
-            [clojure.tools.logging :as log]
             [hooray.db :as db]
             [hooray.query :as query]
             [hooray.pull :as pull]
@@ -18,7 +16,7 @@
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
 
-(defrecord Node [!dbs opts !inc-qs !delta-listeners]
+(defrecord Node [!dbs opts !inc-qs]
   Closeable
   (close [_] nil))
 
@@ -27,18 +25,8 @@
 
 (defn connect [opts]
   {:pre [(s/valid? ::conn-opts opts)]}
-  (->Node (atom [(db/->db opts)]) opts (atom {}) (atom {})))
+  (->Node (atom [(db/->db opts)]) opts (atom {})))
 
-(defn- notify-delta-listeners! [{:keys [!delta-listeners]} inc-q delta]
-  (when-let [listeners (seq (vals (get @!delta-listeners (:id inc-q))))]
-    (doseq [listener listeners]
-      (try
-        (listener delta)
-        (catch Exception e
-          (log/warn e "Incremental delta listener failed"))))
-    true))
-
-(declare consume-delta!)
 
 (defn transact [{:keys [!dbs !inc-qs] :as node} tx-data]
   {:pre [(node? node) (s/valid? ::t/tx-data tx-data)]}
@@ -47,12 +35,9 @@
                                      (conj dbs (db/transact db-before tx-data)))))]
     (when-let [inc-qs (seq @!inc-qs)]
       (doseq [inc-q (vals inc-qs)]
-        (let [delta (if (dbsp/dbsp-query? inc-q)
-                      (dbsp/compute-delta! inc-q db-before tx-data)
-                      (incremental/compute-delta! inc-q db-before db-after tx-data))]
-          (when (seq delta)
-            (when (notify-delta-listeners! node inc-q delta)
-              (consume-delta! inc-q))))))))
+        (if (dbsp/dbsp-query? inc-q)
+          (dbsp/compute-delta! inc-q db-before tx-data)
+          (incremental/compute-delta! inc-q db-before db-after tx-data))))))
 
 (defn db [{:keys [!dbs] :as node}]
   {:pre [(node? node)]}
@@ -96,26 +81,9 @@
     (swap! !inc-qs assoc (:id inc-q) inc-q)
     inc-q))
 
-(defn unregister-inc-q [{:keys [!inc-qs !delta-listeners] :as node} {:keys [id] :as inc-q}]
+(defn unregister-inc-q [{:keys [!inc-qs] :as node} {:keys [id] :as _inc-q}]
   {:pre [(node? node)]}
   (swap! !inc-qs dissoc id)
-  (swap! !delta-listeners dissoc id)
-  node)
-
-(defn- register-delta-listener! [{:keys [!delta-listeners] :as node} {:keys [id] :as _inc-q} listener]
-  {:pre [(node? node)]}
-  (let [listener-id (random-uuid)]
-    (swap! !delta-listeners update id assoc listener-id listener)
-    listener-id))
-
-(defn- unregister-delta-listener! [{:keys [!delta-listeners] :as node} {:keys [id] :as _inc-q} listener-id]
-  {:pre [(node? node)]}
-  (swap! !delta-listeners
-         (fn [listeners]
-           (let [remaining (not-empty (dissoc (get listeners id) listener-id))]
-             (if remaining
-               (assoc listeners id remaining)
-               (dissoc listeners id)))))
   node)
 
 (defn consume-delta! [inc-q]
@@ -123,39 +91,12 @@
     (dbsp/pop-result! inc-q)
     (incremental/pop-result! inc-q)))
 
-(defrecord IncrementalStream [conn inc-q]
+(defrecord IncrementalSubscription [conn inc-q]
   Closeable
   (close [_] (unregister-inc-q conn inc-q)))
 
-(defn open-deltas ^Closeable [conn query]
-  (->IncrementalStream conn (q-inc conn query)))
+(defn subscribe ^Closeable [conn query]
+  (->IncrementalSubscription conn (q-inc conn query)))
 
 (defn take! [{:keys [inc-q]}]
   (consume-delta! inc-q))
-
-(defn delta-chan [conn query]
-  (let [inc-q (q-inc conn query)
-        output-ch (async/chan 1024)
-        listener-id (promise)]
-    (deliver listener-id
-             (register-delta-listener!
-              conn inc-q
-              (fn [delta]
-                ;; TODO this only unregisters if a new delta arrives
-                (async/put! output-ch delta
-                            (fn [delivered?]
-                              (when-not delivered?
-                                (unregister-delta-listener! conn inc-q @listener-id)
-                                (unregister-inc-q conn inc-q)))))))
-    output-ch))
-
-(defrecord IncrementalSubscription [conn inc-q listener-id]
-  Closeable
-  (close [_]
-    (unregister-delta-listener! conn inc-q listener-id)
-    (unregister-inc-q conn inc-q)))
-
-(defn subscribe ^Closeable [conn query callback]
-  (let [inc-q (q-inc conn query)
-        listener-id (register-delta-listener! conn inc-q callback)]
-    (->IncrementalSubscription conn inc-q listener-id)))

@@ -50,7 +50,7 @@ a formal framwork for incremental computation. We also try to combine the two.
 ;; => ([["Ada"] 1] [["Alan"] 1] [["Adam"] -1])
 ```
 
-I am still exploring what the incremental API should look like Clojure-wise. Some options below
+I think I am converging on the following simple API
 ```clj
 (def node (h/connect {:type :mem :storage :hash :algo :generic}))
 (h/transact node [{:db/id -100
@@ -62,33 +62,11 @@ I am still exploring what the incremental API should look like Clojure-wise. Som
   '{:find [name]
     :where [[e :name name]]})
 
-;; Pull deltas explicitly.
-(with-open [deltas (h/open-deltas node names-query)]
+;; Subscription + take!
+(with-open [sub (h/subscribe node names-query)]
   (h/transact node [{:db/id :ivan :name "Ivan"}])
-  (h/take! deltas))
+  (h/take! sub))
 ;; => ([["Ivan"] 1])
-
-;; Read deltas from a core.async channel.
-(defn- take-with-timeout [ch]
-  (let [timeout (async/timeout 1000)
-        [value port] (async/alts!! [ch timeout])]
-    (if (= port timeout)
-      ::timeout
-      value)))
-
-(let [delta-ch (h/delta-chan node names-query)]
-  (try
-    (h/transact node [{:db/id :petr :name "Petr"}])
-    (take-with-timeout delta-ch)
-    (finally
-      (async/close! delta-ch))))
-;; => ([["Petr"] 1])
-
-;; Receive deltas in a callback.
-(with-out-str
-  (with-open [_subscription (h/subscribe node names-query println)]
-    (h/transact node [{:db/id :anna :name "Anna"}])))
-;; => "([[Anna] 1])\n"
 ```
 
 There are currently two incremental join algorithms which I am exploring,
