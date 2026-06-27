@@ -48,6 +48,34 @@ class BindingSetTest {
     }
 
     @Test
+    fun `rejects unknown variables in column lookup`() {
+        val bindings = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a")),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            bindings.columnIndex("?missing")
+        }
+
+        assertEquals("Unknown variable ?missing", error.message)
+    }
+
+    @Test
+    fun `rejects unknown variables in value lookup`() {
+        val bindings = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a")),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            bindings.valueAt(0, "?missing")
+        }
+
+        assertEquals("Unknown variable ?missing", error.message)
+    }
+
+    @Test
     fun `extends rows with introduced variables`() {
         val input = BindingSet(
             variables = listOf("?e"),
@@ -92,6 +120,57 @@ class BindingSetTest {
         }
 
         assertEquals("Extension for input row 0 has arity 1, expected 2", error.message)
+    }
+
+    @Test
+    fun `rejects duplicate introduced variables`() {
+        val input = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a")),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            input.extend(
+                introducedVariables = listOf("?age", "?age"),
+                extensions = listOf(RowExtension(inputRowIndex = 0, values = listOf(35, 36))),
+            )
+        }
+
+        assertEquals("Introduced variables must be distinct", error.message)
+    }
+
+    @Test
+    fun `rejects introduced variables that are already bound`() {
+        val input = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a")),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            input.extend(
+                introducedVariables = listOf("?e"),
+                extensions = listOf(RowExtension(inputRowIndex = 0, values = listOf("b"))),
+            )
+        }
+
+        assertEquals("Introduced variables must not already be bound", error.message)
+    }
+
+    @Test
+    fun `rejects row extensions with out of bounds input rows`() {
+        val input = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a")),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            input.extend(
+                introducedVariables = listOf("?age"),
+                extensions = listOf(RowExtension(inputRowIndex = 1, values = listOf(35))),
+            )
+        }
+
+        assertEquals("Input row index 1 is out of bounds", error.message)
     }
 
     @Test
@@ -148,5 +227,19 @@ class BindingSetTest {
         }
 
         assertEquals("Target layout must contain the same variables", error.message)
+    }
+
+    @Test
+    fun `reorder rejects duplicate target variables`() {
+        val bindings = BindingSet(
+            variables = listOf("?e", "?age"),
+            rows = listOf(listOf("a", 35)),
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            bindings.reorder(listOf("?e", "?e"))
+        }
+
+        assertEquals("Target layout variables must be distinct", error.message)
     }
 }

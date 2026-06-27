@@ -33,9 +33,8 @@ data class BindingSet(
     }
 
     fun columnIndex(variable: Any): Int {
-        val index = columnIndexes[variable] ?: -1
-        require(index >= 0) { "Unknown variable $variable" }
-        return index
+        return columnIndexes[variable]
+            ?: throw IllegalArgumentException("Unknown variable $variable")
     }
 
     fun extend(
