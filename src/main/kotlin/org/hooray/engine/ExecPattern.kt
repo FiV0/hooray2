@@ -1,5 +1,7 @@
 package org.hooray.engine
 
+import clojure.lang.Symbol
+
 data class Proposal(
     val idx: Int,
     val count: Int,
@@ -7,20 +9,22 @@ data class Proposal(
 
 internal const val NO_PROPOSAL = -1
 
+typealias Variable = Symbol
+
 interface ExecPattern {
     val idx: Int
-    val variables: Set<Any>
+    val variables: Set<Variable>
 
     fun count(
         input: BindingSet,
-        introduces: List<Any>,
+        introduces: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> = proposals
 
     fun propose(
         input: BindingSet,
-        introduces: List<Any>,
-        targetVariables: List<Any>,
+        introduces: List<Variable>,
+        targetVariables: List<Variable>,
     ): BindingSet {
         throw UnsupportedOperationException("Pattern cannot propose for this stage")
     }
