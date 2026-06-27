@@ -29,7 +29,11 @@ interface ExecPattern {
         throw UnsupportedOperationException("Pattern cannot propose for this stage")
     }
 
-    fun validate(input: BindingSet): BindingSet
+    fun validate(
+        input: BindingSet,
+        introduces: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet
 }
 
 internal fun updateProposals( idx: Int, proposals: List<Proposal>, counts: List<Int>): List<Proposal> =
