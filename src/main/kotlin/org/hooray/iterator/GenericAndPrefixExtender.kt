@@ -6,27 +6,32 @@ import org.hooray.algo.PrefixExtender
 import org.hooray.engine.BindingSet
 import org.hooray.engine.ExecPattern
 import org.hooray.engine.Proposal
+import org.hooray.engine.Variable
 
 open class GenericAndPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender, ExecPattern {
     override val idx: Int
         get() = TODO("Not yet implemented")
 
-    override val variables: Set<Any>
+    override val variables: Set<Variable>
         get() = TODO("Not yet implemented")
 
     override fun count(
         input: BindingSet,
-        introduces: List<Any>,
+        introduces: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> = TODO("Not yet implemented")
 
     override fun propose(
         input: BindingSet,
-        introduces: List<Any>,
-        targetVariables: List<Any>,
+        introduces: List<Variable>,
+        targetVariables: List<Variable>,
     ): BindingSet = TODO("Not yet implemented")
 
-    override fun validate(input: BindingSet): BindingSet = TODO("Not yet implemented")
+    override fun validate(
+        input: BindingSet,
+        introduces: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = TODO("Not yet implemented")
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
