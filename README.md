@@ -50,7 +50,7 @@ a formal framwork for incremental computation. We also try to combine the two.
 ;; => ([["Ada"] 1] [["Alan"] 1] [["Adam"] -1])
 ```
 
-I think I am converging on the following simple API
+I think I am settling on the following simple API
 ```clj
 (def node (h/connect {:type :mem :storage :hash :algo :generic}))
 (h/transact node [{:db/id -100
