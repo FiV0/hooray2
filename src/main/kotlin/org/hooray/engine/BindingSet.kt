@@ -8,10 +8,10 @@ data class RowExtension(
 )
 
 data class BindingSet(
-    val variables: List<Any>,
+    val variables: List<Variable>,
     val rows: List<BindingRow>,
 ) {
-    val columnIndexes: Map<Any, Int>
+    val columnIndexes: Map<Variable, Int>
 
     init {
         require(variables.toSet().size == variables.size) {
@@ -38,7 +38,7 @@ data class BindingSet(
     }
 
     fun extend(
-        introducedVariables: List<Any>,
+        introducedVariables: List<Variable>,
         extensions: List<RowExtension>,
     ): BindingSet {
         require(introducedVariables.toSet().size == introducedVariables.size) {
@@ -66,7 +66,7 @@ data class BindingSet(
         return BindingSet(variables, rows.distinct())
     }
 
-    fun reorder(targetVariables: List<Any>): BindingSet {
+    fun reorder(targetVariables: List<Variable>): BindingSet {
         if (targetVariables == variables) {
             return this
         }
