@@ -4,10 +4,33 @@ import org.hooray.algo.Extension
 import org.hooray.algo.GenericJoin
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
+import org.hooray.engine.BindingSet
+import org.hooray.engine.ExecPattern
+import org.hooray.engine.Proposal
 
 // The level NOT participates in is the level after all variables appearing in its children are bound.
 // For now this is just the maximum level
-class GenericNotPrefixExtender(val children: List<PrefixExtender>, val level: Int): PrefixExtender {
+class GenericNotPrefixExtender(val children: List<PrefixExtender>, val level: Int): PrefixExtender, ExecPattern {
+    override val idx: Int
+        get() = TODO("Not yet implemented")
+
+    override val variables: Set<Any>
+        get() = TODO("Not yet implemented")
+
+    override fun count(
+        input: BindingSet,
+        introduces: List<Any>,
+        proposals: List<Proposal>,
+    ): List<Proposal> = TODO("Not yet implemented")
+
+    override fun propose(
+        input: BindingSet,
+        introduces: List<Any>,
+        targetVariables: List<Any>,
+    ): BindingSet = TODO("Not yet implemented")
+
+    override fun validate(input: BindingSet): BindingSet = TODO("Not yet implemented")
+
     override fun count(prefix: Prefix): Int = Int.MAX_VALUE
 
     // If propose is called on NOT it means that the variable was not bound outside of NOT

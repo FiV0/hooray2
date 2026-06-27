@@ -3,6 +3,9 @@ package org.hooray.iterator
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
+import org.hooray.engine.BindingSet
+import org.hooray.engine.ExecPattern
+import org.hooray.engine.Proposal
 
 sealed interface SealedIndex {
     data class MapIndex(val map: Map<Any, Any>) : SealedIndex
@@ -10,7 +13,26 @@ sealed interface SealedIndex {
 }
 
 @Suppress("UNCHECKED_CAST")
-open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel: List<Int>) : PrefixExtender, LevelParticipation {
+open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel: List<Int>) : PrefixExtender, LevelParticipation, ExecPattern {
+    override val idx: Int
+        get() = TODO("Not yet implemented")
+
+    override val variables: Set<Any>
+        get() = TODO("Not yet implemented")
+
+    override fun count(
+        input: BindingSet,
+        introduces: List<Any>,
+        proposals: List<Proposal>,
+    ): List<Proposal> = TODO("Not yet implemented")
+
+    override fun propose(
+        input: BindingSet,
+        introduces: List<Any>,
+        targetVariables: List<Any>,
+    ): BindingSet = TODO("Not yet implemented")
+
+    override fun validate(input: BindingSet): BindingSet = TODO("Not yet implemented")
 
     protected fun internalPrefix(prefix: Prefix): Prefix {
         val newPrefix = mutableListOf<Any>()
