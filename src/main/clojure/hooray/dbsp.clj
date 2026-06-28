@@ -10,7 +10,7 @@
             [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t])
-  (:import (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp PlusOp Tuple)
+  (:import (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp MinusOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
@@ -56,7 +56,14 @@
      :children [<descriptor> …]
      :vars     [vars in encounter order across all children]}
 
-  Other clause types (`:not`, `:predicate`, `:fn`) are not yet
+  Not descriptor:
+
+    {:index    <position in the immediate parent clause>
+     :kind     :not
+     :children [<descriptor> …]
+     :vars     [vars in encounter order across all children]}
+
+  Other clause types (`:predicate`, `:fn`) are not yet
   supported and trigger `err/unsupported-ex`."
   [index [clause-type pattern]]
   (case clause-type
@@ -80,6 +87,12 @@
     :and (let [children (vec (map-indexed compile-pattern pattern))]
            {:index index
             :kind :and
+            :children children
+            :vars (vec (distinct (mapcat :vars children)))})
+
+    :not (let [children (vec (map-indexed compile-pattern pattern))]
+           {:index index
+            :kind :not
             :children children
             :vars (vec (distinct (mapcat :vars children)))})
 
@@ -234,13 +247,21 @@
   [descriptor target]
   (plan-inputs (:children descriptor) (vec target)))
 
+(defn- not-plan
+  "A bare `not` relation has no finite positive input domain. It can only be
+  planned by `plan-inputs` after a positive relation has been built."
+  [descriptor _target]
+  (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
+                      {:descriptor descriptor}))
+
 (defn- rel-plan
   "Plans one descriptor as a relation node that produces [target] variables."
   [descriptor target]
   (case (:kind descriptor)
     :triple (triple-plan descriptor target)
     :or (union-plan descriptor target)
-    :and (and-plan descriptor target)))
+    :and (and-plan descriptor target)
+    :not (not-plan descriptor target)))
 
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."
@@ -264,62 +285,95 @@
             (err/unsupported-ex "DBSP-standard engine does not support aggregates yet" {:find-element [t v]})))
         conformed-find))
 
+(defn- not-descriptor? [descriptor]
+  (= :not (:kind descriptor)))
+
+(defn- anti-join-plan
+  "Plans one Datalog `not` clause as A - semijoin(A, distinct(keys(B)))."
+  [positive descriptor]
+  (let [positive-vars (:out-vars positive)
+        negative-vars (:vars descriptor)
+        missing-vars (seq (remove (set positive-vars) negative-vars))]
+    (when missing-vars
+      (throw (ex-info "not variables must be bound by the positive relation"
+                      {:not-vars negative-vars
+                       :positive-vars positive-vars
+                       :missing-vars (vec missing-vars)})))
+    (let [key-vars (vec (filter (set negative-vars) positive-vars))
+          keyed-vars (lead-with (set key-vars) positive-vars)]
+      {:kind :difference
+       :positive positive
+       :negative (plan-inputs (:children descriptor) key-vars)
+       :key-vars key-vars
+       :keyed-vars keyed-vars
+       :out-vars positive-vars})))
+
+(defn- apply-not-plans [positive nots]
+  (reduce anti-join-plan positive nots))
+
 (defn- plan-inputs
   "Plans descriptors as one relation tree. Multiple descriptors become a
   left-deep `:join` node whose inputs are themselves relation nodes."
   ([descriptors] (plan-inputs descriptors nil))
   ([descriptors target]
-   (let [ordered (left-deep-order descriptors)
-         target* (some-> target vec)]
-     (when (empty? ordered)
+   (let [target* (some-> target vec)
+         positives (vec (remove not-descriptor? descriptors))
+         nots (vec (filter not-descriptor? descriptors))
+         ordered (left-deep-order positives)]
+     (when (and (empty? ordered) (empty? nots))
        (throw (ex-info "query has no patterns" {})))
-     (if (= 1 (count ordered))
-       (rel-plan (first ordered) (or target* (:vars (first ordered))))
-       (let [var-sets (mapv #(set (:vars %)) ordered)
-             ;; keys*[i-1] is the variable set joining the accumulated result
-             ;; with ordered[i].
-             keys* (loop [i 1, accset (first var-sets), ks []]
-                     (if (>= i (count ordered))
-                       ks
-                       (recur (inc i)
-                              (set/union accset (nth var-sets i))
-                              (conj ks (set/intersection accset (nth var-sets i))))))
-             first-input (rel-plan (first ordered)
-                                   (lead-with (first keys*) (:vars (first ordered))))]
-         ;; Single left-to-right pass: each join's key column *order* is fixed by
-         ;; the accumulated (left) layout, and the right relation is arranged to
-         ;; that same key order so both sides' leading columns line up.
-         (loop [i 1
-                acc (:out-vars first-input)
-                inputs [first-input]
-                steps []]
-           (if (>= i (count ordered))
-             (let [out-vars (or target* acc)
-                   final-permute (when (and target* (not= acc target*))
-                                   (indices-of acc target*))]
-               (cond-> {:kind :join
-                        :out-vars out-vars
-                        :inputs inputs
-                        :steps steps}
-                 final-permute (assoc :final-permute final-permute)))
-             (let [ki (nth keys* (dec i))
-                   qi (nth ordered i)
-                   key-order (vec (filter ki acc))
-                   left-needed (into key-order (remove ki acc))
-                   permute (indices-of acc left-needed)
-                   qi-target (into key-order (remove ki (:vars qi)))
-                   right-input (rel-plan qi qi-target)
-                   out-vars (into left-needed (remove ki (:vars qi)))]
-               (recur (inc i)
-                      out-vars
-                      (conj inputs right-input)
-                      (conj steps {:right-vars (:out-vars right-input)
-                                   :key-arity (count ki)
-                                   :key-vars key-order
-                                   :left-permute (when (not= permute
-                                                             (vec (range (count acc))))
-                                                   permute)
-                                   :out-vars out-vars}))))))))))
+     (when (empty? ordered)
+       (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
+                           {:descriptors descriptors}))
+     (let [positive-plan
+           (if (= 1 (count ordered))
+             (rel-plan (first ordered) (or target* (:vars (first ordered))))
+             (let [var-sets (mapv #(set (:vars %)) ordered)
+                   ;; keys*[i-1] is the variable set joining the accumulated result
+                   ;; with ordered[i].
+                   keys* (loop [i 1, accset (first var-sets), ks []]
+                           (if (>= i (count ordered))
+                             ks
+                             (recur (inc i)
+                                    (set/union accset (nth var-sets i))
+                                    (conj ks (set/intersection accset (nth var-sets i))))))
+                   first-input (rel-plan (first ordered)
+                                         (lead-with (first keys*) (:vars (first ordered))))]
+               ;; Single left-to-right pass: each join's key column *order* is fixed by
+               ;; the accumulated (left) layout, and the right relation is arranged to
+               ;; that same key order so both sides' leading columns line up.
+               (loop [i 1
+                      acc (:out-vars first-input)
+                      inputs [first-input]
+                      steps []]
+                 (if (>= i (count ordered))
+                   (let [out-vars (or target* acc)
+                         final-permute (when (and target* (not= acc target*))
+                                         (indices-of acc target*))]
+                     (cond-> {:kind :join
+                              :out-vars out-vars
+                              :inputs inputs
+                              :steps steps}
+                       final-permute (assoc :final-permute final-permute)))
+                   (let [ki (nth keys* (dec i))
+                         qi (nth ordered i)
+                         key-order (vec (filter ki acc))
+                         left-needed (into key-order (remove ki acc))
+                         permute (indices-of acc left-needed)
+                         qi-target (into key-order (remove ki (:vars qi)))
+                         right-input (rel-plan qi qi-target)
+                         out-vars (into left-needed (remove ki (:vars qi)))]
+                     (recur (inc i)
+                            out-vars
+                            (conj inputs right-input)
+                            (conj steps {:right-vars (:out-vars right-input)
+                                         :key-arity (count ki)
+                                         :key-vars key-order
+                                         :left-permute (when (not= permute
+                                                                   (vec (range (count acc))))
+                                                         permute)
+                                         :out-vars out-vars})))))))]
+       (apply-not-plans positive-plan nots)))))
 
 (defn plan
   "Builds the full circuit plan for [query]:
@@ -443,6 +497,32 @@
      :handles (vec (mapcat :handles wired))
      :leaves (vec (mapcat :leaves wired))}))
 
+(defn- assemble-difference
+  "Wires a :difference relation node as A - semijoin(A, distinct(keys(B)))."
+  [^Circuit circuit {:keys [positive negative key-vars keyed-vars out-vars]}]
+  (let [positive-wired (assemble-rel circuit positive)
+        negative-wired (assemble-rel circuit negative)
+        positive-keyed (project-stream circuit
+                                       (:stream positive-wired)
+                                       (:vars positive-wired)
+                                       keyed-vars)
+        negative-keys (project-stream circuit
+                                      (:stream negative-wired)
+                                      (:vars negative-wired)
+                                      key-vars)
+        distinct-negative-keys (.addUnary circuit (DistinctOp.) negative-keys)
+        matched-left (.addBinary circuit
+                                 (IncrementalJoinOp. (int (count key-vars))
+                                                     "incremental-join")
+                                 positive-keyed
+                                 distinct-negative-keys)
+        difference (.addBinary circuit (MinusOp. "difference") positive-keyed matched-left)
+        result (project-stream circuit difference keyed-vars out-vars)]
+    {:stream result
+     :vars out-vars
+     :handles (vec (concat (:handles positive-wired) (:handles negative-wired)))
+     :leaves (vec (concat (:leaves positive-wired) (:leaves negative-wired)))}))
+
 (defn- assemble-rel
   "Dispatches relation assembly by [rel]'s `:kind`.
   Returns
@@ -457,7 +537,8 @@
   (case (:kind rel)
     :triple (assemble-triple circuit rel)
     :union  (assemble-union  circuit rel)
-    :join   (assemble-join   circuit rel)))
+    :join   (assemble-join   circuit rel)
+    :difference (assemble-difference circuit rel)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
