@@ -163,7 +163,17 @@
                                              (not [?e :name "Bob"]))]})]
       (is (= :or (:kind p)))
       (is (= :not (:kind (second (:branches p)))))
-      (is (= '[?e] (:vars (second (:branches p))))))))
+      (is (= '[?e] (:vars (second (:branches p)))))))
+
+  (testing "nested :or inside :and is preserved"
+    (let [[p] (patterns '{:find [?e]
+                          :where [(or (and [?e :sex :male]
+                                           (or [?e :name "Ivan"]
+                                               [?e :name "Bob"]))
+                                      [?e :sex :female])]})]
+      (is (= :and (:kind (first (:branches p)))))
+      (is (= [:triple :or]
+             (mapv :kind (:children (first (:branches p)))))))))
 
 (deftest compile-pattern-not-test
   (testing "not descriptor carries child descriptors and free variables"
@@ -180,16 +190,6 @@
                  (dbsp/parse '{:find [?e]
                                :where [[?e :name name]
                                        (not [?other :last-name "Smith"])]})))))
-
-  (testing "nested :or inside :and is preserved"
-    (let [[p] (patterns '{:find [?e]
-                          :where [(or (and [?e :sex :male]
-                                           (or [?e :name "Ivan"]
-                                               [?e :name "Bob"]))
-                                      [?e :sex :female])]})]
-      (is (= :and (:kind (first (:branches p)))))
-      (is (= [:triple :or]
-             (mapv :kind (:children (first (:branches p))))))))
 
 ;; --------------------------------------------------------------------------
 ;; Left-deep join order
