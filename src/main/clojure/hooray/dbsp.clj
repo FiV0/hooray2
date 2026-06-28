@@ -288,7 +288,7 @@
 (defn- not-descriptor? [descriptor]
   (= :not (:kind descriptor)))
 
-(defn- anti-difference-plan
+(defn- anti-join-plan
   "Plans one Datalog `not` clause as A - semijoin(A, distinct(keys(B)))."
   [positive descriptor]
   (let [positive-vars (:out-vars positive)
@@ -309,7 +309,7 @@
        :out-vars positive-vars})))
 
 (defn- apply-not-plans [positive nots]
-  (reduce anti-difference-plan positive nots))
+  (reduce anti-join-plan positive nots))
 
 (defn- plan-inputs
   "Plans descriptors as one relation tree. Multiple descriptors become a
