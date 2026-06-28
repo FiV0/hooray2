@@ -2,7 +2,8 @@
   (:require
    [clojure.test :as t :refer [deftest is testing]]
    [hooray.core :as h]
-   [hooray.dbsp :as dbsp])
+   [hooray.dbsp :as dbsp]
+   [hooray.fixtures :as fix])
   (:import
    (org.hooray.dbsp Tuple)))
 
@@ -36,7 +37,11 @@
   (binding [h/*dbsp-version* :standard]
     (f)))
 
-(t/use-fixtures :each with-standard-dbsp)
+(defn- with-dbsp-schema [f]
+  (h/transact fix/*node* schema)
+  (f))
+
+(t/use-fixtures :each with-standard-dbsp fix/with-node with-dbsp-schema)
 
 (defn- patterns [query]
   (:patterns (dbsp/parse query)))
@@ -695,7 +700,7 @@
 ;; --------------------------------------------------------------------------
 
 (deftest compute-delta-single-pattern-update-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (let [db-before (h/db node)
           iq (dbsp/compile-query db-before '{:find [name] :where [[1 :name name]]})
@@ -703,7 +708,7 @@
       (is (= #{[["Ivan"] -1] [["Ivanov"] 1]} (set delta))))))
 
 (deftest compute-delta-two-pattern-join-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}])
     (let [db-before (h/db node)
           iq (dbsp/compile-query db-before '{:find [name last-name]
@@ -715,7 +720,7 @@
       (is (= #{[["Petr" "Petrov"] 1]} (set delta))))))
 
 (deftest compute-delta-queue-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (let [db-before (h/db node)
           iq (dbsp/compile-query db-before '{:find [name] :where [[1 :name name]]})]
@@ -728,20 +733,20 @@
 ;; --------------------------------------------------------------------------
 
 (deftest e2e-single-pattern-test
-  (let [node (fresh-node)
+  (let [node fix/*node*
         iq (h/q-inc node '{:find [name] :where [[1 :name name]]})]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))))
 
 (deftest e2e-update-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (let [iq (h/q-inc node '{:find [name] :where [[1 :name name]]})]
       (h/transact node [{:db/id 1 :name "Ivanov"}])
       (is (= #{[["Ivan"] -1] [["Ivanov"] 1]} (set (h/consume-delta! iq)))))))
 
 (deftest e2e-two-pattern-join-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}])
     (let [iq (h/q-inc node '{:find [name last-name]
                                     :where [[e :name name]
@@ -750,7 +755,7 @@
       (is (= #{[["Petr" "Petrov"] 1]} (set (h/consume-delta! iq)))))))
 
 (deftest e2e-self-join-test
-  (let [node (fresh-node)
+  (let [node fix/*node*
         iq (h/q-inc node '{:find [?a ?b]
                                   :where [[?a :name n]
                                           [?b :name n]]})]
@@ -760,7 +765,7 @@
            (set (h/consume-delta! iq))))))
 
 (deftest e2e-three-pattern-chain-test
-  (let [node (fresh-node)
+  (let [node fix/*node*
         iq (h/q-inc node '{:find [?a ?d]
                                   :where [[?a :edge ?b]
                                           [?b :edge ?c]
@@ -772,7 +777,7 @@
     (is (= #{[[:n1 :n4] 1]} (set (h/consume-delta! iq))))))
 
 (deftest e2e-triangle-test
-  (let [node (fresh-node)
+  (let [node fix/*node*
         iq (h/q-inc node '{:find [?a ?b ?c]
                                   :where [[?a :edge ?b]
                                           [?b :edge ?c]
@@ -785,7 +790,7 @@
            (set (h/consume-delta! iq))))))
 
 (deftest e2e-cartesian-test
-  (let [node (fresh-node)
+  (let [node fix/*node*
         iq (h/q-inc node '{:find [n c]
                                   :where [[e1 :name n]
                                           [e2 :city c]]})]
@@ -800,7 +805,7 @@
            (set (h/consume-delta! iq))))))
 
 (deftest e2e-cardinality-many-duplicate-add-is-noop-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (h/transact node [[:db/add 1 :edge 2]])
     (let [iq (h/q-inc node '{:find [?to] :where [[1 :edge ?to]]})]
       (h/transact node [[:db/add 1 :edge 2]])
@@ -809,7 +814,7 @@
       (is (= #{[[2] -1]} (set (h/consume-delta! iq)))))))
 
 (deftest e2e-unregister-standard-query-test
-  (let [node (fresh-node)
+  (let [node fix/*node*
         iq (h/q-inc node '{:find [name] :where [[?e :name name]]})]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))
@@ -818,7 +823,7 @@
     (is (nil? (h/consume-delta! iq)))))
 
 (deftest e2e-rejects-unsupported-query-options-test
-  (let [node (fresh-node)]
+  (let [node fix/*node*]
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
                                         :in [name]
@@ -838,7 +843,7 @@
 
 (deftest e2e-or-single-branch-equivalent-to-bare-test
   (testing "(or B) produces the same delta as the bare triple B"
-    (let [bare-node (fresh-node)
+    (let [bare-node fix/*node*
           or-node (fresh-node)
           bare-iq (h/q-inc bare-node '{:find [?e]
                                               :where [[?e :name "Ivan"]]})
@@ -851,7 +856,7 @@
 
 (deftest e2e-or-disjoint-union-test
   (testing "two-branch :or returns the union of its branches"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [?e]
                                     :where [(or [?e :name "Ada"]
                                                 [?e :name "Bob"])]})]
@@ -863,7 +868,7 @@
 
 (deftest e2e-or-overlap-distinct-test
   (testing "overlapping branches collapse via DistinctOp"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [?e]
                                     :where [(or [?e :name "X"]
                                                 [?e :last-name "X"])]})]
@@ -879,9 +884,9 @@
       (h/transact node [[:db/retract 1 :last-name "X"]])
       (is (= #{[[1] -1]} (set (h/consume-delta! iq)))))))
 
-(deftest e2e-or-with-outer-join-test
+(deftest e2e-or-with-outer-join-add-test
   (testing ":or joined with an outer triple — adds"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [[?e :name name]
                                             (or [?e :last-name "Lovelace"]
@@ -890,10 +895,11 @@
                         {:db/id :alan :name "Alan"  :last-name "Turing"}
                         {:db/id :bob  :name "Bob"   :last-name "Smith"}])
       (is (= #{[["Ada"] 1] [["Alan"] 1]}
-             (set (h/consume-delta! iq))))))
+             (set (h/consume-delta! iq)))))))
 
+(deftest e2e-or-with-outer-join-retract-test
   (testing ":or joined with an outer triple — retract drops a matching row"
-    (let [node (fresh-node)]
+    (let [node fix/*node*]
       (h/transact node [{:db/id :ada :name "Ada" :last-name "Lovelace"}])
       (let [iq (h/q-inc node '{:find [name]
                                       :where [[?e :name name]
@@ -904,7 +910,7 @@
 
 (deftest e2e-or-two-var-in-chain-test
   (testing "2-var :or joined into a chain"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [[?e :city "NYC"]
                                             (or [?e :name name]
@@ -916,7 +922,7 @@
 
 (deftest e2e-or-only-query-test
   (testing "an :or block as the only :where pattern"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [?e]
                                     :where [(or [?e :name "Ada"]
                                                 [?e :name "Bob"]
@@ -928,7 +934,7 @@
 
 (deftest e2e-or-branch-can-use-and-test
   (testing ":standard supports existing query grammar where :or branches contain :and"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [[e :name name]
                                             (or [e :last-name "Ivanova"]
@@ -942,7 +948,7 @@
 
 (deftest e2e-or-and-branch-final-permute-test
   (testing ":and branch results are emitted in the parent :or column order"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [?x ?y]
                                     :where [(or [?x :edge ?y]
                                                 (and [?y :name ?x]
@@ -952,9 +958,9 @@
                [["mirror" "node"] 1]}
              (set (h/consume-delta! iq)))))))
 
-(deftest e2e-not-antijoin-test
+(deftest e2e-not-antijoin-add-negative-test
   (testing "adding a negative fact retracts matching positive rows"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [[e :name name]
                                             (not [e :last-name "Smith"])]})]
@@ -964,20 +970,22 @@
              (set (h/consume-delta! iq))))
       (h/transact node [{:db/id 1 :last-name "Smith"}])
       (is (= #{[["Alice"] -1]}
-             (set (h/consume-delta! iq))))))
+             (set (h/consume-delta! iq)))))))
 
+(deftest e2e-not-antijoin-retract-negative-test
   (testing "retracting a negative fact re-adds matching positive rows"
-    (let [node (fresh-node)]
+    (let [node fix/*node*]
       (h/transact node [{:db/id 1 :name "Alice" :last-name "Smith"}])
       (let [iq (h/q-inc node '{:find [name]
                                       :where [[e :name name]
                                               (not [e :last-name "Smith"])]})]
         (h/transact node [[:db/retract 1 :last-name "Smith"]])
         (is (= #{[["Alice"] 1]}
-               (set (h/consume-delta! iq)))))))
+               (set (h/consume-delta! iq))))))))
 
+(deftest e2e-not-antijoin-duplicate-right-keys-test
   (testing "duplicate right-side keys do not multiply the retraction"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [[e :name name]
                                             (not (or [e :last-name "Blocked"]
@@ -988,10 +996,11 @@
       (is (nil? (h/consume-delta! iq)))
       (h/transact node [[:db/retract 1 :city "Blocked"]])
       (is (= #{[["Alice"] 1]}
-             (set (h/consume-delta! iq))))))
+             (set (h/consume-delta! iq)))))))
 
+(deftest e2e-not-antijoin-inside-and-under-or-test
   (testing "not composes inside an and branch under or"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [(or (and [e :name name]
                                                      [e :last-name "Fallback"])
@@ -1007,12 +1016,11 @@
 ;; End-to-end: nested :or
 ;; --------------------------------------------------------------------------
 
-(defn- standard-deltas
-  "Registers [query] on a fresh node, applies [transactions] one at a time,
+(defn- query-deltas
+  "Registers [query] on [node], applies [transactions] one at a time,
   returns the per-transaction deltas as sets."
-  [query transactions]
-  (let [node (fresh-node)
-        iq (h/q-inc node query)]
+  [node query transactions]
+  (let [iq (h/q-inc node query)]
     (mapv (fn [tx]
             (h/transact node tx)
             (set (h/consume-delta! iq)))
@@ -1034,12 +1042,12 @@
                    :where [(or [?e :name "Ada"]
                                [?e :name "Bob"]
                                [?e :name "Carla"])]}]
-      (is (= (standard-deltas flat txs)
-             (standard-deltas nested txs))))))
+      (is (= (query-deltas fix/*node* flat txs)
+             (query-deltas (fresh-node) nested txs))))))
 
 (deftest e2e-nested-or-with-outer-join-test
   (testing "nested :or joined with an outer triple"
-    (let [node (fresh-node)
+    (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                                     :where [[?e :name name]
                                             (or [?e :last-name "Lovelace"]
@@ -1069,8 +1077,8 @@
                              [?e :name "Bob"]
                              [?e :name "Carla"]
                              [?e :name "Dave"])]}]
-      (is (= (standard-deltas flat txs)
-             (standard-deltas deep txs))))))
+      (is (= (query-deltas fix/*node* flat txs)
+             (query-deltas (fresh-node) deep txs))))))
 
 ;; --------------------------------------------------------------------------
 ;; Cross-engine equivalence: :wcoj vs :standard produce the same deltas
