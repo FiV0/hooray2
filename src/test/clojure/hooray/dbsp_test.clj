@@ -936,10 +936,10 @@
   (testing ":standard supports existing query grammar where :or branches contain :and"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
-                                    :where [[e :name name]
-                                            (or [e :last-name "Ivanova"]
-                                                (and [e :last-name "Ivanov"]
-                                                     [e :name "Ivan"]))]})]
+                             :where [[e :name name]
+                                     (or [e :last-name "Ivanova"]
+                                         (and [e :last-name "Ivanov"]
+                                              [e :name "Ivan"]))]})]
       (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                         {:db/id :petr :name "Petr" :last-name "Ivanov"}
                         {:db/id :ivana :name "Ivana" :last-name "Ivanova"}])
@@ -950,67 +950,57 @@
   (testing ":and branch results are emitted in the parent :or column order"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [?x ?y]
-                                    :where [(or [?x :edge ?y]
-                                                (and [?y :name ?x]
-                                                     [?y :edge ?x]))]})]
+                             :where [(or [?x :edge ?y]
+                                         (and [?y :name ?x]
+                                              [?y :edge ?x]))]})]
       (h/transact node [{:db/id "node" :name "mirror" :edge "mirror"}])
       (is (= #{[["node" "mirror"] 1]
                [["mirror" "node"] 1]}
              (set (h/consume-delta! iq)))))))
 
 (deftest e2e-not-antijoin-add-negative-test
-  (testing "adding a negative fact retracts matching positive rows"
-    (let [node fix/*node*
-          iq (h/q-inc node '{:find [name]
-                                    :where [[e :name name]
-                                            (not [e :last-name "Smith"])]})]
-      (h/transact node [{:db/id 1 :name "Alice"}
-                        {:db/id 2 :name "Bob" :last-name "Smith"}])
-      (is (= #{[["Alice"] 1]}
-             (set (h/consume-delta! iq))))
-      (h/transact node [{:db/id 1 :last-name "Smith"}])
-      (is (= #{[["Alice"] -1]}
-             (set (h/consume-delta! iq)))))))
-
-(deftest e2e-not-antijoin-retract-negative-test
-  (testing "retracting a negative fact re-adds matching positive rows"
-    (let [node fix/*node*]
-      (h/transact node [{:db/id 1 :name "Alice" :last-name "Smith"}])
-      (let [iq (h/q-inc node '{:find [name]
-                                      :where [[e :name name]
-                                              (not [e :last-name "Smith"])]})]
-        (h/transact node [[:db/retract 1 :last-name "Smith"]])
-        (is (= #{[["Alice"] 1]}
-               (set (h/consume-delta! iq))))))))
+  (testing "adding a negative fact retracts matching positive rows +
+            retracting a negative fact re-adds matching positive rows"
+    (let [iq (h/q-inc fix/*node* '{:find [name]
+                                   :where [[e :name name]
+                                           (not [e :last-name "Smith"])]})]
+      (h/transact fix/*node* [{:db/id 1 :name "Alice"}
+                              {:db/id 2 :name "Bob" :last-name "Smith"}])
+      (is (= [[["Alice"] 1]]
+             (h/consume-delta! iq)))
+      (h/transact fix/*node* [{:db/id 1 :last-name "Smith"}])
+      (is (= [[["Alice"] -1]]
+             (h/consume-delta! iq)))
+      (h/transact fix/*node* [[:db/retract 1 :last-name "Smith"]])
+      (is (= [[["Alice"] 1]]
+             (h/consume-delta! iq))))))
 
 (deftest e2e-not-antijoin-duplicate-right-keys-test
   (testing "duplicate right-side keys do not multiply the retraction"
-    (let [node fix/*node*
-          iq (h/q-inc node '{:find [name]
-                                    :where [[e :name name]
-                                            (not (or [e :last-name "Blocked"]
-                                                     [e :city "Blocked"]))]})]
-      (h/transact node [{:db/id 1 :name "Alice" :last-name "Blocked" :city "Blocked"}])
+    (let [iq (h/q-inc fix/*node* '{:find [name]
+                                   :where [[e :name name]
+                                           (not (or [e :last-name "Blocked"]
+                                                    [e :city "Blocked"]))]})]
+      (h/transact fix/*node* [{:db/id 1 :name "Alice" :last-name "Blocked" :city "Blocked"}])
       (is (nil? (h/consume-delta! iq)))
-      (h/transact node [[:db/retract 1 :last-name "Blocked"]])
+      (h/transact fix/*node* [[:db/retract 1 :last-name "Blocked"]])
       (is (nil? (h/consume-delta! iq)))
-      (h/transact node [[:db/retract 1 :city "Blocked"]])
-      (is (= #{[["Alice"] 1]}
-             (set (h/consume-delta! iq)))))))
+      (h/transact fix/*node* [[:db/retract 1 :city "Blocked"]])
+      (is (= [[["Alice"] 1]]
+             (h/consume-delta! iq))))))
 
 (deftest e2e-not-antijoin-inside-and-under-or-test
   (testing "not composes inside an and branch under or"
-    (let [node fix/*node*
-          iq (h/q-inc node '{:find [name]
-                                    :where [(or (and [e :name name]
-                                                     [e :last-name "Fallback"])
-                                                (and [e :name name]
-                                                     (not [e :last-name "Smith"])))]})]
-      (h/transact node [{:db/id 1 :name "Alice"}
-                        {:db/id 2 :name "Bob" :last-name "Smith"}
-                        {:db/id 3 :name "Fallback" :last-name "Fallback"}])
-      (is (= #{[["Alice"] 1] [["Fallback"] 1]}
-             (set (h/consume-delta! iq)))))))
+    (let [iq (h/q-inc fix/*node* '{:find [name]
+                                   :where [(or (and [e :name name]
+                                                    [e :last-name "Fallback"])
+                                               (and [e :name name]
+                                                    (not [e :last-name "Smith"])))]})]
+      (h/transact fix/*node* [{:db/id 1 :name "Alice"}
+                              {:db/id 2 :name "Bob" :last-name "Smith"}
+                              {:db/id 3 :name "Fallback" :last-name "Fallback"}])
+      (is (= [[["Alice"] 1] [["Fallback"] 1]]
+             (h/consume-delta! iq))))))
 
 ;; --------------------------------------------------------------------------
 ;; End-to-end: nested :or
