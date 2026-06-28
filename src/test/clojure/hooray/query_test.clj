@@ -97,7 +97,6 @@
              (h/q '{:find [p1] :where [[p1 :name name]
                                        [p1 :last-name name]
                                        [p1 :name "Smith"]]} (h/db fix/*node*))))))
-#_
 (deftest test-or-branch-predicates-preserve-branch-identity
   (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
                           {:db/id "b" :name "B" :age 35}])
@@ -672,6 +671,21 @@
                           (or (and [e :sex :female]
                                    [e :name "Ivan"]))]}
                 (h/db fix/*node*)))))
+
+(deftest test-overlapping-or-components-fork-together
+  (is (= [[1 2 4]]
+         (h/q '{:find [b c d]
+                :in [b c d]
+                :where [(or (and [(= b 1)]
+                                  [(<= 0 d)])
+                            (and [(= d 4)]
+                                  [(<= 0 b)]))
+                        (or (and [(= c 2)]
+                                  [(<= 0 d)])
+                            (and [(= d 5)]
+                                  [(<= 0 c)]))]}
+              (h/db fix/*node*)
+              1 2 4))))
 
 (t/deftest test-not-query
   (t/is (= '[[:triple {:e [:variable e] :a [:constant :name] :v [:variable name]}]

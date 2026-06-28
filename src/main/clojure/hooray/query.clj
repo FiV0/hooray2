@@ -6,12 +6,12 @@
    [clojure.spec.alpha :as s]
    [hooray.db :as db]
    [hooray.error :as err]
+   [hooray.plan :as plan]
    [hooray.util :as util])
   (:import
    (java.util Map HashMap)
    (org.hooray.algo
     FilterLeapfrogIndex
-    GenericJoin
     Join
     LeapfrogIndex
     LeapfrogJoin
@@ -358,13 +358,45 @@
       (->> (zipmap in args)
            (map in->iterator)))))
 
+(defn- in-binding-variables [[type var]]
+  (case type
+    :scale-binding #{var}
+    :collection-binding #{var}
+    :tuple-binding (set var)
+    :relation-binding (set (first var))))
+
+(defn- in->plan-items [in var->idx args opts]
+  (mapv (fn [binding extender]
+          {:type :extender
+           :variables (in-binding-variables binding)
+           :extender extender})
+        in
+        (in->iterators in var->idx args opts)))
+
+(defn- compile-generic-branch [db var-in-join-order branch]
+  (if (= :and (first branch))
+    (mapv (partial compile-pattern db var-in-join-order) (second branch))
+    [(compile-pattern db var-in-join-order branch)]))
+
+(defn- compile-generic-plan-item [db var-in-join-order [type pattern :as conformed-pattern]]
+  (let [var->idx (zipmap var-in-join-order (range))
+        variables (free-variables conformed-pattern)]
+    (case type
+      :or {:type :or
+           :variables variables
+           :levels (sort (mapv var->idx variables))
+           :branches (mapv (partial compile-generic-branch db var-in-join-order) pattern)}
+      {:type :extender
+       :variables variables
+       :extender (compile-pattern db var-in-join-order conformed-pattern)})))
+
 (defn join [compiled-patterns levels {:keys [algo] :as _opts}]
-  (let [^Join join-algo (case algo
-                          :generic (GenericJoin. compiled-patterns levels)
-                          :leapfrog (let [indexes (filter #(not (instance? FilterLeapfrogIndex %)) compiled-patterns)
-                                          filters (filter #(instance? FilterLeapfrogIndex %) compiled-patterns)]
-                                      (LeapfrogJoin. indexes levels filters)))]
-    (.join join-algo)))
+  (case algo
+    :generic (plan/execute (plan/plan compiled-patterns levels))
+    :leapfrog (let [indexes (filter #(not (instance? FilterLeapfrogIndex %)) compiled-patterns)
+                    filters (filter #(instance? FilterLeapfrogIndex %) compiled-patterns)
+                    ^Join join-algo (LeapfrogJoin. indexes levels filters)]
+                (.join join-algo))))
 
 (defmulti aggregate (fn [name & _args] name))
 
@@ -511,8 +543,11 @@
   (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
         vars-in-join-order (query->variable-order conformed-query)
         var->idx (zipmap vars-in-join-order (range))
-        compiled-patterns (concat (in->iterators in var->idx args opts)
-                                  (map (partial compile-pattern db vars-in-join-order) where))
+        compiled-patterns (case (:algo opts)
+                            :generic (concat (in->plan-items in var->idx args opts)
+                                             (map (partial compile-generic-plan-item db vars-in-join-order) where))
+                            :leapfrog (concat (in->iterators in var->idx args opts)
+                                              (map (partial compile-pattern db vars-in-join-order) where)))
         compiled-find (compile-find find var->idx)]
     (cond->> (join compiled-patterns (count vars-in-join-order) opts)
       true (compiled-find)

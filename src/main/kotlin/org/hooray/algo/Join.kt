@@ -5,5 +5,4 @@ typealias ResultTuple = List<Any>
 
 interface Join<T> {
     fun join(): List<T>
-    fun join(prefixes: List<Prefix>): List<T>
 }
