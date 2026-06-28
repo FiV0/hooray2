@@ -155,6 +155,9 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
         }
         return results
     }
+
+    override fun join(prefixes: List<Prefix>): List<Prefix> =
+        TODO("Not yet implemented")
 }
 
 class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<ResultTuple> {
@@ -170,8 +173,11 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
         participants
     }
 
-    override fun join(): List<ResultTuple> {
-        var prefixes: List<Prefix> = listOf(persistentListOf())
+    override fun join(): List<ResultTuple> =
+       join(listOf(persistentListOf()))
+
+    override fun join(prefixes: List<Prefix>): List<ResultTuple> {
+        var prefixes: List<Prefix> = prefixes
 
         // For every level, perform a single join with the extenders participating in that level
         for (extenderSet in extenderSets) {
