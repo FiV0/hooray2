@@ -195,7 +195,7 @@
                                                      (mapcat identity branch-product)))]})
                      branch-products)}))
 
-(defn- plan-items [items levels]
+(defn plan-items [items levels]
   (let [normal-extenders (mapv :extender (filter extender-item? items))
         components (components items)]
     (loop [phases []
