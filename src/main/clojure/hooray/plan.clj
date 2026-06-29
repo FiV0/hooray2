@@ -2,6 +2,32 @@
   (:require [clojure.set :as set])
   (:import (org.hooray.algo GenericJoin)))
 
+;; To avoid branch leaking in or-branches we use the following strategy:
+;; We fix some variable order over all `where` clauses.
+;; Whenever there are no `or` patterns participating in the variable level
+;; we do standard generic join across the levels where no `or` patterns
+;; appear. Whenever an or-pattern appears we fork, meaning we continue
+;; running generic join, but now on the number of branches the `or` pattern
+;; has. We include all variables levels between the first variable level of the
+;; `or` pattern and the last variable pattern.
+;;
+;; Example:
+;; variable order [a, b, c, d, e]
+;; OR b,...,d
+;;
+;; Then the OR branches are forked for variable levels b,c and d, even if c is not
+;; participating in the OR branches.
+;; What happens if multiple `or` patterns overlap in their appearing variables?
+;; We make them a connected fork component and take the cartesian product of
+;; the different branches. This might be not be very performant in the beginning
+;; but I think it's a good first start.
+;;
+;; OR1: b, ..., d with branches X, Y
+;; OR2: b, ......, e with branches Z, M
+;;
+;; fork covering b,c,d,e with four forks
+;; covering XZ, XM, YZ, YM
+
 (defn- or-item? [item]
   (= :or (:type item)))
 
