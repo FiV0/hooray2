@@ -82,7 +82,7 @@
        :variables variables
        :extender (compile-pattern conformed-pattern)})))
 
-(defn compile-items [{:keys [compile-pattern free-variables var-in-join-order in in-extenders where]}]
+(defn- compile-items [{:keys [compile-pattern free-variables var-in-join-order in in-extenders where]}]
   (concat (in->items in in-extenders)
           (map (partial compile-generic-plan-item compile-pattern free-variables var-in-join-order) where)))
 
@@ -153,7 +153,7 @@
                                                      (mapcat identity branch-product)))]})
                      branch-products)}))
 
-(defn plan [items levels]
+(defn- plan [items levels]
   (let [normal-extenders (mapv :extender (filter extender-item? items))
         components (components items)]
     (loop [phases []
@@ -175,6 +175,9 @@
         (recur (conj phases (fork-phase component normal-extenders))
                (inc (:end component))
                remaining-components)))))
+
+(defn generic-plan [{:keys [var-in-join-order] :as opts}]
+  (plan (compile-items opts) (count var-in-join-order)))
 
 (defn- execute-join [phase prefixes]
   (if (empty? (:extenders phase))

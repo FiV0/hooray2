@@ -360,13 +360,12 @@
   (let [levels (count vars-in-join-order)
         var->idx (zipmap vars-in-join-order (range))]
     (case algo
-      :generic (let [compiled-patterns (plan/compile-items {:compile-pattern (partial compile-pattern db vars-in-join-order)
-                                                            :free-variables free-variables
-                                                            :var-in-join-order vars-in-join-order
-                                                            :in in
-                                                            :in-extenders (in->iterators in var->idx args opts)
-                                                            :where where})]
-                 (plan/execute (plan/plan compiled-patterns levels)))
+      :generic (plan/execute (plan/generic-plan {:compile-pattern (partial compile-pattern db vars-in-join-order)
+                                                 :free-variables free-variables
+                                                 :var-in-join-order vars-in-join-order
+                                                 :in in
+                                                 :in-extenders (in->iterators in var->idx args opts)
+                                                 :where where}))
       :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args opts)
                                                 (map (partial compile-pattern db vars-in-join-order) where))
                       indexes (filter #(not (instance? FilterLeapfrogIndex %)) compiled-patterns)
