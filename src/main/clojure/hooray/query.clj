@@ -407,8 +407,7 @@
       :or {:type :or
            :variables variables
            :levels (sort (mapv var->idx variables))
-           :branches (mapv identity
-                           (mapcat (partial compile-generic-branch-alternatives db var-in-join-order) pattern))}
+           :branches (vec (mapcat (partial compile-generic-branch-alternatives db var-in-join-order) pattern))}
       {:type :extender
        :variables variables
        :extender (compile-pattern db var-in-join-order conformed-pattern)})))
