@@ -19,7 +19,7 @@
   (testing "ordinary generic joins remain one join phase"
     (let [phases (plan/plan [(extender :outer)] 3)]
       (is (= [:join] (mapv :type phases)))
-      (is (= [0 2] ((juxt :start :end) (first phases)))))))
+      (is (= [0 2 [0 1 2]] ((juxt :start :end :levels) (first phases)))))))
 
 (deftest join-fork-join-plan-test
   (testing "a single OR component is surrounded by ordinary joins"
@@ -27,10 +27,11 @@
                              (or-node :or-b '#{b} [1] 2)]
                             3)]
       (is (= [:join :fork :join] (mapv :type phases)))
-      (is (= [0 0] ((juxt :start :end) (first phases))))
-      (is (= [1 1 '#{b} 2]
-             ((juxt :start :end :variables #(count (:children %))) (second phases))))
-      (is (= [2 2] ((juxt :start :end) (nth phases 2)))))))
+      (is (= [0 0 [0]] ((juxt :start :end :levels) (first phases))))
+      (is (= [1 1 '#{b} 2 [1]]
+             ((juxt :start :end :variables #(count (:children %)) #(get-in % [:children 0 :phases 0 :levels]))
+              (second phases))))
+      (is (= [2 2 [2]] ((juxt :start :end :levels) (nth phases 2)))))))
 
 (deftest same-variable-ors-plan-as-one-branch-product-fork-test
   (testing "multiple OR components introduced at the same level fork together"
@@ -61,8 +62,9 @@
                             6)
           fork (second phases)]
       (is (= [:join :fork :join] (mapv :type phases)))
-      (is (= [1 4 '#{b c d e} 4]
-             ((juxt :start :end :variables #(count (:children %))) fork))))))
+      (is (= [1 4 '#{b c d e} 4 [1 2 3 4]]
+             ((juxt :start :end :variables #(count (:children %)) #(get-in % [:children 0 :phases 0 :levels]))
+              fork))))))
 
 (deftest non-contiguous-or-vars-stay-in-one-fork-test
   (testing "non-contiguous OR variables keep branch identity through the whole component span"
@@ -71,5 +73,6 @@
                             5)
           fork (second phases)]
       (is (= [:join :fork :join] (mapv :type phases)))
-      (is (= [1 3 '#{b d} 2]
-             ((juxt :start :end :variables #(count (:children %))) fork))))))
+      (is (= [1 3 '#{b d} 2 [1 2 3]]
+             ((juxt :start :end :variables #(count (:children %)) #(get-in % [:children 0 :phases 0 :levels]))
+              fork))))))

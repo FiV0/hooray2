@@ -157,10 +157,11 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
     }
 }
 
-class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<ResultTuple> {
+class GenericJoin(val extenders: List<PrefixExtender>, levels: List<Int>) : Join<ResultTuple> {
+    constructor(extenders: List<PrefixExtender>, levels: Int) : this(extenders, List(levels) { it })
 
     // Precompute which extenders participate in which levels
-    private val extenderSets : List<List<PrefixExtender>> = List(levels) { level ->
+    private val extenderSets : List<List<PrefixExtender>> = levels.map { level ->
         val participants = mutableListOf<PrefixExtender>()
         for (extender in extenders) {
             if (extender.participatesInLevel(level)) {
@@ -175,10 +176,9 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
 
     fun join(prefixes: List<Prefix>): List<ResultTuple> {
         var prefixes: List<Prefix> = prefixes
-        val startLevel = prefixes.firstOrNull()?.size ?: 0
 
         // For every level, perform a single join with the extenders participating in that level
-        for (extenderSet in extenderSets.drop(startLevel)) {
+        for (extenderSet in extenderSets) {
             val singleJoin = GenericSingleJoin(extenderSet, prefixes)
             prefixes = singleJoin.join()
         }

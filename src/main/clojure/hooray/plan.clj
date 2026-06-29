@@ -86,6 +86,7 @@
   {:type :join
    :start start
    :end end
+   :levels (mapv int (range start (inc end)))
    :extenders (vec extenders)})
 
 (defn- fork-phase [component normal-extenders]
@@ -127,7 +128,7 @@
 (defn- execute-join [phase prefixes]
   (if (empty? (:extenders phase))
     prefixes
-    (.join (GenericJoin. (:extenders phase) (inc (:end phase))) prefixes)))
+    (.join (GenericJoin. (:extenders phase) (:levels phase)) prefixes)))
 
 (declare execute)
 
