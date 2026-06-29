@@ -412,13 +412,19 @@
        :variables variables
        :extender (compile-pattern db var-in-join-order conformed-pattern)})))
 
-(defn join [compiled-patterns levels {:keys [algo] :as _opts}]
-  (case algo
-    :generic (plan/execute (plan/plan compiled-patterns levels))
-    :leapfrog (let [indexes (filter #(not (instance? FilterLeapfrogIndex %)) compiled-patterns)
-                    filters (filter #(instance? FilterLeapfrogIndex %) compiled-patterns)
-                    ^Join join-algo (LeapfrogJoin. indexes levels filters)]
-                (.join join-algo))))
+(defn join [db {:keys [in where] :as _conformed-query} vars-in-join-order args {:keys [algo] :as opts}]
+  (let [levels (count vars-in-join-order)
+        var->idx (zipmap vars-in-join-order (range))]
+    (case algo
+      :generic (let [compiled-patterns (concat (in->plan-items in var->idx args opts)
+                                               (map (partial compile-generic-plan-item db vars-in-join-order) where))]
+                 (plan/execute (plan/plan compiled-patterns levels)))
+      :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args opts)
+                                                (map (partial compile-pattern db vars-in-join-order) where))
+                      indexes (filter #(not (instance? FilterLeapfrogIndex %)) compiled-patterns)
+                      filters (filter #(instance? FilterLeapfrogIndex %) compiled-patterns)
+                      ^Join join-algo (LeapfrogJoin. indexes levels filters)]
+                  (.join join-algo)))))
 
 (defmulti aggregate (fn [name & _args] name))
 
@@ -562,16 +568,11 @@
 
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
-  (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
+  (let [{:keys [find keys strs syms _in _where] :as conformed-query} (s/conform ::query query)
         vars-in-join-order (query->variable-order conformed-query)
         var->idx (zipmap vars-in-join-order (range))
-        compiled-patterns (case (:algo opts)
-                            :generic (concat (in->plan-items in var->idx args opts)
-                                             (map (partial compile-generic-plan-item db vars-in-join-order) where))
-                            :leapfrog (concat (in->iterators in var->idx args opts)
-                                              (map (partial compile-pattern db vars-in-join-order) where)))
         compiled-find (compile-find find var->idx)]
-    (cond->> (join compiled-patterns (count vars-in-join-order) opts)
+    (cond->> (join db conformed-query vars-in-join-order args opts)
       true (compiled-find)
       (seq keys) (map (zipmap-fn find keys var->idx keyword))
       (seq strs) (map (zipmap-fn find strs var->idx str))
