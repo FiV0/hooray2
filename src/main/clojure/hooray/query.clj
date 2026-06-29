@@ -357,67 +357,16 @@
       (->> (zipmap in args)
            (map in->iterator)))))
 
-(defn- in-binding-variables [[type var]]
-  (case type
-    :scale-binding #{var}
-    :collection-binding #{var}
-    :tuple-binding (set var)
-    :relation-binding (set (first var))))
-
-(defn- in->plan-items [in var->idx args opts]
-  (mapv (fn [binding extender]
-          {:type :extender
-           :variables (in-binding-variables binding)
-           :extender extender})
-        in
-        (in->iterators in var->idx args opts)))
-
-(declare compile-generic-branch-alternatives)
-
-(defn- cartesian-product [colls]
-  (reduce (fn [acc xs]
-            (for [prefix acc
-                  x xs]
-              (conj prefix x)))
-          [[]]
-          colls))
-
-(defn- generic-branch-patterns [branch]
-  (if (= :and (first branch))
-    (second branch)
-    [branch]))
-
-(defn- compile-generic-pattern-alternatives [db var-in-join-order [type pattern :as conformed-pattern]]
-  (case type
-    :or (mapcat (partial compile-generic-branch-alternatives db var-in-join-order) pattern)
-    :and (compile-generic-branch-alternatives db var-in-join-order conformed-pattern)
-    [[(compile-pattern db var-in-join-order conformed-pattern)]]))
-
-(defn- compile-generic-branch-alternatives [db var-in-join-order branch]
-  (let [pattern-alternatives (map #(compile-generic-pattern-alternatives db var-in-join-order %)
-                                  (generic-branch-patterns branch))]
-    (mapv (fn [alternative-set]
-            (vec (mapcat identity alternative-set)))
-          (cartesian-product pattern-alternatives))))
-
-(defn- compile-generic-plan-item [db var-in-join-order [type pattern :as conformed-pattern]]
-  (let [var->idx (zipmap var-in-join-order (range))
-        variables (free-variables conformed-pattern)]
-    (case type
-      :or {:type :or
-           :variables variables
-           :levels (sort (mapv var->idx variables))
-           :branches (vec (mapcat (partial compile-generic-branch-alternatives db var-in-join-order) pattern))}
-      {:type :extender
-       :variables variables
-       :extender (compile-pattern db var-in-join-order conformed-pattern)})))
-
 (defn join [db {:keys [in where] :as _conformed-query} vars-in-join-order args {:keys [algo] :as opts}]
   (let [levels (count vars-in-join-order)
         var->idx (zipmap vars-in-join-order (range))]
     (case algo
-      :generic (let [compiled-patterns (concat (in->plan-items in var->idx args opts)
-                                               (map (partial compile-generic-plan-item db vars-in-join-order) where))]
+      :generic (let [compiled-patterns (plan/compile-items {:compile-pattern (partial compile-pattern db vars-in-join-order)
+                                                            :free-variables free-variables
+                                                            :var-in-join-order vars-in-join-order
+                                                            :in in
+                                                            :in-extenders (in->iterators in var->idx args opts)
+                                                            :where where})]
                  (plan/execute (plan/plan compiled-patterns levels)))
       :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args opts)
                                                 (map (partial compile-pattern db vars-in-join-order) where))

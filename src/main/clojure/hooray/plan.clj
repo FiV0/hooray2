@@ -28,6 +28,64 @@
 ;; fork covering b,c,d,e with four forks
 ;; covering XZ, XM, YZ, YM
 
+(defn- in-binding-variables [[type var]]
+  (case type
+    :scale-binding #{var}
+    :collection-binding #{var}
+    :tuple-binding (set var)
+    :relation-binding (set (first var))))
+
+(defn- in->items [in in-extenders]
+  (mapv (fn [binding extender]
+          {:type :extender
+           :variables (in-binding-variables binding)
+           :extender extender})
+        in
+        in-extenders))
+
+(declare compile-generic-branch-alternatives)
+
+(defn- generic-branch-patterns [branch]
+  (if (= :and (first branch))
+    (second branch)
+    [branch]))
+
+(defn- compile-generic-pattern-alternatives [compile-pattern [type pattern :as conformed-pattern]]
+  (case type
+    :or (mapcat (partial compile-generic-branch-alternatives compile-pattern) pattern)
+    :and (compile-generic-branch-alternatives compile-pattern conformed-pattern)
+    [[(compile-pattern conformed-pattern)]]))
+
+(defn- cartesian-product [colls]
+  (if (empty? colls)
+    [[]]
+    (for [x (first colls)
+          more (cartesian-product (rest colls))]
+      (cons x more))))
+
+(defn- compile-generic-branch-alternatives [compile-pattern branch]
+  (let [pattern-alternatives (map #(compile-generic-pattern-alternatives compile-pattern %)
+                                  (generic-branch-patterns branch))]
+    (mapv (fn [alternative-set]
+            (vec (mapcat identity alternative-set)))
+          (cartesian-product pattern-alternatives))))
+
+(defn- compile-generic-plan-item [compile-pattern free-variables var-in-join-order [type pattern :as conformed-pattern]]
+  (let [var->idx (zipmap var-in-join-order (range))
+        variables (free-variables conformed-pattern)]
+    (case type
+      :or {:type :or
+           :variables variables
+           :levels (sort (mapv var->idx variables))
+           :branches (vec (mapcat (partial compile-generic-branch-alternatives compile-pattern) pattern))}
+      {:type :extender
+       :variables variables
+       :extender (compile-pattern conformed-pattern)})))
+
+(defn compile-items [{:keys [compile-pattern free-variables var-in-join-order in in-extenders where]}]
+  (concat (in->items in in-extenders)
+          (map (partial compile-generic-plan-item compile-pattern free-variables var-in-join-order) where)))
+
 (defn- or-item? [item]
   (= :or (:type item)))
 
@@ -74,13 +132,6 @@
                        :end end))))
        (sort-by :start)
        vec))
-
-(defn- cartesian-product [colls]
-  (if (empty? colls)
-    [[]]
-    (for [x (first colls)
-          more (cartesian-product (rest colls))]
-      (cons x more))))
 
 (defn- join-phase [start end extenders]
   {:type :join
