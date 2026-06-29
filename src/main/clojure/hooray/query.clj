@@ -372,10 +372,33 @@
         in
         (in->iterators in var->idx args opts)))
 
-(defn- compile-generic-branch [db var-in-join-order branch]
+(declare compile-generic-branch-alternatives)
+
+(defn- cartesian-product [colls]
+  (reduce (fn [acc xs]
+            (for [prefix acc
+                  x xs]
+              (conj prefix x)))
+          [[]]
+          colls))
+
+(defn- generic-branch-patterns [branch]
   (if (= :and (first branch))
-    (mapv (partial compile-pattern db var-in-join-order) (second branch))
-    [(compile-pattern db var-in-join-order branch)]))
+    (second branch)
+    [branch]))
+
+(defn- compile-generic-pattern-alternatives [db var-in-join-order [type pattern :as conformed-pattern]]
+  (case type
+    :or (mapcat (partial compile-generic-branch-alternatives db var-in-join-order) pattern)
+    :and (compile-generic-branch-alternatives db var-in-join-order conformed-pattern)
+    [[(compile-pattern db var-in-join-order conformed-pattern)]]))
+
+(defn- compile-generic-branch-alternatives [db var-in-join-order branch]
+  (let [pattern-alternatives (map #(compile-generic-pattern-alternatives db var-in-join-order %)
+                                  (generic-branch-patterns branch))]
+    (mapv (fn [alternative-set]
+            (vec (mapcat identity alternative-set)))
+          (cartesian-product pattern-alternatives))))
 
 (defn- compile-generic-plan-item [db var-in-join-order [type pattern :as conformed-pattern]]
   (let [var->idx (zipmap var-in-join-order (range))
@@ -384,7 +407,8 @@
       :or {:type :or
            :variables variables
            :levels (sort (mapv var->idx variables))
-           :branches (mapv (partial compile-generic-branch db var-in-join-order) pattern)}
+           :branches (mapv identity
+                           (mapcat (partial compile-generic-branch-alternatives db var-in-join-order) pattern))}
       {:type :extender
        :variables variables
        :extender (compile-pattern db var-in-join-order conformed-pattern)})))

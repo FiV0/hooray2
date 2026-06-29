@@ -672,6 +672,22 @@
                                    [e :name "Ivan"]))]}
                 (h/db fix/*node*)))))
 
+(deftest test-nested-or-in-generic-or-branch
+  (h/transact fix/*node* [{:db/id :ada :name "Ada" :last-name "Lovelace" :sex :female}
+                          {:db/id :alan :name "Alan" :last-name "Turing" :sex :male}
+                          {:db/id :bob :name "Bob" :last-name "Builder" :sex :male}])
+
+  (is (= [["Ada"]
+          ["Alan"]]
+         (h/q '{:find [name]
+                :where [[e :name name]
+                        (or (and [e :last-name "Lovelace"]
+                                 (or [e :sex :female]
+                                     [e :sex :unknown]))
+                            (and [e :last-name "Turing"]
+                                 [e :sex :male]))]}
+              (h/db fix/*node*)))))
+
 (deftest test-overlapping-or-components-fork-together
   (is (= [[1 2 4]]
          (h/q '{:find [b c d]
