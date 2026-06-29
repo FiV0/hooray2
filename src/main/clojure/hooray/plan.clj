@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [clojure.core.match :refer [match]]
             [hooray.error :as err])
-  (:import (org.hooray.algo GenericJoin)))
+  (:import (org.hooray.algo GenericJoin)
+           (org.hooray.iterator GenericAndPrefixExtender)))
 
 ;; some helpers used in plan and query
 
@@ -77,6 +78,23 @@
 ;; fork covering b,c,d,e with four forks
 ;; covering XZ, XM, YZ, YM
 
+;; We implement this algorithm in two phases.
+;; 1. A phase we transform the query into plan items
+;; Everything apart from `or` patterns become extender items
+;;
+;; {:type :extender
+;;  :variables ...
+;;  :extender <PrefixExtender>}
+;;
+;; An `or` pattern gets translated to
+;; {:type :or
+;;  :variables ...
+;;  :levels ...
+;;  :branches [[<PrefixExtender> ...] ...]}
+;; where each branch is a list of prefix extenders of that branch.
+;; `and` patterns can only appear directly below an `or` and also get fully expanded.
+
+
 (defn- in->items [in in-extenders]
   (mapv (fn [binding extender]
           {:type :extender
@@ -112,21 +130,48 @@
             (vec (mapcat identity alternative-set)))
           (cartesian-product pattern-alternatives))))
 
+(declare compile-plan-item)
+
+;; triple-pattern compile-pattern
+;; fn compile-pattern
+;; predicate compile-pattern
+;; or/and recurse + compile-pattern
+;; not recurse + compile pattern
+
+(defn compile-or-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
+  (case type
+    :and (mapv (partial compile-plan-item compile-pattern var-in-join-order) pattern)
+    [(compile-plan-item compile-pattern var-in-join-order conformed-pattern)]))
+
+
+;; the contract is :or returns a set of branches
+;; each brach is a vec of prefix extenders
+;; everything else
+
 (defn- compile-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
   (let [var->idx (zipmap var-in-join-order (range))
         variables (free-variables conformed-pattern)]
     (case type
+      (:triple :fn :predicate) {:type :extender
+                                :variables variables
+                                :extenders [(compile-pattern conformed-pattern)]}
       :or {:type :or
            :variables variables
            :levels (sort (mapv var->idx variables))
-           :branches (vec (mapcat (partial compile-generic-branch-alternatives compile-pattern) pattern))}
-      {:type :extender
-       :variables variables
-       :extender (compile-pattern conformed-pattern)})))
+           :branches (vec (mapcat (partial compile-or-plan-item compile-pattern var-in-join-order) pattern))}
+
+      :not {:type :not
+            :variables variables
+            :children (mapv (partial compile-plan-item compile-pattern var-in-join-order) pattern)})))
 
 (defn- compile-items [{:keys [compile-pattern var-in-join-order in in-extenders where]}]
   (concat (in->items in in-extenders)
           (map (partial compile-plan-item compile-pattern var-in-join-order) where)))
+
+'{:find [a b]
+  :where [[a :foo b]
+          (not (or [a :bar 1]
+                   [b :toto 2]))]}
 
 (defn- or-item? [item]
   (= :or (:type item)))
@@ -220,6 +265,8 @@
 
 (defn generic-plan [{:keys [var-in-join-order] :as opts}]
   (plan-items (compile-items opts) (count var-in-join-order)))
+
+;; this looks good
 
 (defn- execute-join [phase prefixes]
   (if (empty? (:extenders phase))
