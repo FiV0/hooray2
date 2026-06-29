@@ -142,18 +142,8 @@
 ;; [1 x y] -> eav entity needs to come before attribute
 ;; For simplicity let's just forget about attribute variables for now.
 
-
-(defn- in->variables [in]
-  (-> (for [[type var] in]
-        (case type
-          :scale-binding [var]
-          :collection-binding [var]
-          :tuple-binding var
-          :relation-binding var))
-      flatten))
-
 (defn query->variable-order [{:keys [in where] :as _conformed-query}]
-  (let [in-vars (in->variables in)
+  (let [in-vars (plan/in->variables in)
         where-vars (plan/variable-order* where)]
     (-> (concat in-vars where-vars) distinct)))
 

@@ -42,6 +42,15 @@
 (defn free-variables [pattern]
   (set (variable-order pattern)))
 
+(defn in->variables [in]
+  (-> (for [[type var] in]
+        (case type
+          :scale-binding [var]
+          :collection-binding [var]
+          :tuple-binding var
+          :relation-binding var))
+      flatten))
+
 ;; To avoid branch leaking in or-branches we use the following strategy:
 ;; We fix some variable order over all `where` clauses.
 ;; Whenever there are no `or` patterns participating in the variable level
@@ -68,17 +77,10 @@
 ;; fork covering b,c,d,e with four forks
 ;; covering XZ, XM, YZ, YM
 
-(defn- in-binding-variables [[type var]]
-  (case type
-    :scale-binding #{var}
-    :collection-binding #{var}
-    :tuple-binding (set var)
-    :relation-binding (set (first var))))
-
 (defn- in->items [in in-extenders]
   (mapv (fn [binding extender]
           {:type :extender
-           :variables (in-binding-variables binding)
+           :variables (set (in->variables binding))
            :extender extender})
         in
         in-extenders))
