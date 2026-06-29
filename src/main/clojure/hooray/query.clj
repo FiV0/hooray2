@@ -28,7 +28,6 @@
     GenericPrefixExtender
     GenericAndPrefixExtender
     GenericNotPrefixExtender
-    GenericOrPrefixExtender
     GenericPredicatePrefixExtender
     GenericFnPrefixExtender
     SealedIndex$MapIndex
@@ -293,7 +292,7 @@
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       :or (case algo
-            :generic (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
+            :generic (throw (ex-info "`or` pattern with generic join should never get planned" {:or pattern}))
             :leapfrog (AVLOrLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
       :and (case algo
              :generic (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
