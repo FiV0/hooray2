@@ -3,7 +3,7 @@
             [clojure.core.match :refer [match]]
             [hooray.error :as err])
   (:import (org.hooray.algo GenericJoin)
-           (org.hooray.iterator GenericAndPrefixExtender)))
+           (org.hooray.iterator GenericNotPrefixExtender)))
 
 ;; some helpers used in plan and query
 
@@ -52,6 +52,13 @@
           :relation-binding var))
       flatten))
 
+(defn- in-binding-variables [[type var]]
+  (case type
+    :scale-binding #{var}
+    :collection-binding #{var}
+    :tuple-binding (set var)
+    :relation-binding (set (first var))))
+
 ;; To avoid branch leaking in or-branches we use the following strategy:
 ;; We fix some variable order over all `where` clauses.
 ;; Whenever there are no `or` patterns participating in the variable level
@@ -79,42 +86,45 @@
 ;; covering XZ, XM, YZ, YM
 
 ;; We implement this algorithm in two phases.
-;; 1. A phase we transform the query into plan items
-;; Everything apart from `or` patterns become extender items
+;; 1. Transform the query into a logical plan tree. This removes query syntax and
+;;    compiles leaf patterns to prefix extenders, but keeps boolean shape explicit.
 ;;
 ;; {:type :extender
 ;;  :variables ...
-;;  :extender <PrefixExtender>}
+;;  :extenders [<PrefixExtender> ...]}
 ;;
-;; An `or` pattern gets translated to
+;; {:type :and
+;;  :variables ...
+;;  :children [<logical-plan-item> ...]}
+;;
 ;; {:type :or
 ;;  :variables ...
 ;;  :levels ...
-;;  :branches [[<PrefixExtender> ...] ...]}
-;; where each branch is a list of prefix extenders of that branch.
-;; `and` patterns can only appear directly below an `or` and also get fully expanded.
+;;  :branches [[<logical-plan-item> ...] ...]}
+;;
+;; {:type :not
+;;  :variables ...
+;;  :levels ...
+;;  :children [<logical-plan-item> ...]}
+;;
+;; 2. Lower the logical plan tree into executable plan items. At this boundary
+;;    all boolean nesting has been normalized, `not` has become ordinary
+;;    GenericNotPrefixExtenders, and the only remaining item types are
+;;    executable `:extender` and positive `:or` items.
 
 
 (defn- in->items [in in-extenders]
   (mapv (fn [binding extender]
           {:type :extender
-           :variables (set (in->variables binding))
-           :extender extender})
+           :variables (in-binding-variables binding)
+           :extenders [extender]})
         in
         in-extenders))
 
-(declare compile-generic-branch-alternatives)
-
-(defn- generic-branch-patterns [branch]
+(defn- branch-patterns [branch]
   (if (= :and (first branch))
     (second branch)
     [branch]))
-
-(defn- compile-generic-pattern-alternatives [compile-pattern [type pattern :as conformed-pattern]]
-  (case type
-    :or (mapcat (partial compile-generic-branch-alternatives compile-pattern) pattern)
-    :and (compile-generic-branch-alternatives compile-pattern conformed-pattern)
-    [[(compile-pattern conformed-pattern)]]))
 
 (defn- cartesian-product [colls]
   (if (empty? colls)
@@ -123,30 +133,7 @@
           more (cartesian-product (rest colls))]
       (cons x more))))
 
-(defn- compile-generic-branch-alternatives [compile-pattern branch]
-  (let [pattern-alternatives (map (partial compile-generic-pattern-alternatives compile-pattern)
-                                  (generic-branch-patterns branch))]
-    (mapv (fn [alternative-set]
-            (vec (mapcat identity alternative-set)))
-          (cartesian-product pattern-alternatives))))
-
 (declare compile-plan-item)
-
-;; triple-pattern compile-pattern
-;; fn compile-pattern
-;; predicate compile-pattern
-;; or/and recurse + compile-pattern
-;; not recurse + compile pattern
-
-(defn compile-or-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
-  (case type
-    :and (mapv (partial compile-plan-item compile-pattern var-in-join-order) pattern)
-    [(compile-plan-item compile-pattern var-in-join-order conformed-pattern)]))
-
-
-;; the contract is :or returns a set of branches
-;; each brach is a vec of prefix extenders
-;; everything else
 
 (defn- compile-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
   (let [var->idx (zipmap var-in-join-order (range))
@@ -155,23 +142,64 @@
       (:triple :fn :predicate) {:type :extender
                                 :variables variables
                                 :extenders [(compile-pattern conformed-pattern)]}
+      :and {:type :and
+            :variables variables
+            :children (mapv (partial compile-plan-item compile-pattern var-in-join-order) pattern)}
       :or {:type :or
            :variables variables
            :levels (sort (mapv var->idx variables))
-           :branches (vec (mapcat (partial compile-or-plan-item compile-pattern var-in-join-order) pattern))}
+           :branches (mapv (fn [branch]
+                              (mapv (partial compile-plan-item compile-pattern var-in-join-order)
+                                    (branch-patterns branch)))
+                            pattern)}
 
       :not {:type :not
             :variables variables
+            :levels (sort (mapv var->idx variables))
             :children (mapv (partial compile-plan-item compile-pattern var-in-join-order) pattern)})))
 
 (defn- compile-items [{:keys [compile-pattern var-in-join-order in in-extenders where]}]
   (concat (in->items in in-extenders)
           (map (partial compile-plan-item compile-pattern var-in-join-order) where)))
 
-'{:find [a b]
-  :where [[a :foo b]
-          (not (or [a :bar 1]
-                   [b :toto 2]))]}
+(declare logical-items->alternatives)
+
+(defn- logical-item->alternatives [{:keys [type children branches extenders levels] :as item}]
+  (case type
+    :extender [extenders]
+    :and (logical-items->alternatives children)
+    :or (vec (mapcat logical-items->alternatives branches))
+    :not [(mapv (fn [alternative]
+                  (GenericNotPrefixExtender. alternative (apply max levels)))
+                (logical-items->alternatives children))]
+    (throw (ex-info "Unknown logical plan item" {:item item}))))
+
+(defn- logical-items->alternatives [items]
+  (mapv (fn [alternative-set]
+          (vec (mapcat identity alternative-set)))
+        (cartesian-product (map logical-item->alternatives items))))
+
+(defn- logical-item->executable-items [{:keys [type variables levels branches extenders children] :as item}]
+  (case type
+    :extender (mapv (fn [extender]
+                      {:type :extender
+                       :variables variables
+                       :extender extender})
+                    extenders)
+    :and (mapcat logical-item->executable-items children)
+    :or [{:type :or
+          :variables variables
+          :levels levels
+          :branches (vec (mapcat logical-items->alternatives branches))}]
+    :not (mapv (fn [extender]
+                 {:type :extender
+                  :variables variables
+                  :extender extender})
+               (first (logical-item->alternatives item)))
+    (throw (ex-info "Unknown logical plan item" {:item item}))))
+
+(defn- logical-items->executable-items [items]
+  (vec (mapcat logical-item->executable-items items)))
 
 (defn- or-item? [item]
   (= :or (:type item)))
@@ -264,7 +292,8 @@
                remaining-components)))))
 
 (defn generic-plan [{:keys [var-in-join-order] :as opts}]
-  (plan-items (compile-items opts) (count var-in-join-order)))
+  (plan-items (logical-items->executable-items (compile-items opts))
+              (count var-in-join-order)))
 
 ;; this looks good
 

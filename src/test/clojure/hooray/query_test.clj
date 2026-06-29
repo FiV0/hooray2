@@ -717,6 +717,31 @@
                           {:db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
                           {:db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}])
 
+  (t/testing "or inside not is distributed into negative extenders"
+    (h/transact fix/*node* [{:db/id :db/foo-attr
+                             :db/ident :foo
+                             :db/valueType :db.type/keyword
+                             :db/cardinality :db.cardinality/one}
+                            {:db/id :db/bar-attr
+                             :db/ident :bar
+                             :db/valueType :db.type/keyword
+                             :db/cardinality :db.cardinality/one}
+                            {:db/id :db/toto-attr
+                             :db/ident :toto
+                             :db/valueType :db.type/keyword
+                             :db/cardinality :db.cardinality/one}])
+    (h/transact fix/*node* [{:db/id :a-keep :foo :b-keep}
+                            {:db/id :a-drop-bar :foo :b-drop-bar :bar :b-drop-bar}
+                            {:db/id :a-drop-toto :foo :b-drop-toto :toto :b-drop-toto}
+                            {:db/id :a-other :foo :b-other :bar :different :toto :else}])
+    (is (= #{[:a-keep :b-keep]
+             [:a-other :b-other]}
+           (set (h/q '{:find [a b]
+                       :where [[a :foo b]
+                               (not (or [a :bar b]
+                                        [a :toto b]))]}
+                     (h/db fix/*node*))))))
+
   (t/testing "literal v"
     (t/is (= 1 (count (h/q '{:find [e]
                              :where [[e :name name]
