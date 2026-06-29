@@ -106,13 +106,13 @@
       (cons x more))))
 
 (defn- compile-generic-branch-alternatives [compile-pattern branch]
-  (let [pattern-alternatives (map #(compile-generic-pattern-alternatives compile-pattern %)
+  (let [pattern-alternatives (map (partial compile-generic-pattern-alternatives compile-pattern)
                                   (generic-branch-patterns branch))]
     (mapv (fn [alternative-set]
             (vec (mapcat identity alternative-set)))
           (cartesian-product pattern-alternatives))))
 
-(defn- compile-generic-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
+(defn- compile-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
   (let [var->idx (zipmap var-in-join-order (range))
         variables (free-variables conformed-pattern)]
     (case type
@@ -126,7 +126,7 @@
 
 (defn- compile-items [{:keys [compile-pattern var-in-join-order in in-extenders where]}]
   (concat (in->items in in-extenders)
-          (map (partial compile-generic-plan-item compile-pattern var-in-join-order) where)))
+          (map (partial compile-plan-item compile-pattern var-in-join-order) where)))
 
 (defn- or-item? [item]
   (= :or (:type item)))
@@ -195,7 +195,7 @@
                                                      (mapcat identity branch-product)))]})
                      branch-products)}))
 
-(defn- plan [items levels]
+(defn- plan-items [items levels]
   (let [normal-extenders (mapv :extender (filter extender-item? items))
         components (components items)]
     (loop [phases []
@@ -219,7 +219,7 @@
                remaining-components)))))
 
 (defn generic-plan [{:keys [var-in-join-order] :as opts}]
-  (plan (compile-items opts) (count var-in-join-order)))
+  (plan-items (compile-items opts) (count var-in-join-order)))
 
 (defn- execute-join [phase prefixes]
   (if (empty? (:extenders phase))
