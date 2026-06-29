@@ -1,6 +1,7 @@
 (ns hooray.incremental
   (:require [clojure.core.match :refer [match]]
             [clojure.spec.alpha :as s]
+            [hooray.plan :as plan]
             [hooray.query :as query]
             [hooray.transact :as t]
             [hooray.util :as util]
@@ -127,7 +128,7 @@
 (defn compile-incremental-q ^IncrementalPipeline [db query]
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [{:keys [find keys strs syms in where] :as _conformed-query} (s/conform ::query/query query)
-        var-order (query/variable-order* where)
+        var-order (plan/variable-order* where)
         var->index (zipmap var-order (range))
         compiled-patterns (map (partial compile-inc-pattern var-order) where)]
     (when (seq in)

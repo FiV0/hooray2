@@ -1,6 +1,46 @@
 (ns hooray.plan
-  (:require [clojure.set :as set])
+  (:require [clojure.set :as set]
+            [clojure.core.match :refer [match]]
+            [hooray.error :as err])
   (:import (org.hooray.algo GenericJoin)))
+
+;; some helpers used in plan and query
+
+(declare variable-order*)
+
+(defn variable-order [[type value]]
+  (-> (case type
+        :triple (let [{:keys [e a v]} value]
+                  (match [e a v]
+                    [[:constant _] [:constant _] [:constant _]] []
+                    [[:constant _] [:constant _] [:variable value-var]] [value-var]
+                    [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
+                    [[:variable entity-var] [:constant _] [:variable value-var]]
+                    (if (= entity-var value-var)
+                      (err/unsupported-ex "Hooray does not (yet) support repeated variables inside one triple pattern"
+                                          {:pattern value})
+                      [entity-var value-var])
+                    [_ [:variable _] _] (err/unsupported-ex "Currently variables in attribute position are not supported")))
+
+        (:or :and :not) (variable-order* value)
+        :predicate (let [{:keys [args]} value]
+                     (->> args
+                          (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
+                          (map second)))
+        :fn (let [[{:keys [args]} ret-var] value]
+              (-> (->> args
+                       (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
+                       (map second))
+                  (conj ret-var))))
+      distinct))
+
+(defn variable-order* [patterns]
+  (->> (map variable-order patterns)
+       flatten
+       distinct))
+
+(defn free-variables [pattern]
+  (set (variable-order pattern)))
 
 ;; To avoid branch leaking in or-branches we use the following strategy:
 ;; We fix some variable order over all `where` clauses.
@@ -70,7 +110,7 @@
             (vec (mapcat identity alternative-set)))
           (cartesian-product pattern-alternatives))))
 
-(defn- compile-generic-plan-item [compile-pattern free-variables var-in-join-order [type pattern :as conformed-pattern]]
+(defn- compile-generic-plan-item [compile-pattern var-in-join-order [type pattern :as conformed-pattern]]
   (let [var->idx (zipmap var-in-join-order (range))
         variables (free-variables conformed-pattern)]
     (case type
@@ -82,9 +122,9 @@
        :variables variables
        :extender (compile-pattern conformed-pattern)})))
 
-(defn- compile-items [{:keys [compile-pattern free-variables var-in-join-order in in-extenders where]}]
+(defn- compile-items [{:keys [compile-pattern var-in-join-order in in-extenders where]}]
   (concat (in->items in in-extenders)
-          (map (partial compile-generic-plan-item compile-pattern free-variables var-in-join-order) where)))
+          (map (partial compile-generic-plan-item compile-pattern var-in-join-order) where)))
 
 (defn- or-item? [item]
   (= :or (:type item)))
@@ -182,7 +222,7 @@
 (defn- execute-join [phase prefixes]
   (if (empty? (:extenders phase))
     prefixes
-    (.join (GenericJoin. (:extenders phase) (:levels phase)) prefixes)))
+    (.join (GenericJoin. (:extenders phase) ^java.util.List (:levels phase)) prefixes)))
 
 (declare execute)
 

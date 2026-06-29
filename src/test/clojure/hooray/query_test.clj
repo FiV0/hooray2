@@ -1,6 +1,7 @@
 (ns hooray.query-test
   (:require [clojure.test :as t :refer [deftest is testing]]
             [clojure.spec.alpha :as s]
+            [hooray.plan :as plan]
             [hooray.query :as query]
             [hooray.fixtures :as fix]
             [hooray.core :as h])
@@ -9,30 +10,30 @@
 (deftest variable-order-test
   (testing "no variables - all constants"
     (let [where (s/conform ::query/where [[1 :person/name "Alice"]])]
-      (is (= [] (query/variable-order* where)))))
+      (is (= [] (plan/variable-order* where)))))
 
   (testing "single variable in value position"
     (let [where (s/conform ::query/where '[[1 :person/name x]])]
-      (is (= '[x] (query/variable-order* where)))))
+      (is (= '[x] (plan/variable-order* where)))))
 
   (testing "single variable in entity position (constant value)"
     (let [where (s/conform ::query/where '[[x :person/name "Alice"]])]
-      (is (= '[x] (query/variable-order* where)))))
+      (is (= '[x] (plan/variable-order* where)))))
 
   (testing "two variables - entity and value positions"
     (let [where (s/conform ::query/where '[[x :person/name y]])]
-      (is (= '[x y] (query/variable-order* where)))))
+      (is (= '[x y] (plan/variable-order* where)))))
 
   (testing "multiple where clauses with same variable"
     (let [where (s/conform ::query/where
                            '[[x :person/name y]
                              [x :person/age z]])]
-      (is (= '[x y z] (query/variable-order* where)))))
+      (is (= '[x y z] (plan/variable-order* where)))))
 
   (testing "variable in attribute position throws exception"
     (let [where (s/conform ::query/where '[[x y "Alice"]])]
       (is (thrown? ExceptionInfo
-                   (query/variable-order* where))
+                   (plan/variable-order* where))
           "Should throw when variable is in attribute position"))))
 
 ;; All tests copied from XTDB

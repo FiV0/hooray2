@@ -142,33 +142,6 @@
 ;; [1 x y] -> eav entity needs to come before attribute
 ;; For simplicity let's just forget about attribute variables for now.
 
-(declare variable-order*)
-
-(defn variable-order [[type value]]
-  (-> (case type
-        :triple (let [{:keys [e a v]} value]
-                  (match [e a v]
-                    [[:constant _] [:constant _] [:constant _]] []
-                    [[:constant _] [:constant _] [:variable value-var]] [value-var]
-                    [[:variable entity-var] [:constant _] [:constant _]] [entity-var]
-                    [[:variable entity-var] [:constant _] [:variable value-var]]
-                    (if (= entity-var value-var)
-                      (err/unsupported-ex "Hooray does not (yet) support repeated variables inside one triple pattern"
-                                          {:pattern value})
-                      [entity-var value-var])
-                    [_ [:variable _] _] (err/unsupported-ex "Currently variables in attribute position are not supported")))
-
-        (:or :and :not) (variable-order* value)
-        :predicate (let [{:keys [args]} value]
-                     (->> args
-                          (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
-                          (map second)))
-        :fn (let [[{:keys [args]} ret-var] value]
-              (-> (->> args
-                       (filter (fn [[arg-type _arg-value]] (= arg-type :variable)))
-                       (map second))
-                  (conj ret-var))))
-      distinct))
 
 (defn- in->variables [in]
   (-> (for [[type var] in]
@@ -179,21 +152,13 @@
           :relation-binding var))
       flatten))
 
-(defn variable-order* [patterns]
-  (->> (map variable-order patterns)
-       flatten
-       distinct))
-
 (defn query->variable-order [{:keys [in where] :as _conformed-query}]
   (let [in-vars (in->variables in)
-        where-vars (variable-order* where)]
+        where-vars (plan/variable-order* where)]
     (-> (concat in-vars where-vars) distinct)))
 
-(defn free-variables [pattern]
-  (set (variable-order pattern)))
-
 (defn free-variables* [patterns]
-  (->> (map free-variables patterns)
+  (->> (map plan/free-variables patterns)
        (reduce clojure.set/union)))
 
 ;; TODO this doesn't properly work for nested patterns, let's first pass to not-join and or-join
@@ -201,10 +166,10 @@
   ([patterns] (validate-patterns patterns #{}))
   ([patterns context-pos-vars]
    (let [{triples :triple ors :or ands :and nots :not} (group-by first patterns)
-         positive-vars (into context-pos-vars (mapcat free-variables (concat triples ors ands)))]
+         positive-vars (into context-pos-vars (mapcat plan/free-variables (concat triples ors ands)))]
 
      (doseq [[_ or-branches] ors]
-       (let [or-branches-free-vars (mapv free-variables or-branches)]
+       (let [or-branches-free-vars (mapv plan/free-variables or-branches)]
          (when-not (every? #(= (first or-branches-free-vars) %) (rest or-branches-free-vars))
            (err/incorrect-ex "Branches of `or` must have same free variables!" {} :db.error/invalid-query))
          (validate-patterns or-branches positive-vars)))
@@ -361,7 +326,6 @@
         var->idx (zipmap vars-in-join-order (range))]
     (case algo
       :generic (plan/execute (plan/generic-plan {:compile-pattern (partial compile-pattern db vars-in-join-order)
-                                                 :free-variables free-variables
                                                  :var-in-join-order vars-in-join-order
                                                  :in in
                                                  :in-extenders (in->iterators in var->idx args opts)
