@@ -26,7 +26,6 @@
     AVLOrLeapfrogIndex
     AVLPredicateLeapfrogIndex
     GenericPrefixExtender
-    GenericAndPrefixExtender
     GenericNotPrefixExtender
     GenericPredicatePrefixExtender
     GenericFnPrefixExtender
@@ -295,7 +294,7 @@
             :generic (throw (ex-info "`or` pattern with generic join should never get planned" {:or pattern}))
             :leapfrog (AVLOrLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
       :and (case algo
-             :generic (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
+             :generic (throw (ex-info "`and` pattern with generic join should never get planned" {:and pattern}))
              :leapfrog (AVLAndLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
       :not (case algo
              :generic (GenericNotPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern)
