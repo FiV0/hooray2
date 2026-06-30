@@ -24,13 +24,10 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
         check(children.isNotEmpty()) { "At least one child extender is required" }
     }
 
-    private fun checkPrefix(idx: Int, prefix: Prefix): Boolean {
-        return childTries[idx].trieNodeFor(prefix) != null
+    override fun count(prefix: Prefix): Int {
+        val nodes = childTries.map { it.trieNodeFor(prefix) }
+        return saturatingSum(children.mapIndexed { index, extender -> if (nodes[index] != null) extender.count(prefix) else 0})
     }
-
-    override fun count(prefix: Prefix): Int =
-        // TODO maybe also adopt for `prefix` checking
-        saturatingSum(children.map { it.count(prefix) })
 
     override fun propose(prefix: Prefix): List<Extension> {
         val nodes = childTries.map { it.trieNodeFor(prefix) }
