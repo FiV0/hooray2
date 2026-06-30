@@ -13,6 +13,7 @@ class GenericRelationPrefixExtender(
 
     private val levelSet: Set<Int>
     private val trie = Trie<Any>()
+    private val root = trie.trieNodeFor(emptyList()) ?: error("Trie root must exist")
 
     init {
         require(levels.isNotEmpty()) { "At least one level is required" }
@@ -29,11 +30,16 @@ class GenericRelationPrefixExtender(
         }
     }
 
-    private fun extractPrefix(prefix: Prefix): List<Any> =
-        levels.takeWhile { level -> level < prefix.size }.map { level -> prefix[level] }
-
-    private fun trieNodeFor(prefix: Prefix): Trie.Node<Any>? =
-        trie.trieNodeFor(extractPrefix(prefix))
+    private fun trieNodeFor(prefix: Prefix): Trie.Node<Any>? {
+        var node = root
+        for (level in levels) {
+            if (level >= prefix.size) {
+                break
+            }
+            node = node.children[prefix[level]] ?: return null
+        }
+        return node
+    }
 
     override fun count(prefix: Prefix): Int {
         val node = trieNodeFor(prefix) ?: return 0
