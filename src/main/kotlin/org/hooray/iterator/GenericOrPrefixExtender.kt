@@ -44,8 +44,6 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
         return childProposals.filterNotNull().flatten().distinct()
     }
 
-
-
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         val nodes = childTries.map { it.trieNodeFor(prefix) }
         val result = mutableListOf<Extension>()
