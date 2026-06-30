@@ -4,18 +4,16 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
 import org.hooray.algo.ResultTuple
+import org.hooray.util.Trie
 
 class GenericRelationPrefixExtender(
     private val levels: List<Int>,
     relation: List<ResultTuple>
 ) : PrefixExtender {
 
-    private class TrieNode {
-        val children: MutableMap<Any, TrieNode> = hashMapOf()
-    }
-
     private val levelSet: Set<Int>
-    private val root = TrieNode()
+    private val trie = Trie<Any>()
+    private val root = trie.trieNodeFor(emptyList()) ?: error("Trie root must exist")
 
     init {
         require(levels.isNotEmpty()) { "At least one level is required" }
@@ -28,21 +26,17 @@ class GenericRelationPrefixExtender(
         levelSet = levels.toSet()
 
         for (tuple in relation) {
-            var node = root
-            for (value in tuple) {
-                node = node.children.getOrPut(value) { TrieNode() }
-            }
+            trie.insert(tuple)
         }
     }
 
-    private fun trieNodeFor(prefix: Prefix): TrieNode? {
+    private fun trieNodeFor(prefix: Prefix): Trie.Node<Any>? {
         var node = root
         for (level in levels) {
             if (level >= prefix.size) {
                 break
             }
-            val value = prefix[level]
-            node = node.children[value] ?: return null
+            node = node.children[prefix[level]] ?: return null
         }
         return node
     }
@@ -59,7 +53,7 @@ class GenericRelationPrefixExtender(
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
         val validExtensions = trieNodeFor(prefix)?.children ?: return emptyList()
-        return extensions.filter { validExtensions.contains(it) }
+        return extensions.filter { validExtensions.containsKey(it) }
     }
 
     override fun participatesInLevel(level: Int): Boolean =
