@@ -5,6 +5,7 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import java.util.*
 
+// TODO: This is still broken for branch leaking
 class AVLOrPrefixExtender(children: List<AVLPrefixExtender>): GenericOrPrefixExtender(children) {
 
     private fun mergeSortedLists(lists: List<List<Extension>>): List<Extension> {
