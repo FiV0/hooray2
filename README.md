@@ -136,9 +136,9 @@ I have written two blog posts about combining WCOJ with DBSP:
 	- [ ] pull
 - Incremental
     - [x] Standard triple pattern
-	- [ ] Or
-	- [ ] And
-	- [ ] Not
+	- [x] Or (only `:standard`)
+	- [x] And (only `:standard`)
+	- [x] Not (only `:standard`)
 	- [ ] Or-join
 	- [ ] Not-join
 	- [ ] predicates
