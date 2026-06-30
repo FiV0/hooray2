@@ -28,17 +28,19 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>, totalLeve
 
     private fun extractRelevantPrefix(prefix: Prefix) = prefix.filterIndexed { index, _ -> levelSet.contains(index) }
 
-    protected fun nodeForChild(childIndex: Int, prefix: Prefix): Trie.Node<Any>? =
-        childTries[childIndex].trieNodeFor(extractRelevantPrefix(prefix))
+    protected fun nodesForPrefix(prefix: Prefix): List<Trie.Node<Any>?> {
+        val relevantPrefix = extractRelevantPrefix(prefix)
+        return childTries.map { it.trieNodeFor(relevantPrefix) }
+    }
 
     override fun count(prefix: Prefix): Int {
-        val nodes = children.indices.map { nodeForChild(it, prefix) }
-        return saturatingSum(children.mapIndexed { index, extender -> if (nodes[index] != null) extender.count(prefix) else 0})
+        val nodes = nodesForPrefix(prefix)
+        return saturatingSum(children.mapIndexed { index, extender -> if (nodes[index] != null) extender.count(prefix) else 0 })
     }
 
     override fun propose(prefix: Prefix): List<Extension> {
-        val nodes = children.indices.map { nodeForChild(it, prefix) }
-        val childProposals = children.mapIndexed { index, extender -> if (nodes[index] != null) extender.propose(prefix) else emptyList()}
+        val nodes = nodesForPrefix(prefix)
+        val childProposals = children.mapIndexed { index, extender -> if (nodes[index] != null) extender.propose(prefix) else emptyList() }
         for ((idx, proposals) in childProposals.withIndex()) {
             val node = nodes[idx] ?: continue
             for (proposal in proposals) {
@@ -50,7 +52,7 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>, totalLeve
     }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
-        val nodes = children.indices.map { nodeForChild(it, prefix) }
+        val nodes = nodesForPrefix(prefix)
         val result = mutableListOf<Extension>()
         for ((idx, child) in children.withIndex()) {
             val node = nodes[idx] ?: continue

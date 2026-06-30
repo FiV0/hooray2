@@ -28,9 +28,10 @@ class AVLOrPrefixExtender(children: List<AVLPrefixExtender>, totalLevels: Int): 
     }
 
     override fun propose(prefix: Prefix): List<Extension> {
+        val nodes = nodesForPrefix(prefix)
         val results = mutableListOf<List<Extension>>()
         for ((idx, child) in children.withIndex()) {
-            val node = nodeForChild(idx, prefix) ?: continue
+            val node = nodes[idx] ?: continue
             val childProposals = child.propose(prefix)
             for (proposal in childProposals) {
                 node.insert(proposal)
@@ -41,9 +42,10 @@ class AVLOrPrefixExtender(children: List<AVLPrefixExtender>, totalLevels: Int): 
     }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+        val nodes = nodesForPrefix(prefix)
         val results = mutableListOf<List<Extension>>()
         for ((idx, child) in children.withIndex()) {
-            val node = nodeForChild(idx, prefix) ?: continue
+            val node = nodes[idx] ?: continue
             val childExtensions = child.intersect(prefix, extensions)
             for (extension in childExtensions) {
                 node.insert(extension)
