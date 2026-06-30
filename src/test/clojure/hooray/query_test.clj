@@ -115,6 +115,19 @@
              [?e :name ?name]]}
           (h/db fix/*node*)))))
 
+(deftest test-or-predicate-only-branches-can-filter-bound-values
+  (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}])
+
+  (is (= [[35]]
+         (h/q
+          '{:find [?age]
+            :where
+            [[?e :age ?age]
+             (or
+              [(< ?age 30)]
+              [(< ?age 40)])]}
+          (h/db fix/*node*)))))
+
 (deftest test-and-predicate-after-terminal-triple-does-not-over-index
   (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
                           {:db/id "b" :name "B" :age 50}])

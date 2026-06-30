@@ -16,21 +16,28 @@ internal fun saturatingSum(values: Iterable<Int>): Int {
     return total
 }
 
-open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender {
+open class GenericOrPrefixExtender(val children: List<PrefixExtender>, totalLevels: Int) : PrefixExtender {
 
     private val childTries = List(children.size) { Trie<Any>() }
+    private val levelSet: Set<Int>
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
+        levelSet = (0 until totalLevels).filter { level -> children.first().participatesInLevel(level) }.toSet()
     }
 
+    private fun extractRelevantPrefix(prefix: Prefix) = prefix.filterIndexed { index, _ -> levelSet.contains(index) }
+
+    protected fun nodeForChild(childIndex: Int, prefix: Prefix): Trie.Node<Any>? =
+        childTries[childIndex].trieNodeFor(extractRelevantPrefix(prefix))
+
     override fun count(prefix: Prefix): Int {
-        val nodes = childTries.map { it.trieNodeFor(prefix) }
+        val nodes = children.indices.map { nodeForChild(it, prefix) }
         return saturatingSum(children.mapIndexed { index, extender -> if (nodes[index] != null) extender.count(prefix) else 0})
     }
 
     override fun propose(prefix: Prefix): List<Extension> {
-        val nodes = childTries.map { it.trieNodeFor(prefix) }
+        val nodes = children.indices.map { nodeForChild(it, prefix) }
         val childProposals = children.mapIndexed { index, extender -> if (nodes[index] != null) extender.propose(prefix) else emptyList()}
         for ((idx, proposals) in childProposals.withIndex()) {
             val node = nodes[idx] ?: continue
@@ -39,11 +46,11 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
             }
         }
         // TODO the distinct call can likely be optimized to avoid large intermediate lists
-        return childProposals.filterNotNull().flatten().distinct()
+        return childProposals.flatten().distinct()
     }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
-        val nodes = childTries.map { it.trieNodeFor(prefix) }
+        val nodes = children.indices.map { nodeForChild(it, prefix) }
         val result = mutableListOf<Extension>()
         for ((idx, child) in children.withIndex()) {
             val node = nodes[idx] ?: continue
@@ -56,6 +63,5 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
         return result.distinct()
     }
 
-    // All or clauses have the same variables, hence participate in the same levels
-    override fun participatesInLevel(level: Int) = children.first().participatesInLevel(level)
+    override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
 }

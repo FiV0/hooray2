@@ -293,7 +293,8 @@
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       :or (case algo
-            :generic (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
+            :generic (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern)
+                                               (count var-in-join-order))
             :leapfrog (AVLOrLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
       :and (case algo
              :generic (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))

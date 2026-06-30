@@ -22,7 +22,7 @@ class GenericOrPrefixExtenderTest {
                 GenericPredicatePrefixExtender(listOf(1), lessThanForty),
             )
         )
-        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB))
+        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB), totalLevels = 2)
 
         assertEquals(listOf("a", "b"), orExtender.intersect(emptyList(), listOf("a", "b")))
         assertEquals(emptyList<Any>(), orExtender.intersect(listOf("a"), listOf(35)))
@@ -39,7 +39,7 @@ class GenericOrPrefixExtenderTest {
         val branchB = GenericAndPrefixExtender(
             listOf(GenericPredicatePrefixExtender(listOf(1), lessThanForty))
         )
-        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB))
+        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB), totalLevels = 2)
 
         assertEquals(listOf("entity"), orExtender.intersect(emptyList(), listOf("entity")))
         assertEquals(Int.MAX_VALUE, saturatingSum(listOf(Int.MAX_VALUE, Int.MAX_VALUE)))
