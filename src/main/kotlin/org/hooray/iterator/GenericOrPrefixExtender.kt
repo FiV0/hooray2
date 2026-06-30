@@ -18,7 +18,7 @@ internal fun saturatingSum(values: Iterable<Int>): Int {
 
 open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender {
 
-    val childTries = List(children.size) { Trie<Any>() }
+    private val childTries = List(children.size) { Trie<Any>() }
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
