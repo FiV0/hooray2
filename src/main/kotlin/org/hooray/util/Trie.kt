@@ -12,6 +12,8 @@ class Trie<T> {
 
         internal fun childForInsert(value: T): Node<T> =
             mutableChildren.getOrPut(value) { Node() }
+
+        fun insert(value: T) = childForInsert(value)
     }
 
     private val root = Node<T>()

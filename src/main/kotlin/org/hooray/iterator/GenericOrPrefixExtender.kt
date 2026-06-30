@@ -3,6 +3,7 @@ package org.hooray.iterator
 import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
+import org.hooray.util.Trie
 
 internal fun saturatingSum(values: Iterable<Int>): Int {
     var total = 0
@@ -17,20 +18,47 @@ internal fun saturatingSum(values: Iterable<Int>): Int {
 
 open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender {
 
+    val childTries = List(children.size) { Trie<Any>() }
+
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
     }
 
+    private fun checkPrefix(idx: Int, prefix: Prefix): Boolean {
+        return childTries[idx].trieNodeFor(prefix) != null
+    }
+
     override fun count(prefix: Prefix): Int =
+        // TODO maybe also adopt for `prefix` checking
         saturatingSum(children.map { it.count(prefix) })
 
-    // TODO the distinct call can likely be optimized to avoid large intermediate lists
-    override fun propose(prefix: Prefix) = children.flatMap { it.propose(prefix) }.distinct()
+    override fun propose(prefix: Prefix): List<Extension> {
+        val nodes = childTries.map { it.trieNodeFor(prefix) }
+        val childProposals = children.mapIndexed { index, extender -> if (nodes[index] != null) extender.propose(prefix) else null }
+        for ((idx, proposals) in childProposals.withIndex()) {
+            if (proposals != null) {
+                val node = nodes[idx] ?: error("Node should not be null here")
+                for (proposal in proposals) {
+                    node.insert(proposal)
+                }
+            }
+        }
+        // TODO the distinct call can likely be optimized to avoid large intermediate lists
+        return childProposals.filterNotNull().flatten().distinct()
+    }
+
+
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+        val nodes = childTries.map { it.trieNodeFor(prefix) }
         val result = mutableListOf<Extension>()
-        for (child in children) {
+        for ((idx, child) in children.withIndex()) {
+            if (nodes[idx] == null) continue
             val childExtensions = child.intersect(prefix, extensions)
+            for (extension in childExtensions) {
+                val node = nodes[idx] ?: error("Node should not be null here")
+                node.insert(extension)
+            }
             result.addAll(childExtensions)
         }
         return result.distinct()
