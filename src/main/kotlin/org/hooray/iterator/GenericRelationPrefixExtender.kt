@@ -29,10 +29,11 @@ class GenericRelationPrefixExtender(
         }
     }
 
+    private fun extractPrefix(prefix: Prefix): List<Any> =
+        levels.takeWhile { level -> level < prefix.size }.map { level -> prefix[level] }
+
     private fun trieNodeFor(prefix: Prefix): Trie.Node<Any>? =
-        trie.trieNodeFor(
-            levels.takeWhile { level -> level < prefix.size }.map { level -> prefix[level] }
-        )
+        trie.trieNodeFor(extractPrefix(prefix))
 
     override fun count(prefix: Prefix): Int {
         val node = trieNodeFor(prefix) ?: return 0
