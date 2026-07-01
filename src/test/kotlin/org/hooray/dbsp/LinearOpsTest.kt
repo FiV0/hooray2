@@ -37,6 +37,19 @@ class LinearOpsTest {
         assertTrue(FilterOp { true }.eval(emptyTupleZSet()).isEmpty())
     }
 
+    @Test
+    fun `filter from predicate keeps matching tuples and preserves weights`() {
+        val op = FilterOp.fromPredicate("adult") { (it[1] as Int) >= 18 }
+        val out = op.eval(
+            zset(
+                Tuple.of("Ada", 36) to 2,
+                Tuple.of("Bob", 17) to 3,
+                Tuple.of("Carla", 42) to -1,
+            )
+        )
+        assertEquals(zset(Tuple.of("Ada", 36) to 2, Tuple.of("Carla", 42) to -1), out)
+    }
+
     // --- MapOp ---
 
     @Test
