@@ -5,7 +5,7 @@ import org.hooray.algo.Extension
 import org.hooray.algo.Prefix
 import java.util.*
 
-class AVLOrPrefixExtender(children: List<AVLPrefixExtender>): GenericOrPrefixExtender(children) {
+class AVLOrPrefixExtender(children: List<AVLPrefixExtender>, totalLevels: Int): GenericOrPrefixExtender(children, totalLevels) {
 
     private fun mergeSortedLists(lists: List<List<Extension>>): List<Extension> {
         val priorityQueue = PriorityQueue<Pair<Int, Int>>(
@@ -28,17 +28,29 @@ class AVLOrPrefixExtender(children: List<AVLPrefixExtender>): GenericOrPrefixExt
     }
 
     override fun propose(prefix: Prefix): List<Extension> {
+        val nodes = nodesForPrefix(prefix)
         val results = mutableListOf<List<Extension>>()
-        for (child in children) {
-            results.add(child.propose(prefix))
+        for ((idx, child) in children.withIndex()) {
+            val node = nodes[idx] ?: continue
+            val childProposals = child.propose(prefix)
+            for (proposal in childProposals) {
+                node.insert(proposal)
+            }
+            results.add(childProposals)
         }
         return mergeSortedLists(results)
     }
 
     override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> {
+        val nodes = nodesForPrefix(prefix)
         val results = mutableListOf<List<Extension>>()
-        for (child in children) {
-            results.add(child.intersect(prefix, extensions))
+        for ((idx, child) in children.withIndex()) {
+            val node = nodes[idx] ?: continue
+            val childExtensions = child.intersect(prefix, extensions)
+            for (extension in childExtensions) {
+                node.insert(extension)
+            }
+            results.add(childExtensions)
         }
         return mergeSortedLists(results)
     }
