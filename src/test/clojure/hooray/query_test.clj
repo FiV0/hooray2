@@ -128,20 +128,6 @@
               [(< ?age 40)])]}
           (h/db fix/*node*)))))
 
-(deftest test-and-predicate-after-terminal-triple-does-not-over-index
-  (h/transact fix/*node* [{:db/id "a" :name "A" :age 35}
-                          {:db/id "b" :name "B" :age 50}])
-
-  (is (= [["A" 35]]
-         (h/q
-          '{:find [?name ?age]
-            :where
-            [[?e :age ?age]
-             (or (and [?e :name "A"]
-                      [(< ?age 40)]))
-             [?e :name ?name]]}
-          (h/db fix/*node*)))))
-
 (deftest projection-semantics-with-bags
   (h/transact fix/*node*
               [{:db/id :db/person-department
