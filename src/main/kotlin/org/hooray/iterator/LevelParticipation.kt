@@ -2,7 +2,7 @@ package org.hooray.iterator
 
 interface LevelParticipation {
     // Returns a list of levels in which the participant variables are involved
-    fun variableLevels(): List<Int>
+    fun variableLevels(): List<Long> = TODO("only implemented for generic join extenders")
     // Returns true if the participant is involved in the specified level
     // This returns true for a subset of variable levels, but not necessarily all of them
     // For example:

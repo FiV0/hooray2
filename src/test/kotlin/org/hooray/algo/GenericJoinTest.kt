@@ -61,6 +61,8 @@ class GenericJoinTest {
                 }
             }
 
+            override fun variableLevels(): List<Long> = listOf(0L, 1L)
+
             override fun participatesInLevel(level: Int) = level == 1
         }
 
@@ -93,6 +95,8 @@ class GenericJoinTest {
         assertEquals(false, extender.participatesInLevel(1))
         assertEquals(true, extender.participatesInLevel(2))
         assertEquals(false, extender.participatesInLevel(3))
+
+        assertEquals(listOf(0L, 2L), extender.variableLevels())
     }
 
     @Test

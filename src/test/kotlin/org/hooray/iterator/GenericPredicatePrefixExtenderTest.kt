@@ -11,7 +11,7 @@ class GenericPredicatePrefixExtenderTest {
     fun `test unary predicate - filter even numbers`() {
         // Predicate1: keep only even numbers
         val isEven: Predicate1<Any> = { x -> (x as Int) % 2 == 0 }
-        val predicateExtender = GenericPredicatePrefixExtender(listOf(0), isEven)
+        val predicateExtender = GenericPredicatePrefixExtender(listOf(0L), isEven)
 
         // Test participatesInLevel
         assertEquals(true, predicateExtender.participatesInLevel(0))
@@ -31,7 +31,7 @@ class GenericPredicatePrefixExtenderTest {
     @Test
     fun `test unary predicate - filter positive numbers`() {
         val isPositive: Predicate1<Any> = { x -> (x as Int) > 0 }
-        val predicateExtender = GenericPredicatePrefixExtender(listOf(0), isPositive)
+        val predicateExtender = GenericPredicatePrefixExtender(listOf(0L), isPositive)
 
         val extensions = listOf(-3, -2, -1, 0, 1, 2, 3)
         val filtered = predicateExtender.intersect(emptyList(), extensions)
@@ -44,7 +44,7 @@ class GenericPredicatePrefixExtenderTest {
     fun `test binary predicate - filter where second is greater than first`() {
         // Predicate2: keep where extension > prefix value
         val greaterThan: Predicate2<Any, Any> = { a, b -> (b as Int) > (a as Int) }
-        val predicateExtender = GenericPredicatePrefixExtender(listOf(0, 1), greaterThan)
+        val predicateExtender = GenericPredicatePrefixExtender(listOf(0L, 1L), greaterThan)
 
         // Test participatesInLevel - should participate in last level (1)
         assertEquals(false, predicateExtender.participatesInLevel(0))
@@ -62,7 +62,7 @@ class GenericPredicatePrefixExtenderTest {
     fun `test binary predicate - filter where sum is even`() {
         // Predicate2: keep where a + b is even
         val sumIsEven: Predicate2<Any, Any> = { a, b -> ((a as Int) + (b as Int)) % 2 == 0 }
-        val predicateExtender = GenericPredicatePrefixExtender(listOf(0, 1), sumIsEven)
+        val predicateExtender = GenericPredicatePrefixExtender(listOf(0L, 1L), sumIsEven)
 
         // Prefix [3] (odd), so keep only odd extensions (odd + odd = even)
         val extensions = (1..6).toList()
@@ -81,7 +81,7 @@ class GenericPredicatePrefixExtenderTest {
     @Test
     fun `test propose throws IllegalStateException`() {
         val isEven: Predicate1<Any> = { x -> (x as Int) % 2 == 0 }
-        val predicateExtender = GenericPredicatePrefixExtender(listOf(0), isEven)
+        val predicateExtender = GenericPredicatePrefixExtender(listOf(0L), isEven)
 
         assertThrows<IllegalStateException> {
             predicateExtender.propose(emptyList())
@@ -97,7 +97,7 @@ class GenericPredicatePrefixExtenderTest {
         }
 
         assertThrows<IllegalArgumentException> {
-            GenericPredicatePrefixExtender(listOf(0, 1, 2), pred)
+            GenericPredicatePrefixExtender(listOf(0L, 1L, 2L), pred)
         }
     }
 
@@ -105,7 +105,7 @@ class GenericPredicatePrefixExtenderTest {
     fun `test binary predicate with join-like scenario`() {
         // Simulate a scenario where we have tuples and want to filter based on a predicate
         val lessThan: Predicate2<Any, Any> = { a, b -> (a as Int) < (b as Int) }
-        val predicateExtender = GenericPredicatePrefixExtender(listOf(0, 1), lessThan)
+        val predicateExtender = GenericPredicatePrefixExtender(listOf(0L, 1L), lessThan)
 
         val resultTuples = mutableListOf<ResultTuple>()
         val proposedExtensions = (1..5).toList()

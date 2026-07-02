@@ -13,7 +13,7 @@ sealed interface AVLIndex {
 }
 
 @Suppress("UNCHECKED_CAST")
-class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Int>) : GenericPrefixExtender(
+class AVLPrefixExtender(val avlIndex: AVLIndex, participatesInLevel: List<Long>) : GenericPrefixExtender(
     when(avlIndex) {
         is AVLIndex.AVLMapIndex -> SealedIndex.MapIndex(avlIndex.map as Map<Any, Any>)
         is AVLIndex.AVLSetIndex -> SealedIndex.SetIndex(avlIndex.set as Set<Any>)

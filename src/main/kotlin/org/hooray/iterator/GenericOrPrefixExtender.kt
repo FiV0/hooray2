@@ -16,22 +16,33 @@ internal fun saturatingSum(values: Iterable<Int>): Int {
     return total
 }
 
-open class GenericOrPrefixExtender(val children: List<PrefixExtender>, totalLevels: Int) : PrefixExtender {
+open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender {
 
     private val childTries = List(children.size) { Trie<Any>() }
-    private val levelSet: Set<Int>
+    private val variableLevels: List<Long>
+    private val levelSet: Set<Long>
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
-        levelSet = (0 until totalLevels).filter { level -> children.first().participatesInLevel(level) }.toSet()
+        variableLevels = children.flatMap { it.variableLevels() }.distinct().sorted()
+        // Participation levels are a subset of the variable levels
+        levelSet = variableLevels.filter { level -> children.first().participatesInLevel(level.toInt()) }.toSet()
     }
 
-    private fun extractRelevantPrefix(prefix: Prefix) = prefix.filterIndexed { index, _ -> levelSet.contains(index) }
-
-    protected fun nodesForPrefix(prefix: Prefix): List<Trie.Node<Any>?> {
-        val relevantPrefix = extractRelevantPrefix(prefix)
-        return childTries.map { it.trieNodeFor(relevantPrefix) }
-    }
+    // The child tries are keyed by the values at all variable levels, not just the participation
+    // levels: a child's decision at a participation level may depend on variables bound at levels
+    // where the OR was never consulted (e.g. a predicate argument bound by a triple pattern).
+    // At those levels every value passes, so missing nodes are created on the fly; at
+    // participation levels a missing node means the branch rejected that value.
+    protected fun nodesForPrefix(prefix: Prefix): List<Trie.Node<Any>?> =
+        childTries.map { trie ->
+            var node: Trie.Node<Any>? = trie.trieNodeFor(emptyList())
+            for (level in variableLevels) {
+                if (level >= prefix.size || node == null) break
+                node = if (levelSet.contains(level)) node.children[prefix[level.toInt()]] else node.insert(prefix[level.toInt()])
+            }
+            node
+        }
 
     override fun count(prefix: Prefix): Int {
         val nodes = nodesForPrefix(prefix)
@@ -65,5 +76,7 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>, totalLeve
         return result.distinct()
     }
 
-    override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
+    override fun variableLevels(): List<Long> = variableLevels
+
+    override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level.toLong())
 }

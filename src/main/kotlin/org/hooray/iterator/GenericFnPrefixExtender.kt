@@ -7,7 +7,7 @@ import org.hooray.algo.PrefixExtender
 typealias Fn1<A, R> = (A) -> R
 typealias Fn2<A, B, R> = (A, B) -> R
 
-class GenericFnPrefixExtender(val levels: List<Int>, val outputLevel: Int, val fn: Any) : PrefixExtender {
+class GenericFnPrefixExtender(val levels: List<Long>, val outputLevel: Long, val fn: Any) : PrefixExtender {
 
     init {
         require(levels.size in 1..2) { "Hooray only supports unary and binary functions for now." }
@@ -18,11 +18,11 @@ class GenericFnPrefixExtender(val levels: List<Int>, val outputLevel: Int, val f
         return when (levels.size) {
             1 -> {
                 val f = fn as Fn1<Any, Any>
-                f(prefix[levels[0]])
+                f(prefix[levels[0].toInt()])
             }
             2 -> {
                 val f = fn as Fn2<Any, Any, Any>
-                f(prefix[levels[0]], prefix[levels[1]])
+                f(prefix[levels[0].toInt()], prefix[levels[1].toInt()])
             }
             else -> throw IllegalStateException("Unreachable")
         }
@@ -37,5 +37,7 @@ class GenericFnPrefixExtender(val levels: List<Int>, val outputLevel: Int, val f
         return if (extensions.contains(result)) listOf(result) else emptyList()
     }
 
-    override fun participatesInLevel(level: Int) = level == outputLevel
+    override fun variableLevels(): List<Long> = (levels + outputLevel).sorted()
+
+    override fun participatesInLevel(level: Int) = level.toLong() == outputLevel
 }

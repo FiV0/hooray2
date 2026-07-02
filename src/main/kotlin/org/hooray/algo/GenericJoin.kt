@@ -31,6 +31,8 @@ interface PrefixExtender : LevelParticipation {
                 // TODO this doesn't make use of the fact that sortedValues is sorted
                         = extensions.filter { ext -> sortedValues.contains(ext) }
 
+                override fun variableLevels(): List<Long> = listOf(participatesInLevel.toLong())
+
                 override fun participatesInLevel(level: Int) = level == participatesInLevel
             }
         }
@@ -81,13 +83,15 @@ interface PrefixExtender : LevelParticipation {
                     return listOf(partialPrefix[i])
                 }
 
+                override fun variableLevels(): List<Long> = participatingLevels.map { it.toLong() }
+
                 override fun participatesInLevel(level: Int) = levelSet.contains(level)
             }
         }
 
         @JvmStatic
         fun createFromPrefixesExtender(participatingLevels: List<Int>, partialPrefixes: List<Prefix>) =
-            GenericRelationPrefixExtender(participatingLevels, partialPrefixes)
+            GenericRelationPrefixExtender(participatingLevels.map { it.toLong() }, partialPrefixes)
 
         fun createPrefixAndExtensionsExtender(fixedPrefix: Prefix, fixedExtensions: List<Extension>): PrefixExtender {
             val extensionSet = fixedExtensions.toHashSet()
@@ -117,6 +121,8 @@ interface PrefixExtender : LevelParticipation {
                             extensions.filter { ext -> extensionSet.contains(ext) }
                     else
                         emptyList()
+
+                override fun variableLevels(): List<Long> = (0L..fixedPrefix.size).toList()
 
                 override fun participatesInLevel(level: Int) = level <= fixedPrefix.size
             }

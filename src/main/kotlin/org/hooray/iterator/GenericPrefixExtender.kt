@@ -10,13 +10,13 @@ sealed interface SealedIndex {
 }
 
 @Suppress("UNCHECKED_CAST")
-open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel: List<Int>) : PrefixExtender, LevelParticipation {
+open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel: List<Long>) : PrefixExtender, LevelParticipation {
 
     protected fun internalPrefix(prefix: Prefix): Prefix {
         val newPrefix = mutableListOf<Any>()
         for (level in participatesInLevel) {
             if (level < prefix.size) {
-                newPrefix.add(prefix[level])
+                newPrefix.add(prefix[level.toInt()])
             }
         }
         return newPrefix
@@ -65,5 +65,7 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
             is SealedIndex.SetIndex -> extensions.filter { ext -> index.set.contains(ext) }
         }
 
-    override fun participatesInLevel(level: Int) = participatesInLevel.contains(level)
+    override fun variableLevels(): List<Long> = participatesInLevel
+
+    override fun participatesInLevel(level: Int) = participatesInLevel.contains(level.toLong())
 }

@@ -10,7 +10,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test unary function - double the value`() {
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
-        val fnExtender = GenericFnPrefixExtender(listOf(0), 1, double)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L), 1L, double)
 
         // Test participatesInLevel
         assertEquals(false, fnExtender.participatesInLevel(0))
@@ -30,7 +30,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test unary function - intersect with matching extension`() {
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
-        val fnExtender = GenericFnPrefixExtender(listOf(0), 1, double)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L), 1L, double)
 
         // Extensions contain the result (10)
         val extensions = listOf(8, 9, 10, 11, 12)
@@ -41,7 +41,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test unary function - intersect with no matching extension`() {
         val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
-        val fnExtender = GenericFnPrefixExtender(listOf(0), 1, double)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L), 1L, double)
 
         // Extensions do not contain the result (10)
         val extensions = listOf(1, 2, 3, 4, 5)
@@ -52,7 +52,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test binary function - sum of two values`() {
         val sum: Fn2<Any, Any, Any> = { a, b -> (a as Int) + (b as Int) }
-        val fnExtender = GenericFnPrefixExtender(listOf(0, 1), 2, sum)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L, 1L), 2L, sum)
 
         // Test participatesInLevel
         assertEquals(false, fnExtender.participatesInLevel(0))
@@ -67,7 +67,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test binary function - intersect with matching extension`() {
         val sum: Fn2<Any, Any, Any> = { a, b -> (a as Int) + (b as Int) }
-        val fnExtender = GenericFnPrefixExtender(listOf(0, 1), 2, sum)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L, 1L), 2L, sum)
 
         // prefix [3, 7] -> result is 10
         val extensions = listOf(8, 9, 10, 11, 12)
@@ -78,7 +78,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test binary function - intersect with no matching extension`() {
         val sum: Fn2<Any, Any, Any> = { a, b -> (a as Int) + (b as Int) }
-        val fnExtender = GenericFnPrefixExtender(listOf(0, 1), 2, sum)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L, 1L), 2L, sum)
 
         // prefix [3, 7] -> result is 10, but extensions don't contain 10
         val extensions = listOf(1, 2, 3, 4, 5)
@@ -89,7 +89,7 @@ class GenericFnPrefixExtenderTest {
     @Test
     fun `test binary function - multiply`() {
         val multiply: Fn2<Any, Any, Any> = { a, b -> (a as Int) * (b as Int) }
-        val fnExtender = GenericFnPrefixExtender(listOf(0, 1), 2, multiply)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L, 1L), 2L, multiply)
 
         // prefix [4, 5] -> 20
         assertEquals(listOf(20), fnExtender.propose(listOf(4, 5)))
@@ -104,11 +104,11 @@ class GenericFnPrefixExtenderTest {
         val fn: Fn1<Any, Any> = { it }
 
         assertThrows<IllegalArgumentException> {
-            GenericFnPrefixExtender(emptyList(), 0, fn)
+            GenericFnPrefixExtender(emptyList(), 0L, fn)
         }
 
         assertThrows<IllegalArgumentException> {
-            GenericFnPrefixExtender(listOf(0, 1, 2), 3, fn)
+            GenericFnPrefixExtender(listOf(0L, 1L, 2L), 3L, fn)
         }
     }
 
@@ -116,7 +116,7 @@ class GenericFnPrefixExtenderTest {
     fun `test unary function with join-like scenario`() {
         // Simulate computing squares: for each x, propose x^2
         val square: Fn1<Any, Any> = { x -> (x as Int) * (x as Int) }
-        val fnExtender = GenericFnPrefixExtender(listOf(0), 1, square)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L), 1L, square)
 
         val resultTuples = mutableListOf<ResultTuple>()
         val possibleExtensions = (1..25).toList() // includes all squares up to 5^2
@@ -147,7 +147,7 @@ class GenericFnPrefixExtenderTest {
         // Test that levels don't have to be contiguous
         // levels [0, 2] means we read from prefix[0] and prefix[2]
         val sum: Fn2<Any, Any, Any> = { a, b -> (a as Int) + (b as Int) }
-        val fnExtender = GenericFnPrefixExtender(listOf(0, 2), 3, sum)
+        val fnExtender = GenericFnPrefixExtender(listOf(0L, 2L), 3L, sum)
 
         // prefix [10, "ignored", 5] -> 10 + 5 = 15
         val prefix = listOf(10, "ignored", 5)

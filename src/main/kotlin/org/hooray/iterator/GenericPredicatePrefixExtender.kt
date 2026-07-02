@@ -8,7 +8,7 @@ typealias Predicate0 = () -> Boolean
 typealias Predicate1<A> = (A) -> Boolean
 typealias Predicate2<A, B> = (A, B) -> Boolean
 
-class GenericPredicatePrefixExtender(val levels: List<Int>, val predicate: Any) : PrefixExtender {
+class GenericPredicatePrefixExtender(val levels: List<Long>, val predicate: Any) : PrefixExtender {
 
     init {
         require(levels.size in 1..2) { "Hooray only supports unary and binary predicates for now." }
@@ -33,12 +33,14 @@ class GenericPredicatePrefixExtender(val levels: List<Int>, val predicate: Any) 
             }
             2 -> {
                 val pred = predicate as Predicate2<Any, Any>
-                val arg1 = prefix[levels[0]]
+                val arg1 = prefix[levels[0].toInt()]
                 extensions.filter { ext -> pred(arg1, ext) }
             }
             else -> throw IllegalStateException("Unreachable")
         }
     }
 
-    override fun participatesInLevel(level: Int) = level == levels.last()
+    override fun variableLevels(): List<Long> = levels
+
+    override fun participatesInLevel(level: Int) = level.toLong() == levels.last()
 }

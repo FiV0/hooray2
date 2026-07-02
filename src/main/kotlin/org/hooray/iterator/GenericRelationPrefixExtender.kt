@@ -7,11 +7,11 @@ import org.hooray.algo.ResultTuple
 import org.hooray.util.Trie
 
 class GenericRelationPrefixExtender(
-    private val levels: List<Int>,
+    private val levels: List<Long>,
     relation: List<ResultTuple>
 ) : PrefixExtender {
 
-    private val levelSet: Set<Int>
+    private val levelSet: Set<Long>
     private val trie = Trie<Any>()
     private val root = trie.trieNodeFor(emptyList()) ?: error("Trie root must exist")
 
@@ -36,7 +36,7 @@ class GenericRelationPrefixExtender(
             if (level >= prefix.size) {
                 break
             }
-            node = node.children[prefix[level]] ?: return null
+            node = node.children[prefix[level.toInt()]] ?: return null
         }
         return node
     }
@@ -56,6 +56,8 @@ class GenericRelationPrefixExtender(
         return extensions.filter { validExtensions.containsKey(it) }
     }
 
+    override fun variableLevels(): List<Long> = levels
+
     override fun participatesInLevel(level: Int): Boolean =
-        levelSet.contains(level)
+        levelSet.contains(level.toLong())
 }

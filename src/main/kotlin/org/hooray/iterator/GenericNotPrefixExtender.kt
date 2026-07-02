@@ -5,9 +5,15 @@ import org.hooray.algo.GenericJoin
 import org.hooray.algo.Prefix
 import org.hooray.algo.PrefixExtender
 
-// The level NOT participates in is the level after all variables appearing in its children are bound.
-// For now this is just the maximum level
-class GenericNotPrefixExtender(val children: List<PrefixExtender>, val level: Int): PrefixExtender {
+// The level NOT participates in is the level at which all variables appearing in its children are bound,
+// i.e. the last of its variable levels.
+class GenericNotPrefixExtender(val children: List<PrefixExtender>, val levels: List<Long>): PrefixExtender {
+
+    init {
+        require(levels.isNotEmpty()) { "At least one level is required" }
+        require(levels == levels.sorted()) { "Levels must be sorted ascending" }
+    }
+
     override fun count(prefix: Prefix): Int = Int.MAX_VALUE
 
     // If propose is called on NOT it means that the variable was not bound outside of NOT
@@ -33,5 +39,7 @@ class GenericNotPrefixExtender(val children: List<PrefixExtender>, val level: In
 //        return filteredExtensions
     }
 
-    override fun participatesInLevel(level: Int) = this.level == level
+    override fun variableLevels(): List<Long> = levels
+
+    override fun participatesInLevel(level: Int) = level.toLong() == levels.last()
 }

@@ -293,15 +293,14 @@
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
       :or (case algo
-            :generic (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern)
-                                               (count var-in-join-order))
+            :generic (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
             :leapfrog (AVLOrLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
       :and (case algo
              :generic (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
              :leapfrog (AVLAndLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
       :not (case algo
              :generic (GenericNotPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern)
-                                                 (dec (count var-in-join-order)))
+                                                 (->> (variable-order* pattern) (mapv var->idx) sort vec))
              :leapfrog (AVLNotLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)
                                              (dec (count var-in-join-order))))
 

@@ -36,5 +36,7 @@ open class GenericAndPrefixExtender(val children: List<PrefixExtender>) : Prefix
         return currentExtensions
     }
 
+    override fun variableLevels(): List<Long> = children.flatMap { it.variableLevels() }.distinct().sorted()
+
     override fun participatesInLevel(level: Int) = children.any { it.participatesInLevel(level) }
 }

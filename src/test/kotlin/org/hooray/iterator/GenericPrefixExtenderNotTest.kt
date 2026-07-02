@@ -10,14 +10,14 @@ class GenericPrefixExtenderNotTest {
     fun `test NOT with even numbers on level 0 and divisible by 3 on level 1`() {
         // First child: filter even numbers on level 0
         val evenIndex = SealedIndex.SetIndex((1..10).filter { it % 2 == 0 }.toSet())
-        val evenExtender = GenericPrefixExtender(evenIndex, listOf(0))
+        val evenExtender = GenericPrefixExtender(evenIndex, listOf(0L))
 
         // Second child: filter numbers divisible by 3 on level 1
         val divisibleByThreeIndex = SealedIndex.SetIndex((1..10).filter { it % 3 == 0 }.toSet())
-        val divisibleByThreeExtender = GenericPrefixExtender(divisibleByThreeIndex, listOf(1))
+        val divisibleByThreeExtender = GenericPrefixExtender(divisibleByThreeIndex, listOf(1L))
 
         // NOT extender participates at level 1 (after level 0 is bound)
-        val notExtender = GenericNotPrefixExtender(listOf(evenExtender, divisibleByThreeExtender), 1)
+        val notExtender = GenericNotPrefixExtender(listOf(evenExtender, divisibleByThreeExtender), listOf(0L, 1L))
 
         // Simulate the join process
         val resultTuples = mutableListOf<ResultTuple>()
@@ -64,10 +64,10 @@ class GenericPrefixExtenderNotTest {
         }
 
         val combinedIndex = SealedIndex.MapIndex(nestedMap)
-        val combinedExtender = GenericPrefixExtender(combinedIndex, listOf(0, 1))
+        val combinedExtender = GenericPrefixExtender(combinedIndex, listOf(0L, 1L))
 
         // NOT extender participates at level 1 (after level 0 is bound)
-        val notExtender = GenericNotPrefixExtender(listOf(combinedExtender), 1)
+        val notExtender = GenericNotPrefixExtender(listOf(combinedExtender), listOf(0L, 1L))
 
         // Simulate the join process
         val resultTuples = mutableListOf<ResultTuple>()

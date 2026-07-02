@@ -11,7 +11,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `participates only in configured levels`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 2),
+            listOf(0L, 2L),
             listOf(listOf("a", "x")),
         )
 
@@ -24,7 +24,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `proposes distinct values from relation trie`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 1),
+            listOf(0L, 1L),
             listOf(
                 listOf("a", "x"),
                 listOf("a", "y"),
@@ -44,7 +44,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `intersect filters candidates while preserving candidate order`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 1),
+            listOf(0L, 1L),
             listOf(
                 listOf("a", "x"),
                 listOf("a", "y"),
@@ -61,7 +61,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `returns empty results for non matching prefixes`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 1),
+            listOf(0L, 1L),
             listOf(
                 listOf("a", "x"),
                 listOf("b", "y")
@@ -76,7 +76,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `supports non contiguous levels`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 2),
+            listOf(0L, 2L),
             listOf(
                 listOf("a", "x"),
                 listOf("a", "y"),
@@ -92,7 +92,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `counts matching prefixes including terminal matches`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 2),
+            listOf(0L, 2L),
             listOf(
                 listOf("a", "b"),
                 listOf("x", "y")
@@ -111,7 +111,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `counts non contiguous prefixes before the last participating level`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 2),
+            listOf(0L, 2L),
             listOf(
                 listOf("a", "b"),
                 listOf("a", "c")
@@ -127,7 +127,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `proposes values for matching non contiguous prefixes`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 2),
+            listOf(0L, 2L),
             listOf(
                 listOf("a", "b"),
                 listOf("x", "y")
@@ -144,7 +144,7 @@ class GenericRelationPrefixExtenderTest {
     @Test
     fun `intersects values for matching non contiguous prefixes`() {
         val extender = GenericRelationPrefixExtender(
-            listOf(0, 2),
+            listOf(0L, 2L),
             listOf(
                 listOf("a", "b"),
                 listOf("x", "y")
@@ -164,7 +164,7 @@ class GenericRelationPrefixExtenderTest {
         val level0Extender = PrefixExtender.createSingleLevel(listOf("Ivan", "Petr", "Bob"), 0)
         val level1Extender = PrefixExtender.createSingleLevel(listOf("Ivanov", "Petrov", "Smith"), 1)
         val relationExtender = GenericRelationPrefixExtender(
-            listOf(0, 1),
+            listOf(0L, 1L),
             listOf(
                 listOf("Ivan", "Ivanov"),
                 listOf("Petr", "Petrov")
@@ -189,11 +189,11 @@ class GenericRelationPrefixExtenderTest {
         }
 
         assertThrows<IllegalArgumentException> {
-            GenericRelationPrefixExtender(listOf(0, 0), listOf(listOf("a", "b")))
+            GenericRelationPrefixExtender(listOf(0L, 0L), listOf(listOf("a", "b")))
         }
 
         assertThrows<IllegalArgumentException> {
-            GenericRelationPrefixExtender(listOf(0, 1), listOf(listOf("a")))
+            GenericRelationPrefixExtender(listOf(0L, 1L), listOf(listOf("a")))
         }
     }
 }

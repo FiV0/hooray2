@@ -128,7 +128,6 @@
               [(< ?age 40)])]}
           (h/db fix/*node*)))))
 
-#_
 (deftest test-or-and-branch-predicates-stay-bound-to-same-prefix
   (h/transact fix/*node* [{:db/id :db/limit
                            :db/ident :limit
@@ -138,16 +137,16 @@
                           {:db/id 2 :name "leaked" :age 20 :salary 10 :limit 5}])
 
   (is (= #{["valid"]}
-         (h/q '{:find [?name]
-                :where [[?e :name ?name]
-                        [?e :age ?age]
-                        [?e :salary ?score]
-                        [?e :limit ?limit]
-                        (or (and [(< ?age ?score)]
-                                 [(< ?limit 10)])
-                            (and [(> ?age ?score)]
-                                 [(< ?limit 0)]))]}
-              (h/db fix/*node*)))))
+         (set (h/q '{:find [?name]
+                     :where [[?e :name ?name]
+                             [?e :age ?age]
+                             [?e :salary ?score]
+                             [?e :limit ?limit]
+                             (or (and [(< ?age ?score)]
+                                      [(< ?limit 10)])
+                                 (and [(> ?age ?score)]
+                                      [(< ?limit 0)]))]}
+                   (h/db fix/*node*))))))
 
 (deftest projection-semantics-with-bags
   (h/transact fix/*node*

@@ -13,16 +13,16 @@ class GenericOrPrefixExtenderTest {
         val branchA = GenericAndPrefixExtender(
             listOf(
                 PrefixExtender.createFromPrefixExtender(listOf(0), listOf("a")),
-                GenericPredicatePrefixExtender(listOf(1), lessThanThirty),
+                GenericPredicatePrefixExtender(listOf(1L), lessThanThirty),
             )
         )
         val branchB = GenericAndPrefixExtender(
             listOf(
                 PrefixExtender.createFromPrefixExtender(listOf(0), listOf("b")),
-                GenericPredicatePrefixExtender(listOf(1), lessThanForty),
+                GenericPredicatePrefixExtender(listOf(1L), lessThanForty),
             )
         )
-        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB), totalLevels = 2)
+        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB))
 
         assertEquals(listOf("a", "b"), orExtender.intersect(emptyList(), listOf("a", "b")))
         assertEquals(emptyList<Any>(), orExtender.intersect(listOf("a"), listOf(35)))
@@ -34,12 +34,12 @@ class GenericOrPrefixExtenderTest {
         val lessThanThirty: Predicate1<Any> = { age -> (age as Int) < 30 }
         val lessThanForty: Predicate1<Any> = { age -> (age as Int) < 40 }
         val branchA = GenericAndPrefixExtender(
-            listOf(GenericPredicatePrefixExtender(listOf(1), lessThanThirty))
+            listOf(GenericPredicatePrefixExtender(listOf(1L), lessThanThirty))
         )
         val branchB = GenericAndPrefixExtender(
-            listOf(GenericPredicatePrefixExtender(listOf(1), lessThanForty))
+            listOf(GenericPredicatePrefixExtender(listOf(1L), lessThanForty))
         )
-        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB), totalLevels = 2)
+        val orExtender = GenericOrPrefixExtender(listOf(branchA, branchB))
 
         assertEquals(listOf("entity"), orExtender.intersect(emptyList(), listOf("entity")))
         assertEquals(Int.MAX_VALUE, saturatingSum(listOf(Int.MAX_VALUE, Int.MAX_VALUE)))

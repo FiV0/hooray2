@@ -86,7 +86,7 @@
             index2 (set-fn 6 12 18)
             extender1 (GenericPrefixExtender. (SealedIndex$SetIndex. index1) [0])
             extender2 (GenericPrefixExtender. (SealedIndex$SetIndex. index2) [0])
-            or-extender (GenericOrPrefixExtender. [extender1 extender2] 1)]
+            or-extender (GenericOrPrefixExtender. [extender1 extender2])]
 
         ;; count should sum both children
         (t/is (= 6 (.count or-extender [])))
@@ -106,7 +106,7 @@
             index2 (map-fn 3 (set-fn 6 10) 9 (set-fn 24 28))
             extender1 (GenericPrefixExtender. (SealedIndex$MapIndex. index1) [0 1])
             extender2 (GenericPrefixExtender. (SealedIndex$MapIndex. index2) [0 1])
-            or-extender (GenericOrPrefixExtender. [extender1 extender2] 2)]
+            or-extender (GenericOrPrefixExtender. [extender1 extender2])]
 
         ;; count at level 0: index1 has {3, 6}, index2 has {3, 9} -> 4 total
         (t/is (= 4 (.count or-extender [])))
@@ -144,7 +144,7 @@
             extender1 (GenericPrefixExtender. (SealedIndex$SetIndex. index1) [0])
             extender2 (GenericPrefixExtender. (SealedIndex$SetIndex. index2) [0])
             extender3 (GenericPrefixExtender. (SealedIndex$SetIndex. index3) [0])
-            or-extender (GenericOrPrefixExtender. [extender1 extender2 extender3] 1)]
+            or-extender (GenericOrPrefixExtender. [extender1 extender2 extender3])]
 
         (t/is (= 6 (.count or-extender [])))
         (t/is (= #{1 2 3 4 5 6} (set (.propose or-extender []))))
@@ -157,7 +157,7 @@
           index2 (avl/sorted-set 6 12 18)
           extender1 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index1) [0])
           extender2 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index2) [0])
-          or-extender (AVLOrPrefixExtender. [extender1 extender2] 1)]
+          or-extender (AVLOrPrefixExtender. [extender1 extender2])]
 
       ;; count should sum both children
       (t/is (= 6 (.count or-extender [])))
@@ -177,7 +177,7 @@
           index2 (avl/sorted-map 3 (avl/sorted-set 6 10) 9 (avl/sorted-set 24 28))
           extender1 (AVLPrefixExtender. (AVLIndex$AVLMapIndex. index1) [0 1])
           extender2 (AVLPrefixExtender. (AVLIndex$AVLMapIndex. index2) [0 1])
-          or-extender (AVLOrPrefixExtender. [extender1 extender2] 2)]
+          or-extender (AVLOrPrefixExtender. [extender1 extender2])]
 
       ;; count at level 0: index1 has {3, 6}, index2 has {3, 9} -> 4 total
       (t/is (= 4 (.count or-extender [])))
@@ -215,7 +215,7 @@
           extender1 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index1) [0])
           extender2 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index2) [0])
           extender3 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index3) [0])
-          or-extender (AVLOrPrefixExtender. [extender1 extender2 extender3] 1)]
+          or-extender (AVLOrPrefixExtender. [extender1 extender2 extender3])]
 
       (t/is (= 6 (.count or-extender [])))
       (t/is (= [1 2 3 4 5 6] (.propose or-extender [])))
@@ -226,7 +226,7 @@
           index2 (avl/sorted-set 2 3 6 7)
           extender1 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index1) [0])
           extender2 (AVLPrefixExtender. (AVLIndex$AVLSetIndex. index2) [0])
-          or-extender (AVLOrPrefixExtender. [extender1 extender2] 1)]
+          or-extender (AVLOrPrefixExtender. [extender1 extender2])]
 
       ;; Should include duplicates in sorted order: [1, 2, 3, 3, 5, 6, 7, 7]
       (t/is (= [1 2 3 3 5 6 7 7] (.propose or-extender [])))
