@@ -33,7 +33,7 @@ interface PrefixExtender : LevelParticipation {
 
                 override fun variableLevels(): List<Long> = listOf(participatesInLevel.toLong())
 
-                override fun participatesInLevel(level: Int) = level == participatesInLevel
+                override fun participatesInLevel(level: Long) = level == participatesInLevel.toLong()
             }
         }
 
@@ -85,7 +85,7 @@ interface PrefixExtender : LevelParticipation {
 
                 override fun variableLevels(): List<Long> = participatingLevels.map { it.toLong() }
 
-                override fun participatesInLevel(level: Int) = levelSet.contains(level)
+                override fun participatesInLevel(level: Long) = levelSet.contains(level.toInt())
             }
         }
 
@@ -124,7 +124,7 @@ interface PrefixExtender : LevelParticipation {
 
                 override fun variableLevels(): List<Long> = (0L..fixedPrefix.size).toList()
 
-                override fun participatesInLevel(level: Int) = level <= fixedPrefix.size
+                override fun participatesInLevel(level: Long) = level <= fixedPrefix.size
             }
         }
     }
@@ -169,7 +169,7 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
     private val extenderSets : List<List<PrefixExtender>> = List(levels) { level ->
         val participants = mutableListOf<PrefixExtender>()
         for (extender in extenders) {
-            if (extender.participatesInLevel(level)) {
+            if (extender.participatesInLevel(level.toLong())) {
                 participants.add(extender)
             }
         }

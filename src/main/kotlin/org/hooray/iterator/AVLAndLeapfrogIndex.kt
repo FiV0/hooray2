@@ -110,5 +110,5 @@ class AVLAndLeapfrogIndex(private val children: List<LeapfrogIndex>) : LeapfrogI
 
     override fun maxLevel(): Int = children.first().maxLevel()
 
-    override fun participatesInLevel(level: Int): Boolean = children.all { it.participatesInLevel(level) }
+    override fun participatesInLevel(level: Long): Boolean = children.all { it.participatesInLevel(level) }
 }

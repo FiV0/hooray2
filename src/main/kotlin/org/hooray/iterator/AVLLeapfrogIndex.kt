@@ -111,5 +111,5 @@ class AVLLeapfrogIndex(private val index: AVLIndex , val variableOrder: List<Sym
 
     override fun maxLevel() = variableOrder.size
 
-    override fun participatesInLevel(level: Int) = variables.contains(variableOrder[level])
+    override fun participatesInLevel(level: Long) = variables.contains(variableOrder[level.toInt()])
 }

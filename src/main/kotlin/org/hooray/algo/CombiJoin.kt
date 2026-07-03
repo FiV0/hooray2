@@ -67,7 +67,7 @@ class CombiJoin (val extenders: List<CombiJoinExtender>, levels: Int): Join<Resu
     private val extenderSets : List<List<CombiJoinExtender>> = List(levels) { level ->
         val participants = mutableListOf<CombiJoinExtender>()
         for (extender in extenders) {
-            if (extender.participatesInLevel(level)) {
+            if (extender.participatesInLevel(level.toLong())) {
                 participants.add(extender)
             }
         }

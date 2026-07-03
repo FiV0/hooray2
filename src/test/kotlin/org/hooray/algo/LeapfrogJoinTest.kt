@@ -101,7 +101,7 @@ class LeapfrogJoinTest {
                 return levelData.size
             }
 
-            override fun participatesInLevel(level: Int): Boolean {
+            override fun participatesInLevel(level: Long): Boolean {
                 return level < levelData.size
             }
         }

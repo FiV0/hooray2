@@ -44,7 +44,7 @@ interface ZSetPrefixExtender : LevelParticipation {
                 override fun intersect(prefix: Prefix, extensions: ZSet<Extension, IntegerWeight>): ZSet<Extension, IntegerWeight> =
                     candidates(prefix).equiJoin(extensions)
 
-                override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
+                override fun participatesInLevel(level: Long): Boolean = levelSet.contains(level.toInt())
             }
         }
     }
@@ -228,7 +228,7 @@ internal class IncrementalWcojJoinEngine(
         var prefixes = ZSet.singleton<ResultTuple>(persistentListOf())
 
         for (level in 0 until levels) {
-            val participating = extenders.filter { it.participatesInLevel(level) }
+            val participating = extenders.filter { it.participatesInLevel(level.toLong()) }
             require(participating.isNotEmpty(), { "No extenders participate in level $level, cannot perform join" })
 
             // TODO really extend the prefixes instead of createing new longer prefixes on every level

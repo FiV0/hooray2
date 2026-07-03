@@ -39,5 +39,5 @@ class GenericFnPrefixExtender(val levels: List<Long>, val outputLevel: Long, val
 
     override fun variableLevels(): List<Long> = (levels + outputLevel).sorted()
 
-    override fun participatesInLevel(level: Int) = level.toLong() == outputLevel
+    override fun participatesInLevel(level: Long) = level == outputLevel
 }

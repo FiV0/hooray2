@@ -11,7 +11,7 @@ open class GenericAndPrefixExtender(val children: List<PrefixExtender>) : Prefix
     }
 
     private fun participants(prefix: Prefix): List<PrefixExtender> =
-        children.filter { it.participatesInLevel(prefix.size) }
+        children.filter { it.participatesInLevel(prefix.size.toLong()) }
 
     override fun count(prefix: Prefix) = participants(prefix).minOf { it.count(prefix) }
 
@@ -38,5 +38,5 @@ open class GenericAndPrefixExtender(val children: List<PrefixExtender>) : Prefix
 
     override fun variableLevels(): List<Long> = children.flatMap { it.variableLevels() }.distinct().sorted()
 
-    override fun participatesInLevel(level: Int) = children.any { it.participatesInLevel(level) }
+    override fun participatesInLevel(level: Long) = children.any { it.participatesInLevel(level) }
 }

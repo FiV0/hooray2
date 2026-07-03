@@ -16,7 +16,7 @@ class AVLFnLeapfrogIndex(
         require(inputLevels.all { it < outputLevel }) { "All input levels must be before output level." }
     }
 
-    override fun participatesInLevel(level: Int): Boolean = level == outputLevel
+    override fun participatesInLevel(level: Long): Boolean = level == outputLevel.toLong()
 
     override fun openLevel() {}
 

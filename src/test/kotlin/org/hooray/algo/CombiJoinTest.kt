@@ -38,7 +38,7 @@ class CombiJoinTest {
                 return SimpleLeapfrogIterator(values)
             }
 
-            override fun participatesInLevel(level: Int) = level == participateInLevel
+            override fun participatesInLevel(level: Long) = level == participateInLevel.toLong()
         }
     }
 
@@ -84,7 +84,7 @@ class CombiJoinTest {
                 return SimpleLeapfrogIterator(values)
             }
 
-            override fun participatesInLevel(level: Int) = level == 1
+            override fun participatesInLevel(level: Long) = level == 1L
         }
 
         val extenders = listOf(

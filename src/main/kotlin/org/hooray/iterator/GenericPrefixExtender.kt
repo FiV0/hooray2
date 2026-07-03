@@ -67,5 +67,5 @@ open class GenericPrefixExtender(val index: SealedIndex, val participatesInLevel
 
     override fun variableLevels(): List<Long> = participatesInLevel
 
-    override fun participatesInLevel(level: Int) = participatesInLevel.contains(level.toLong())
+    override fun participatesInLevel(level: Long) = participatesInLevel.contains(level)
 }

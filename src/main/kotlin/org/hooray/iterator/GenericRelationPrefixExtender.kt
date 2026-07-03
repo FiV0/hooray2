@@ -58,6 +58,6 @@ class GenericRelationPrefixExtender(
 
     override fun variableLevels(): List<Long> = levels
 
-    override fun participatesInLevel(level: Int): Boolean =
-        levelSet.contains(level.toLong())
+    override fun participatesInLevel(level: Long): Boolean =
+        levelSet.contains(level)
 }

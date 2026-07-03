@@ -63,7 +63,7 @@ class GenericJoinTest {
 
             override fun variableLevels(): List<Long> = listOf(0L, 1L)
 
-            override fun participatesInLevel(level: Int) = level == 1
+            override fun participatesInLevel(level: Long) = level == 1L
         }
 
         val extenders = listOf(

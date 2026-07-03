@@ -25,5 +25,5 @@ class AVLNotLeapfrogIndex(
         return join.join().isEmpty()
     }
 
-    override fun participatesInLevel(level: Int) = level == participationLevel
+    override fun participatesInLevel(level: Long) = level == participationLevel.toLong()
 }

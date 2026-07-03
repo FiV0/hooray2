@@ -26,7 +26,7 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
         check(children.isNotEmpty()) { "At least one child extender is required" }
         variableLevels = children.flatMap { it.variableLevels() }.distinct().sorted()
         // Participation levels are a subset of the variable levels
-        levelSet = variableLevels.filter { level -> children.first().participatesInLevel(level.toInt()) }.toSet()
+        levelSet = variableLevels.filter { level -> children.first().participatesInLevel(level) }.toSet()
     }
 
     // The child tries are keyed by the values at all variable levels, not just the participation
@@ -78,5 +78,5 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
 
     override fun variableLevels(): List<Long> = variableLevels
 
-    override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level.toLong())
+    override fun participatesInLevel(level: Long): Boolean = levelSet.contains(level)
 }

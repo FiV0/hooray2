@@ -42,5 +42,5 @@ class GenericPredicatePrefixExtender(val levels: List<Long>, val predicate: Any)
 
     override fun variableLevels(): List<Long> = levels
 
-    override fun participatesInLevel(level: Int) = level.toLong() == levels.last()
+    override fun participatesInLevel(level: Long) = level == levels.last()
 }

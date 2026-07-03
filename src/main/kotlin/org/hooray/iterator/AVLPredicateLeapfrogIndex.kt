@@ -12,7 +12,7 @@ class AVLPredicateLeapfrogIndex(
         require(levels.size in 1..2) { "Hooray only supports unary and binary predicates for now." }
     }
 
-    override fun participatesInLevel(level: Int) = level == levels.last()
+    override fun participatesInLevel(level: Long) = level == levels.last().toLong()
 
     @Suppress("UNCHECKED_CAST")
     override fun accept(tuple: ResultTuple): Boolean {

@@ -54,5 +54,5 @@ class AVLOrLeapfrogIndex(private val children: List<LeapfrogIndex>) : LeapfrogIn
 
     override fun maxLevel(): Int = children.first().maxLevel()
 
-    override fun participatesInLevel(level: Int): Boolean = children.first().participatesInLevel(level)
+    override fun participatesInLevel(level: Long): Boolean = children.first().participatesInLevel(level)
 }

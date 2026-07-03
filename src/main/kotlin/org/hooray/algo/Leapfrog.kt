@@ -85,7 +85,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun maxLevel(): Int = 1
 
-                override fun participatesInLevel(level: Int): Boolean = level == participatingLevel
+                override fun participatesInLevel(level: Long): Boolean = level == participatingLevel.toLong()
             }
         }
 
@@ -131,7 +131,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun maxLevel(): Int = tuple.size
 
-                override fun participatesInLevel(level: Int): Boolean = level < tuple.size
+                override fun participatesInLevel(level: Long): Boolean = level < tuple.size
             }
         }
 
@@ -188,7 +188,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun maxLevel(): Int = partialPrefix.size
 
-                override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
+                override fun participatesInLevel(level: Long): Boolean = levelSet.contains(level.toInt())
             }
         }
 
@@ -357,7 +357,7 @@ interface LeapfrogIndex : LeapfrogIterator, LayeredIndex, LevelParticipation {
 
                 override fun maxLevel(): Int = participatingLevels.size
 
-                override fun participatesInLevel(level: Int): Boolean = levelSet.contains(level)
+                override fun participatesInLevel(level: Long): Boolean = levelSet.contains(level.toInt())
             }
         }
 
@@ -428,7 +428,7 @@ class LeapfrogJoin @JvmOverloads constructor(
         participants = List(levels) { i ->
             val participants = mutableListOf<LeapfrogIndex>()
             for(index in indexes) {
-                if(index.participatesInLevel(i)) {
+                if(index.participatesInLevel(i.toLong())) {
                     participants.add(index)
                 }
             }

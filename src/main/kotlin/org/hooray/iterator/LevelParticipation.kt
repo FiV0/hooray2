@@ -10,5 +10,5 @@ interface LevelParticipation {
     // variableLeves() = [1 2]
     // participatesInLevel(1) = false
     // participatesInLevel(2) = true
-    fun participatesInLevel(level: Int): Boolean
+    fun participatesInLevel(level: Long): Boolean
 }
