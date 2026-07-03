@@ -24,7 +24,7 @@ open class GenericOrPrefixExtender(val children: List<PrefixExtender>) : PrefixE
 
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
-        variableLevels = children.flatMap { it.variableLevels() }.distinct().sorted()
+        variableLevels = children.first().variableLevels()
         // Participation levels are a subset of the variable levels
         levelSet = variableLevels.filter { level -> children.first().participatesInLevel(level) }.toSet()
     }
