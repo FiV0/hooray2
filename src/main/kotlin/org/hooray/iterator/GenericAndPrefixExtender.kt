@@ -6,8 +6,11 @@ import org.hooray.algo.PrefixExtender
 
 open class GenericAndPrefixExtender(val children: List<PrefixExtender>) : PrefixExtender {
 
+    val variableLevels: List<Long>
+
     init {
         check(children.isNotEmpty()) { "At least one child extender is required" }
+        variableLevels = children.flatMap { it.variableLevels() }.distinct().sorted()
     }
 
     private fun participants(prefix: Prefix): List<PrefixExtender> =
@@ -36,7 +39,7 @@ open class GenericAndPrefixExtender(val children: List<PrefixExtender>) : Prefix
         return currentExtensions
     }
 
-    override fun variableLevels(): List<Long> = children.flatMap { it.variableLevels() }.distinct().sorted()
+    override fun variableLevels(): List<Long> = variableLevels
 
     override fun participatesInLevel(level: Long) = children.any { it.participatesInLevel(level) }
 }
