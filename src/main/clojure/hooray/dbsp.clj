@@ -33,44 +33,34 @@
 (defn compile-pattern
   "Compiles one conformed `where` clause into a pattern descriptor.
 
-  Every descriptor carries two variable vectors: `:vars`, all variables
-  appearing in the pattern, and `:groundable`, the subset the pattern can bind
-  by itself. Variables in `:vars` but not in `:groundable` must be bound by an
-  outer scope before the pattern can be planned.
+  Every descriptor has the following keys:
+  -  :index      <position in the immediate parent clause>
+  -  :kind       the descriptor kind
+  -  :vars       the variables this pattern references
+  -  :groundable variables this pattern references and can also ground
+
+  (set vars) \ (set groundable) must be bound by an outer scope.
 
   Triple descriptor:
 
-    {:index      <position in the immediate parent clause>
-     :kind       :triple
-     :attr       {:kind :constant :value v}
+    {:attr       {:kind :constant :value v}
      :entity     {:kind :constant :value v} | {:kind :variable :var s}
-     :value      {:kind :constant :value v} | {:kind :variable :var s}
-     :vars       [vars in entity/value encounter order]
-     :groundable [same as :vars — a triple binds all its variables]}
+     :value      {:kind :constant :value v} | {:kind :variable :var s}}
 
   Or descriptor (nesting preserved, not flattened):
 
-    {:index      <position in the immediate parent clause>
-     :kind       :or
-     :branches   [<descriptor> …]
-     :vars       [vars in encounter order of the first branch]
-     :groundable [vars groundable by every branch, in :vars order]}
+    {:kind       :or
+     :branches   [<descriptor> …]}
 
   And descriptor:
 
-    {:index      <position in the immediate parent clause>
-     :kind       :and
-     :children   [<descriptor> …]
-     :vars       [vars in encounter order across all children]
-     :groundable [vars groundable by any child, in encounter order]}
+    {:kind       :and
+     :children   [<descriptor> …]}
 
   Not descriptor:
 
-    {:index      <position in the immediate parent clause>
-     :kind       :not
-     :children   [<descriptor> …]
-     :vars       [vars in encounter order across all children]
-     :groundable [] — an antijoin only filters, it binds nothing}
+    {:kind       :not
+     :children   [<descriptor> …]}
 
   Other clause types (`:predicate`, `:fn`) are not yet
   supported and trigger `err/unsupported-ex`."
