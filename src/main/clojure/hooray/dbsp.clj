@@ -39,7 +39,7 @@
   -  :vars       the variables this pattern references
   -  :groundable variables this pattern references and can also ground
 
-  (set vars) \ (set groundable) must be bound by an outer scope.
+  (set vars) - (set groundable) must be bound by an outer scope.
 
   Triple descriptor:
 
