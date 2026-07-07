@@ -202,7 +202,7 @@
                                        (not [?other :last-name "Smith"])]})))))
 
 (deftest compile-pattern-groundable-test
-  (testing "vars from an outer scope are not groundable by an inner and/not (issue #32)"
+  (testing "vars from an outer scope are not groundable by an inner and/not"
     (let [[_outer p] (patterns '{:find [?n]
                                  :where [[?e :name ?n]
                                          (or (and [?e :age 30]
@@ -216,7 +216,7 @@
       (is (= '[?e ?n] (:vars p)))
       (is (= '[?e] (:groundable p)))))
 
-  (testing "an or of only not branches grounds nothing (issue #32)"
+  (testing "an or of only not branches grounds nothing"
     (let [[_outer p] (patterns '{:find [?e]
                                  :where [[?e :name ?n] (or (not [?e :age 1]))]})]
       (is (= :or (:kind p)))
