@@ -85,7 +85,7 @@
            :kind :or
            :branches branches
            :vars (:vars (first branches))
-           :groundable (vec (filter groundable (:vars (first branches))))})
+           :groundable (vec groundable)})
 
     :and (let [children (vec (map-indexed compile-pattern pattern))]
            {:index index
