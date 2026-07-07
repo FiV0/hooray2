@@ -218,7 +218,8 @@
 
   (testing "an or of only not branches grounds nothing"
     (let [[_outer p] (patterns '{:find [?e]
-                                 :where [[?e :name ?n] (or (not [?e :age 1]))]})]
+                                 :where [[?e :name ?n]
+                                         (or (not [?e :age 1]))]})]
       (is (= :or (:kind p)))
       (is (= '[?e] (:vars p)))
       (is (= [] (:groundable p))))))
