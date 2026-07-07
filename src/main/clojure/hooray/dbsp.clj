@@ -33,35 +33,44 @@
 (defn compile-pattern
   "Compiles one conformed `where` clause into a pattern descriptor.
 
+  Every descriptor carries two variable vectors: `:vars`, all variables
+  appearing in the pattern, and `:groundable`, the subset the pattern can bind
+  by itself. Variables in `:vars` but not in `:groundable` must be bound by an
+  outer scope before the pattern can be planned.
+
   Triple descriptor:
 
-    {:index   <position in the immediate parent clause>
-     :kind    :triple
-     :attr    {:kind :constant :value v}
-     :entity  {:kind :constant :value v} | {:kind :variable :var s}
-     :value   {:kind :constant :value v} | {:kind :variable :var s}
-     :vars    [vars in entity/value encounter order]}
+    {:index      <position in the immediate parent clause>
+     :kind       :triple
+     :attr       {:kind :constant :value v}
+     :entity     {:kind :constant :value v} | {:kind :variable :var s}
+     :value      {:kind :constant :value v} | {:kind :variable :var s}
+     :vars       [vars in entity/value encounter order]
+     :groundable [same as :vars — a triple binds all its variables]}
 
   Or descriptor (nesting preserved, not flattened):
 
-    {:index    <position in the immediate parent clause>
-     :kind     :or
-     :branches [<descriptor> …]
-     :vars     [vars in encounter order of the first branch]}
+    {:index      <position in the immediate parent clause>
+     :kind       :or
+     :branches   [<descriptor> …]
+     :vars       [vars in encounter order of the first branch]
+     :groundable [vars groundable by every branch, in :vars order]}
 
   And descriptor:
 
-    {:index    <position in the immediate parent clause>
-     :kind     :and
-     :children [<descriptor> …]
-     :vars     [vars in encounter order across all children]}
+    {:index      <position in the immediate parent clause>
+     :kind       :and
+     :children   [<descriptor> …]
+     :vars       [vars in encounter order across all children]
+     :groundable [vars groundable by any child, in encounter order]}
 
   Not descriptor:
 
-    {:index    <position in the immediate parent clause>
-     :kind     :not
-     :children [<descriptor> …]
-     :vars     [vars in encounter order across all children]}
+    {:index      <position in the immediate parent clause>
+     :kind       :not
+     :children   [<descriptor> …]
+     :vars       [vars in encounter order across all children]
+     :groundable [] — an antijoin only filters, it binds nothing}
 
   Other clause types (`:predicate`, `:fn`) are not yet
   supported and trigger `err/unsupported-ex`."
@@ -70,31 +79,37 @@
     :triple (let [{:keys [e a v]} pattern
                   a* (elem a)
                   e* (elem e)
-                  v* (elem v)]
+                  v* (elem v)
+                  vars (vec (keep elem-var [e* v*]))]
               {:index index
                :kind :triple
                :attr a*
                :entity e*
                :value v*
-               :vars (vec (keep elem-var [e* v*]))})
+               :vars vars
+               :groundable vars})
 
-    :or (let [branches (vec (map-indexed compile-pattern pattern))]
+    :or (let [branches (vec (map-indexed compile-pattern pattern))
+              groundable (apply set/intersection (map (comp set :groundable) branches))]
           {:index index
            :kind :or
            :branches branches
-           :vars (:vars (first branches))})
+           :vars (:vars (first branches))
+           :groundable (vec (filter groundable (:vars (first branches))))})
 
     :and (let [children (vec (map-indexed compile-pattern pattern))]
            {:index index
             :kind :and
             :children children
-            :vars (vec (distinct (mapcat :vars children)))})
+            :vars (vec (distinct (mapcat :vars children)))
+            :groundable (vec (distinct (mapcat :groundable children)))})
 
     :not (let [children (vec (map-indexed compile-pattern pattern))]
            {:index index
             :kind :not
             :children children
-            :vars (vec (distinct (mapcat :vars children)))})
+            :vars (vec (distinct (mapcat :vars children)))
+            :groundable []})
 
     (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
                         {:clause-type clause-type :pattern pattern})))
