@@ -1002,6 +1002,18 @@
       (is (= [[["Alice"] 1] [["Fallback"] 1]]
              (h/consume-delta! iq))))))
 
+#_
+(deftest e2e-not-antijoin-inside-or-with-variable-from-outer-scope
+  (let [iq (h/q-inc fix/*node* '{:find [?n]
+                                 :where [[?e :name ?n]
+                                         (or (and [?e :age 30]
+                                                  (not [?e :name ?n]
+                                                       [?e :age 35])))]})]
+    (h/transact fix/*node* [{:db/id 1 :name "Ivan" :age 30}
+                            {:db/id 2 :name "Bob" :age 35}])
+    (is (= [[["Ivan"] 1]]
+           (h/consume-delta! iq)))))
+
 ;; --------------------------------------------------------------------------
 ;; End-to-end: nested :or
 ;; --------------------------------------------------------------------------
