@@ -1014,6 +1014,15 @@
     (is (= [[["Ivan"] 1]]
            (h/consume-delta! iq)))))
 
+#_
+(deftest e2e-not-antijoin-with-only-not-clauses
+  (let [iq (h/q-inc fix/*node* '{:find [?e]
+                                 :where  [[?e :name ?n] (or (not [?e :age 1]) (not [?e :age 2]))]})]
+    (h/transact fix/*node* [{:db/id 1 :name "Ivan" :age 30}
+                            {:db/id 2 :name "Bob" :age 35}])
+    (is (= [[["Ivan"] 1] [["Bob"] 1]]
+           (h/consume-delta! iq)))))
+
 ;; --------------------------------------------------------------------------
 ;; End-to-end: nested :or
 ;; --------------------------------------------------------------------------
