@@ -257,8 +257,8 @@
 
     {:kind :triple
      :order :aev/:ave
-     :filter …
-     :project …
+     :filter <constant-filter for the incoming [a e v] tuples>
+     :project <projection to the patterns variable columns>
      :out-vars target}"
   [descriptor target]
   (let [order (choose-order descriptor target)]
