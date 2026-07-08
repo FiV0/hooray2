@@ -380,8 +380,8 @@
     (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
                         {:descriptor descriptor}))
   (let [negative-vars (:vars descriptor)
-        missing-vars (seq (remove (set incoming) negative-vars))]
-    (when missing-vars
+        missing-vars (remove (set incoming) negative-vars)]
+    (when (seq missing-vars)
       (throw (ex-info "not variables must be bound by the running relation"
                       {:not-vars negative-vars
                        :incoming (vec incoming)
