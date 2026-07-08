@@ -252,27 +252,6 @@
   (vec (keep-indexed (fn [i el] (when (variable? el) i))
                      (order-elems descriptor order))))
 
-(defn- triple-plan
-  "Plan for one triple descriptor, producing its variables in [target] order.
-
-    {:kind :triple
-     :order :aev/:ave
-     :filter <constant-filter for the incoming [a e v] tuples>
-     :project <projection to the patterns variable columns>
-     :out-vars target}"
-  [descriptor target]
-  (let [order (choose-order descriptor target)]
-    {:kind :triple
-     ;; the order in which we are processing triples in this triple pattern
-     :order order
-     ;; the constant part of the triple pattern
-     :filter (constant-filter descriptor order)
-     ;; the projection after the filter of the constants
-     ;; for example [a(constant) e(constant) v] -> [v]
-     :project (projection descriptor order)
-     ;; the vars of this pattern
-     :out-vars (vec target)}))
-
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."
   [key-set layout]
@@ -294,9 +273,6 @@
             v
             (err/unsupported-ex "DBSP-standard engine does not support aggregates yet" {:find-element [t v]})))
         conformed-find))
-
-(declare plan-node)
-(declare plan-scope)
 
 (defn- permute-node
   "A `:permute` node: reorders the running relation (layout [acc-vars]) to
@@ -327,25 +303,49 @@
                :out-vars target}
         (:incoming node) (assoc :incoming (:incoming node))))))
 
-(defn- triple-join-node
-  "A joining `:triple` node: extends the running relation (layout [incoming])
-  with [descriptor]'s triple stream — the standard join. The join's key
-  column *order* is fixed by the running (left) layout, and the triple's own
-  source pipeline is arranged to that same key order so both sides' leading
-  columns line up; `:left-permute` reorders the running relation when its
-  key columns do not already lead."
-  [descriptor incoming]
-  (let [ki (set/intersection (set incoming) (set (:vars descriptor)))
-        key-order (vec (filter ki incoming))
-        left-needed (into key-order (remove ki incoming))
-        permute (indices-of incoming left-needed)]
-    (-> (triple-plan descriptor (into key-order (remove ki (:vars descriptor))))
-        (assoc :incoming (vec incoming)
-               :key-arity (count ki)
-               :key-vars key-order
-               :left-permute (when (not= permute (vec (range (count incoming))))
-                               permute)
-               :out-vars (into left-needed (remove ki (:vars descriptor)))))))
+(defmulti ^:private plan-node
+  "Plans one [descriptor] as a plan node, dispatching on its `:kind`. With
+  [incoming] — the running relation's column layout — the node extends that
+  relation; without it the node produces its stream standalone. With
+  [target], each method arranges the node's output to that variable order."
+  (fn [descriptor _incoming _target] (:kind descriptor)))
+
+(defn- triple-plan
+  "Plan for one triple descriptor, producing its variables in [target] order.
+
+    {:kind :triple
+     :order :aev/:ave
+     :filter <constant-filter for the incoming [a e v] tuples>
+     :project <projection to the patterns variable columns>
+     :out-vars target}"
+  [descriptor target]
+  (let [order (choose-order descriptor target)]
+    {:kind :triple
+     :order order
+     :filter (constant-filter descriptor order)
+     ;; the projection after the filter of the constants
+     ;; for example [a(constant) e(constant) v] -> [v]
+     :project (projection descriptor order)
+     :out-vars (vec target)}))
+
+
+(defmethod plan-node :triple
+  [descriptor incoming target]
+  (if-not incoming
+    (triple-plan descriptor (or target (:vars descriptor)))
+    (let [ki (set/intersection (set incoming) (set (:vars descriptor)))
+          key-order (vec (filter ki incoming))
+          left-needed (into key-order (remove ki incoming))
+          permute (indices-of incoming left-needed)]
+      (-> (triple-plan descriptor (into key-order (remove ki (:vars descriptor))))
+          (assoc :incoming (vec incoming)
+                 :key-arity (count ki)
+                 :key-vars key-order
+                 :left-permute (when (not= permute (vec (range (count incoming))))
+                                 permute)
+                 :out-vars (into left-needed (remove ki (:vars descriptor))))
+          (ensure-target target)))))
+
 
 (defn- union-node
   "A `:union` node for an `or` descriptor. Every branch is planned against
@@ -363,6 +363,18 @@
              :branches (mapv #(plan-node % incoming out-vars) (:branches descriptor))
              :out-vars out-vars}
       incoming (assoc :incoming (vec incoming)))))
+
+(defmethod plan-node :or
+  [descriptor incoming target]
+  (ensure-target (union-node descriptor incoming target) target))
+
+(declare plan-scope)
+
+;; `and` is ordinary conjunction, so it lowers directly to a left-deep scope
+;; over its children; `plan-scope` arranges to [target] itself.
+(defmethod plan-node :and
+  [descriptor incoming target]
+  (plan-scope (:children descriptor) incoming target))
 
 (defn- difference-node
   "A `:difference` node for a `not` descriptor: anti-joins the running
@@ -393,30 +405,6 @@
        :key-vars key-vars
        :keyed-vars (lead-with (set key-vars) incoming)
        :out-vars (vec incoming)})))
-
-(defmulti ^:private plan-node
-  "Plans one [descriptor] as a plan node, dispatching on its `:kind`. With
-  [incoming] — the running relation's column layout — the node extends that
-  relation; without it the node produces its stream standalone. With
-  [target], each method arranges the node's output to that variable order."
-  (fn [descriptor _incoming _target] (:kind descriptor)))
-
-(defmethod plan-node :triple
-  [descriptor incoming target]
-  (if incoming
-    (ensure-target (triple-join-node descriptor incoming) target)
-    ;; a standalone triple reaches [target] directly through its :order
-    (triple-plan descriptor (or target (:vars descriptor)))))
-
-(defmethod plan-node :or
-  [descriptor incoming target]
-  (ensure-target (union-node descriptor incoming target) target))
-
-;; `and` is ordinary conjunction, so it lowers directly to a left-deep scope
-;; over its children; `plan-scope` arranges to [target] itself.
-(defmethod plan-node :and
-  [descriptor incoming target]
-  (plan-scope (:children descriptor) incoming target))
 
 (defmethod plan-node :not
   [descriptor incoming target]
