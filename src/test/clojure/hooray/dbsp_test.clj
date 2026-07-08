@@ -315,12 +315,17 @@
                          :where [[?a :r ?b]
                                  [?b :s ?c]
                                  [?c :t ?d]]})
-          chain (:where-plan p)]
+          chain (:where-plan p)
+          [base & joins] (:children chain)]
       (is (= :chain (:kind chain)))
-      (is (= :triple (get-in chain [:base :kind])))
-      (is (= 2 (count (:steps chain))))
-      (is (every? #(= :join (:op %)) (:steps chain)))
-      (is (every? #(= :triple (get-in % [:right :kind])) (:steps chain))))))
+      (is (nil? (:incoming chain)))
+      (is (= 3 (count (:children chain))))
+      (is (= :triple (:kind base)))
+      (is (nil? (:incoming base)))
+      (is (every? #(= :triple (:kind %)) joins))
+      ;; each child extends the layout produced by its predecessor
+      (is (= (mapv :out-vars (butlast (:children chain)))
+             (mapv :incoming joins))))))
 
 (deftest plan-two-pattern-join-test
   (let [p (dbsp/plan '{:find [name age]
@@ -330,10 +335,12 @@
     (is (= :chain (:kind chain)))
     (is (= '[?e name age] (:result-vars p)))
     (is (= [1 2] (:final-permute p)))
-    (is (= :triple (get-in chain [:base :kind])))
-    (is (= 1 (count (:steps chain))))
-    (let [j (first (:steps chain))]
-      (is (= :join (:op j)))
+    (is (= 2 (count (:children chain))))
+    (let [[base j] (:children chain)]
+      (is (= :triple (:kind base)))
+      (is (nil? (:incoming base)))
+      (is (= :triple (:kind j)))
+      (is (= '[?e name] (:incoming j)))
       (is (= 1 (:key-arity j)))
       (is (= '[?e] (:key-vars j)))
       (is (nil? (:left-permute j)))
@@ -345,17 +352,17 @@
                          :where [[?e :name name]
                                  [?p :age name]]})
           chain (:where-plan p)
-          p0 (:base chain)
-          p1 (:right (first (:steps chain)))]
+          [p0 p1] (:children chain)]
       (is (= :chain (:kind chain)))
       (is (= :triple (:kind p0)))
       (is (= :triple (:kind p1)))
-      (is (= :ave (:order p0)))
+      (is (= :aev (:order p0)))
       (is (= :ave (:order p1)))
       (is (= {0 :name} (:filter p0)))
       (is (= [1 2] (:project p0)))
       (is (= {0 :age} (:filter p1)))
       (is (= [1 2] (:project p1)))
+      (is (= '[?e name] (:incoming p1)))
       (is (= '[name ?e ?p] (:result-vars p))))))
 
 (deftest plan-constant-filter-test
@@ -375,16 +382,17 @@
       (is (= '[name] (:out-vars pat))))))
 
 (deftest plan-chain-intermediate-permute-test
-  (testing "the third join needs the intermediate result re-permuted"
+  (testing "later joins re-permute the running relation so the key columns lead"
     (let [p (dbsp/plan '{:find [?a ?d]
                          :where [[?a :r ?b]
                                  [?b :s ?c]
                                  [?c :t ?d]]})
-          chain (:where-plan p)]
+          chain (:where-plan p)
+          [_base j1 j2] (:children chain)]
       (is (= :chain (:kind chain)))
-      (is (= 2 (count (:steps chain))))
-      (is (nil? (:left-permute (nth (:steps chain) 0))))
-      (is (= [2 0 1] (:left-permute (nth (:steps chain) 1))))
+      (is (= 3 (count (:children chain))))
+      (is (= [1 0] (:left-permute j1)))
+      (is (= [2 0 1] (:left-permute j2)))
       (is (= '[?c ?b ?a ?d] (:result-vars p)))
       (is (= [2 3] (:final-permute p))))))
 
@@ -395,9 +403,10 @@
                                  [?b :s ?c]
                                  [?c :t ?a]]})
           chain (:where-plan p)
-          closing (last (:steps chain))]
+          closing (last (:children chain))]
       (is (= :chain (:kind chain)))
-      (is (= :join (:op closing)))
+      (is (= :triple (:kind closing)))
+      (is (some? (:incoming closing)))
       (is (= 2 (:key-arity closing)))
       (is (= 2 (count (set (:key-vars closing))))))))
 
@@ -408,32 +417,35 @@
                                      [?e :sex :female])]})
           pat (:where-plan p)]
       (is (= :union (:kind pat)))
+      (is (nil? (:incoming pat)))
       (is (= '[?e] (:out-vars pat)))
       (is (= 2 (count (:branches pat))))
       (is (every? #(= '[?e] (:out-vars %)) (:branches pat)))
       (is (every? #(= :triple (:kind %)) (:branches pat)))
+      (is (every? #(nil? (:incoming %)) (:branches pat)))
       (is (= '[?e] (:result-vars p))))))
 
 (deftest plan-or-with-outer-join-test
-  (testing ":or after an outer triple becomes a :union step over the running relation"
+  (testing ":or after an outer triple becomes a :union node extending the running relation"
     (let [p (dbsp/plan '{:find [name]
                          :where [[?e :name name]
                                  (or [?e :sex :male]
                                      [?e :sex :female])]})
           chain (:where-plan p)
-          [or-step] (:steps chain)]
+          [base or-node] (:children chain)]
       (is (= :chain (:kind chain)))
-      (is (= :triple (get-in chain [:base :kind])))
-      (is (= :union (:op or-step)))
-      ;; the or grounds nothing new, so the step keeps the running layout
-      (is (= '[?e name] (:out-vars or-step)))
-      (is (= 2 (count (:branches or-step))))
+      (is (= :triple (:kind base)))
+      (is (= :union (:kind or-node)))
+      (is (= '[?e name] (:incoming or-node)))
+      ;; the or grounds nothing new, so the node keeps the running layout
+      (is (= '[?e name] (:out-vars or-node)))
+      (is (= 2 (count (:branches or-node))))
       ;; every branch joins the running relation with its triple on ?e
       (is (every? (fn [branch]
-                    (and (= 1 (count branch))
-                         (= :join (:op (first branch)))
-                         (= '[?e] (:key-vars (first branch)))))
-                  (:branches or-step))))))
+                    (and (= :triple (:kind branch))
+                         (= '[?e name] (:incoming branch))
+                         (= '[?e] (:key-vars branch))))
+                  (:branches or-node))))))
 
 (deftest plan-or-multi-var-test
   (testing "2-var :or grounds its extra variable through every branch"
@@ -442,12 +454,12 @@
                                  (or [?p :name n]
                                      [?p :age n])]})
           chain (:where-plan p)
-          [or-step] (:steps chain)]
+          [_base or-node] (:children chain)]
       (is (= :chain (:kind chain)))
-      (is (= :union (:op or-step)))
+      (is (= :union (:kind or-node)))
       ;; the running relation grounds ?p, the or adds n
-      (is (= '[?p n] (:out-vars or-step)))
-      (is (every? #(= '[?p n] (:out-vars (last %))) (:branches or-step))))))
+      (is (= '[?p n] (:out-vars or-node)))
+      (is (every? #(= '[?p n] (:out-vars %)) (:branches or-node))))))
 
 (deftest plan-nested-or-test
   (testing "nested :or plan preserves the descriptor tree"
@@ -466,71 +478,78 @@
         (is (every? #(= '[?e] (:out-vars %)) (:branches inner)))))))
 
 (deftest plan-and-inside-or-test
-  (testing ":and branch inside :or splices its children into the branch's step chain"
+  (testing ":and branch inside :or becomes a chain extending the running relation"
     (let [p (dbsp/plan '{:find [name]
                          :where [[?e :name name]
                                  (or [?e :last-name name]
                                      (and [?e :sex :male]
                                           [?e :name name]))]})
-          chain (:where-plan p)
-          [or-step] (:steps chain)
-          and-branch (second (:branches or-step))]
-      (is (= :union (:op or-step)))
-      (is (= '[?e name] (:out-vars or-step)))
-      (is (= 2 (count and-branch)))
-      (is (every? #(= :join (:op %)) and-branch))
-      (is (= '[?e name] (:out-vars (last and-branch))))))
+          [_base or-node] (:children (:where-plan p))
+          and-branch (second (:branches or-node))]
+      (is (= :union (:kind or-node)))
+      (is (= '[?e name] (:out-vars or-node)))
+      (is (= :chain (:kind and-branch)))
+      (is (= '[?e name] (:incoming and-branch)))
+      (is (= 2 (count (:children and-branch))))
+      (is (every? #(and (= :triple (:kind %)) (some? (:incoming %)))
+                  (:children and-branch)))
+      (is (= '[?e name] (:out-vars and-branch)))))
 
   (testing ":and branch of a scope-initial :or is finally permuted when its natural join order differs"
     (let [p (dbsp/plan '{:find [?x ?y]
                          :where [(or [?x :edge ?y]
                                      (and [?y :name ?x]
                                           [?y :edge ?x]))]})
-          or-pat (:where-plan p)
-          and-branch (second (:branches or-pat))]
-      (is (= :union (:kind or-pat)))
+          or-node (:where-plan p)
+          and-branch (second (:branches or-node))]
+      (is (= :union (:kind or-node)))
       (is (= :chain (:kind and-branch)))
+      (is (nil? (:incoming and-branch)))
       (is (= '[?x ?y] (:out-vars and-branch)))
-      (is (= {:op :permute :indices [1 0] :out-vars '[?x ?y]}
-             (last (:steps and-branch)))))))
+      (is (= {:kind :permute :indices [1 0] :out-vars '[?x ?y]}
+             (last (:children and-branch)))))))
 
 (deftest plan-nested-or-inside-and-test
-  (testing "nested :or inside an :and branch becomes a :union step in the branch chain"
+  (testing "nested :or inside an :and branch becomes a :union node in the branch chain"
     (let [p (dbsp/plan '{:find [?e]
                          :where [(or (and [?e :sex :male]
                                           (or [?e :name "Ivan"]
                                               [?e :name "Bob"]))
                                      [?e :sex :female])]})
-          or-pat (:where-plan p)
-          and-branch (first (:branches or-pat))
-          nested-or (first (:steps and-branch))]
-      (is (= :union (:kind or-pat)))
+          or-node (:where-plan p)
+          and-branch (first (:branches or-node))
+          nested-or (second (:children and-branch))]
+      (is (= :union (:kind or-node)))
       (is (= :chain (:kind and-branch)))
-      (is (= :union (:op nested-or)))
+      (is (= :union (:kind nested-or)))
+      (is (= '[?e] (:incoming nested-or)))
       (is (= '[?e] (:out-vars and-branch)))
       (is (= '[?e] (:out-vars nested-or))))))
 
 (deftest plan-not-test
-  (testing "not plans as an anti-semijoin :difference step off the running relation"
+  (testing "not plans as an anti-semijoin :difference node off the running relation"
     (let [p (dbsp/plan '{:find [name]
                          :where [[?e :name name]
                                  (not [?e :last-name "Smith"])]})
           chain (:where-plan p)
-          diff (first (:steps chain))]
+          [base diff] (:children chain)]
       (is (= :chain (:kind chain)))
-      (is (= :triple (get-in chain [:base :kind])))
-      (is (= :difference (:op diff)))
+      (is (= :triple (:kind base)))
+      (is (= :difference (:kind diff)))
+      (is (= '[?e name] (:incoming diff)))
       (is (= '[?e name] (:result-vars p)))
       (is (= '[?e name] (:out-vars diff)))
       (is (= '[?e] (:key-vars diff)))
-      (is (= :triple (:kind (:negative diff))))))
+      (is (= :triple (:kind (:negative diff))))
+      ;; the negative relation is planned standalone
+      (is (nil? (:incoming (:negative diff))))))
 
   (testing "not keeps the running relation as-is when the anti key is already leading"
     (let [p (dbsp/plan '{:find [name ?e]
                          :where [[?e :name name]
                                  (not [?e :last-name "Smith"])]})
-          diff (first (:steps (:where-plan p)))]
-      (is (= :difference (:op diff)))
+          diff (second (:children (:where-plan p)))]
+      (is (= :difference (:kind diff)))
       (is (= '[?e] (:key-vars diff)))
       ;; keyed layout equals the running layout — no re-order needed
       (is (= '[?e name] (:keyed-vars diff)))
@@ -541,9 +560,10 @@
                          :where [[?e :name name]
                                  [name :city city]
                                  (not [?e :last-name "Smith"])]})
-          diff (last (:steps (:where-plan p)))]
-      (is (= :difference (:op diff)))
+          diff (last (:children (:where-plan p)))]
+      (is (= :difference (:kind diff)))
       (is (= '[?e] (:key-vars diff)))
+      (is (= '[name ?e city] (:incoming diff)))
       (is (= '[name ?e city] (:out-vars diff)))
       (is (= '[?e name city] (:keyed-vars diff)))))
 
@@ -552,14 +572,15 @@
                          :where [[?e :name n]
                                  (or [?e :name "Ada"]
                                      (not [?e :name "Bob"]))]})
-          chain (:where-plan p)
-          [or-step] (:steps chain)
-          [pos-branch not-branch] (:branches or-step)]
-      (is (= :union (:op or-step)))
-      (is (= [:join] (mapv :op pos-branch)))
-      (is (= [:difference] (mapv :op not-branch)))
-      (is (= '[?e] (:key-vars (first not-branch))))
-      (is (= '[?e n] (:out-vars (first not-branch)))))))
+          [_base or-node] (:children (:where-plan p))
+          [pos-branch not-branch] (:branches or-node)]
+      (is (= :union (:kind or-node)))
+      (is (= :triple (:kind pos-branch)))
+      (is (= '[?e n] (:incoming pos-branch)))
+      (is (= :difference (:kind not-branch)))
+      (is (= '[?e n] (:incoming not-branch)))
+      (is (= '[?e] (:key-vars not-branch)))
+      (is (= '[?e n] (:out-vars not-branch))))))
 
 (deftest plan-or-deterministic-test
   (let [q '{:find [?e]
@@ -601,14 +622,14 @@
                                                      [?b :s ?c]
                                                      [?c :t ?d]]})]
     (is (= 3 (count inputs)))
-    ;; base (input, filter, permute); join1's right + join (no left permute);
-    ;; join2's left permute + right + join; final permute.
+    ;; base (input, filter, permute); then per join: left permute + own
+    ;; source pipeline + join; final permute.
     (is (= ["input" "filter-constants" "permute"
-            "input" "filter-constants" "permute" "incremental-join"
+            "permute" "input" "filter-constants" "permute" "incremental-join"
             "permute" "input" "filter-constants" "permute" "incremental-join"
             "permute"]
            (vec (.operatorNames circuit))))
-    (is (= 13 (.getNodeCount circuit)))))
+    (is (= 14 (.getNodeCount circuit)))))
 
 (deftest assemble-leaves-test
   (testing "plan->circuit returns a :leaves vector parallel to :inputs"

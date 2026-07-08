@@ -184,25 +184,34 @@
 ;; tuples. A Filter drops rows that miss the pattern's constants; a DBSP Map
 ;; operator projects to the pattern's variable columns.
 ;;
-;; A scope (the top-level `:where`, an `and`, an `or` branch, a `not` body)
-;; plans as a left-deep chain `{:kind :chain :base <rel> :steps [<step> …]}`:
-;; a self-contained base relation followed by steps that each extend the
-;; running relation. The running stream is threaded through the steps at
-;; assembly time; `(set (:out-vars acc))` is by construction the set of
-;; variables grounded so far, which is what `left-deep-order` checks
-;; introducibility against. Step ops:
+;; The plan is a tree of nodes `{:kind … :out-vars […] …}` with kinds
+;; `:triple`, `:chain`, `:union`, `:difference` and `:permute`. A node
+;; optionally carries `:incoming`, the column layout of the running relation
+;; it extends. Without `:incoming` a node produces its stream standalone,
+;; rooted at its own Source(s); with it the node consumes the running stream:
 ;;
-;;   {:op :join …}        joins a triple onto the running relation; the
-;;                        `IncrementalJoin` keys on the leading columns shared
-;;                        with the running relation, the triple's `:order` is
-;;                        picked so its variables already lead correctly, and
-;;                        a permuting Map operator is inserted when the running layout
-;;                        does not
-;;   {:op :union …}       or-continuation; every branch extends the same
-;;                        running stream (so branches can anti-join outer
-;;                        bindings) and the results are unioned
-;;   {:op :difference …}  anti-joins a `not`'s relation off the running one
-;;   {:op :permute …}     reorders to an explicit target layout
+;;   :triple       the standard join; the `IncrementalJoin` keys on the
+;;                 leading columns shared with the running relation, the
+;;                 triple's `:order` is picked so its variables lead in that
+;;                 key order, and a permuting Map operator (`:left-permute`)
+;;                 is inserted when the running layout does not already lead
+;;                 with the keys
+;;   :chain        the running stream is the base of the chain; every child
+;;                 extends its predecessor's output (child i's `:incoming`
+;;                 is child i-1's `:out-vars`)
+;;   :union        every branch extends the *same* running stream (so
+;;                 branches can anti-join outer bindings) and the branch
+;;                 streams are unioned
+;;   :difference   anti-joins a `not`'s relation off the running one
+;;   :permute      reorders the running stream to an explicit target layout;
+;;                 never carries `:incoming` (it is a unary reordering of
+;;                 whatever stream it follows)
+;;
+;; A scope (the top-level `:where`, an `and`, an `or` branch, a `not` body)
+;; plans as a `:chain` over its descriptors in `left-deep-order`;
+;; `(set (:out-vars <previous child>))` is by construction the set of
+;; variables grounded so far, which is what `left-deep-order` checks
+;; introducibility against.
 
 (defn- variable? [el] (= :variable (:kind el)))
 
@@ -262,42 +271,6 @@
      ;; the vars of this pattern
      :out-vars (vec target)}))
 
-(declare rel-plan)
-(declare plan-inputs)
-
-(defn- union-plan
-  "Relation plan for a scope-initial `or` descriptor (no running relation to
-  extend, so the `or` must be self-groundable). Every branch is planned
-  standalone with the same [target] variable order so the branch streams can
-  be unioned directly. A non-initial `or` becomes a `:union` step instead
-  (see `union-step`)."
-  [descriptor target]
-  {:kind :union
-   :out-vars (vec target)
-   :branches (mapv #(rel-plan % target) (:branches descriptor))})
-
-(defn- and-plan
-  "Relation plan for a standalone `and` descriptor. `and` is ordinary
-  conjunction, so it lowers directly to a left-deep scope over its children."
-  [descriptor target]
-  (plan-inputs (:children descriptor) (vec target)))
-
-(defn- not-plan
-  "A bare `not` relation has no finite positive input domain. It can only be
-  planned as a `:difference` step off a running relation."
-  [descriptor _target]
-  (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
-                      {:descriptor descriptor}))
-
-(defn- rel-plan
-  "Plans one descriptor as a relation node that produces [target] variables."
-  [descriptor target]
-  (case (:kind descriptor)
-    :triple (triple-plan descriptor target)
-    :or (union-plan descriptor target)
-    :and (and-plan descriptor target)
-    :not (not-plan descriptor target)))
-
 (defn- lead-with
   "Reorders [layout] so the members of [key-set] (in layout order) come first."
   [key-set layout]
@@ -320,127 +293,147 @@
             (err/unsupported-ex "DBSP-standard engine does not support aggregates yet" {:find-element [t v]})))
         conformed-find))
 
-(defn- not-descriptor? [descriptor]
-  (= :not (:kind descriptor)))
+(declare plan-node)
+(declare plan-scope)
 
-(defn- join-step
-  "A `:join` step: extends the running relation (layout [acc-vars]) with
-  [descriptor]'s triple stream. The join's key column *order* is fixed by the
-  running (left) layout, and the right relation is arranged to that same key
-  order so both sides' leading columns line up."
-  [acc-vars descriptor]
-  (let [ki (set/intersection (set acc-vars) (set (:vars descriptor)))
-        key-order (vec (filter ki acc-vars))
-        left-needed (into key-order (remove ki acc-vars))
-        permute (indices-of acc-vars left-needed)]
-    {:op :join
-     :right (rel-plan descriptor (into key-order (remove ki (:vars descriptor))))
-     :key-arity (count ki)
-     :key-vars key-order
-     :left-permute (when (not= permute (vec (range (count acc-vars))))
-                     permute)
-     :out-vars (into left-needed (remove ki (:vars descriptor)))}))
+(defn- permute-node
+  "A `:permute` node: reorders the running relation (layout [acc-vars]) to
+  [target-vars]."
+  [acc-vars target-vars]
+  {:kind :permute
+   :indices (indices-of acc-vars target-vars)
+   :out-vars (vec target-vars)})
 
-(defn- difference-step
-  "A `:difference` step: anti-joins the running relation (layout [acc-vars])
-  with a `not` descriptor's relation as A - semijoin(A, distinct(keys(B))).
+(defn- ensure-target
+  "Arranges [node]'s output to the [target] layout: a no-op when [target] is
+  nil or already matches, otherwise a `:permute` node is appended to the
+  chain, or wrapped around the node."
+  [node target]
+  (let [target (some-> target vec)]
+    (cond
+      (or (nil? target) (= (:out-vars node) target))
+      node
+
+      (= :chain (:kind node))
+      (-> node
+          (update :children conj (permute-node (:out-vars node) target))
+          (assoc :out-vars target))
+
+      :else
+      (cond-> {:kind :chain
+               :children [node (permute-node (:out-vars node) target)]
+               :out-vars target}
+        (:incoming node) (assoc :incoming (:incoming node))))))
+
+(defn- triple-join-node
+  "A joining `:triple` node: extends the running relation (layout [incoming])
+  with [descriptor]'s triple stream — the standard join. The join's key
+  column *order* is fixed by the running (left) layout, and the triple's own
+  source pipeline is arranged to that same key order so both sides' leading
+  columns line up; `:left-permute` reorders the running relation when its
+  key columns do not already lead."
+  [descriptor incoming]
+  (let [ki (set/intersection (set incoming) (set (:vars descriptor)))
+        key-order (vec (filter ki incoming))
+        left-needed (into key-order (remove ki incoming))
+        permute (indices-of incoming left-needed)]
+    (-> (triple-plan descriptor (into key-order (remove ki (:vars descriptor))))
+        (assoc :incoming (vec incoming)
+               :key-arity (count ki)
+               :key-vars key-order
+               :left-permute (when (not= permute (vec (range (count incoming))))
+                               permute)
+               :out-vars (into left-needed (remove ki (:vars descriptor)))))))
+
+(defn- union-node
+  "A `:union` node for an `or` descriptor. Every branch is planned against
+  the same [incoming] layout — each branch extends the *same* running stream,
+  which is what lets a branch's inner `not` key on variables from the outer
+  scope and a bare `not` branch anti-join the running relation itself. All
+  branches are arranged to the union's `:out-vars` (with [incoming] the
+  running variables plus the variables the `or` grounds, standalone the
+  requested [target]) so the branch streams can be unioned directly."
+  [descriptor incoming target]
+  (let [out-vars (if incoming
+                   (into (vec incoming) (remove (set incoming) (:vars descriptor)))
+                   (vec (or target (:vars descriptor))))]
+    (cond-> {:kind :union
+             :branches (mapv #(plan-node % incoming out-vars) (:branches descriptor))
+             :out-vars out-vars}
+      incoming (assoc :incoming (vec incoming)))))
+
+(defn- difference-node
+  "A `:difference` node for a `not` descriptor: anti-joins the running
+  relation (layout [incoming]) with the `not`'s relation as
+  A - semijoin(A, distinct(keys(B))).
 
   The negative relation B is planned standalone, keyed on the `not`'s
   variables (all grounded by the running relation, per `left-deep-order`).
   A `not` body that is not itself self-groundable — e.g. a bare `not` inside
   an `or` inside this `not` — therefore still fails with an
-  insufficient-binding error."
-  [acc-vars descriptor]
+  insufficient-binding error. Without a running relation a `not` has no
+  finite positive input domain and cannot be planned."
+  [descriptor incoming]
+  (when-not incoming
+    (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
+                        {:descriptor descriptor}))
   (let [negative-vars (:vars descriptor)
-        missing-vars (seq (remove (set acc-vars) negative-vars))]
+        missing-vars (seq (remove (set incoming) negative-vars))]
     (when missing-vars
       (throw (ex-info "not variables must be bound by the running relation"
                       {:not-vars negative-vars
-                       :acc-vars acc-vars
+                       :incoming (vec incoming)
                        :missing-vars (vec missing-vars)})))
-    (let [key-vars (vec (filter (set negative-vars) acc-vars))]
-      {:op :difference
-       :negative (plan-inputs (:children descriptor) key-vars)
+    (let [key-vars (vec (filter (set negative-vars) incoming))]
+      {:kind :difference
+       :incoming (vec incoming)
+       :negative (plan-scope (:children descriptor) nil key-vars)
        :key-vars key-vars
-       :keyed-vars (lead-with (set key-vars) acc-vars)
-       :out-vars (vec acc-vars)})))
+       :keyed-vars (lead-with (set key-vars) incoming)
+       :out-vars (vec incoming)})))
 
-(defn- permute-step
-  "A `:permute` step: reorders the running relation to [target-vars]."
-  [acc-vars target-vars]
-  {:op :permute
-   :indices (indices-of acc-vars target-vars)
-   :out-vars (vec target-vars)})
+(defn- plan-node
+  "Plans one [descriptor] as a plan node. With [incoming] — the running
+  relation's column layout — the node extends that relation; without it the
+  node produces its stream standalone. With [target], the node's output is
+  arranged to that variable order. `and` is ordinary conjunction, so it
+  lowers directly to a left-deep scope over its children."
+  [descriptor incoming target]
+  (case (:kind descriptor)
+    :triple (if incoming
+              (ensure-target (triple-join-node descriptor incoming) target)
+              (triple-plan descriptor (or target (:vars descriptor))))
+    :or (ensure-target (union-node descriptor incoming target) target)
+    :and (plan-scope (:children descriptor) incoming target)
+    :not (ensure-target (difference-node descriptor incoming) target)))
 
-(declare extend-step)
-
-(defn- union-step
-  "A `:union` step: extends the running relation (layout [acc-vars]) with an
-  `or` descriptor. Every branch continues the *same* running stream — this is
-  what lets a branch's inner `not` key on variables from the outer scope, and
-  a bare `not` branch anti-join the running relation itself. Each branch is a
-  step vector; branch layouts are normalised to a common `:out-vars` (the
-  running variables plus the variables the `or` grounds) so the branch
-  streams can be unioned directly."
-  [acc-vars descriptor]
-  (let [out-vars (into (vec acc-vars) (remove (set acc-vars) (:vars descriptor)))]
-    {:op :union
-     :branches (mapv (fn [branch]
-                       (let [{:keys [vars steps]} (extend-step {:vars (vec acc-vars) :steps []}
-                                                               branch)]
-                         (cond-> steps
-                           (not= vars out-vars) (conj (permute-step vars out-vars)))))
-                     (:branches descriptor))
-     :out-vars out-vars}))
-
-(defn- extend-step
-  "Extends the running left-deep relation [acc] (`{:vars […] :steps […]}`)
-  with one [descriptor], dispatching on its kind. `and` is ordinary
-  conjunction, so its children are spliced into the current scope's chain."
-  [acc descriptor]
-  (if (= :and (:kind descriptor))
-    (reduce extend-step acc (left-deep-order (:children descriptor) (set (:vars acc))))
-    (let [step (case (:kind descriptor)
-                 :triple (join-step (:vars acc) descriptor)
-                 :or (union-step (:vars acc) descriptor)
-                 :not (difference-step (:vars acc) descriptor))]
-      (-> acc
-          (assoc :vars (:out-vars step))
-          (update :steps conj step)))))
-
-(defn- plan-inputs
-  "Plans [descriptors] as one left-deep scope: a standalone base relation
-  extended step-by-step in `left-deep-order`. Returns the base relation
-  directly when no steps are needed, otherwise a `:chain` node. With
-  [target], the result is arranged to that variable order."
-  ([descriptors] (plan-inputs descriptors nil))
-  ([descriptors target]
-   (let [target* (some-> target vec)
-         ordered (left-deep-order descriptors #{})]
-     (when (empty? ordered)
-       (throw (ex-info "query has no patterns" {})))
-     (when (not-descriptor? (first ordered))
-       (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
-                           {:descriptors descriptors}))
-     (let [d0 (first ordered)
-           ;; lead the base with the first step's join key so the first join
-           ;; needs no left permute.
-           base-target (if-let [d1 (second ordered)]
-                         (lead-with (set/intersection (set (:vars d0)) (set (:vars d1)))
-                                    (:vars d0))
-                         (or target* (:vars d0)))
-           base (rel-plan d0 base-target)
-           {:keys [vars steps]} (reduce extend-step
-                                        {:vars (:out-vars base) :steps []}
-                                        (rest ordered))
-           steps (cond-> steps
-                   (and target* (not= vars target*)) (conj (permute-step vars target*)))]
-       (if (seq steps)
-         {:kind :chain
-          :base base
-          :steps steps
-          :out-vars (:out-vars (peek steps))}
-         base)))))
+(defn- plan-scope
+  "Plans [descriptors] as one left-deep scope in `left-deep-order`. Without
+  [incoming] the scope opens with a standalone base relation; with it every
+  descriptor (the first included) extends the running relation. Returns the
+  sole node directly when the scope plans to a single node, otherwise a
+  `:chain`. With [target], the result is arranged to that variable order."
+  [descriptors incoming target]
+  (let [ordered (left-deep-order descriptors (set incoming))]
+    (when (empty? ordered)
+      (throw (ex-info "query has no patterns" {})))
+    (let [;; a lone standalone descriptor can take the target directly;
+          ;; a multi-descriptor scope plans its base in natural order and
+          ;; reaches the target through a final :permute instead (the base
+          ;; may not even carry all the target's variables).
+          base-target (when (and (nil? incoming) (= 1 (count ordered)))
+                        target)
+          children (reduce (fn [children d]
+                             (conj children (plan-node d (:out-vars (peek children)) nil)))
+                           [(plan-node (first ordered) incoming base-target)]
+                           (rest ordered))
+          node (if (= 1 (count children))
+                 (first children)
+                 (cond-> {:kind :chain
+                          :children children
+                          :out-vars (:out-vars (peek children))}
+                   incoming (assoc :incoming (vec incoming))))]
+      (ensure-target node target))))
 
 (defn plan
   "Builds the full circuit plan for [query]:
@@ -452,7 +445,7 @@
   [query]
   (let [{:keys [find patterns]} (parse query)
         fvars (find-vars find)
-        where-plan (plan-inputs patterns)
+        where-plan (plan-scope patterns nil nil)
         result-vars (:out-vars where-plan)]
     {:find fvars
      :where-plan where-plan
@@ -464,18 +457,19 @@
 ;; --------------------------------------------------------------------------
 
 (defn- assemble-triple
-  "Wires one triple pattern into [circuit]: Source -> Filter? -> Map(project).
-  Returns
-
-   {:stream <Stream>
-    :vars […]
-    :handles [<InputHandle>]
-    :leaves [{:order …}]}."
-  [^Circuit circuit pattern]
-  (let [pair (.addInput circuit)
+  "Wires a `:triple` node into [circuit]. Standalone (no running relation
+  [acc]) the node is its own Source -> Filter? -> Map(project) pipeline;
+  extending, the running stream (permuted when the key columns do not
+  already lead) is `IncrementalJoin`ed with that pipeline."
+  [^Circuit circuit node acc]
+  (let [left (when acc
+               (if-let [left-permute (:left-permute node)]
+                 (.addUnary circuit (MapOp/permute (int-array left-permute)) (:stream acc))
+                 (:stream acc)))
+        pair (.addInput circuit)
         source (.getFirst pair)
         handle (.getSecond pair)
-        constants (:filter pattern)
+        constants (:filter node)
         filtered (if (seq constants)
                    (.addUnary circuit
                               (FilterOp/matchingConstants
@@ -484,12 +478,20 @@
                               source)
                    source)
         projected (.addUnary circuit
-                             (MapOp/permute (int-array (:project pattern)))
+                             (MapOp/permute (int-array (:project node)))
                              filtered)]
-    {:stream projected
-     :vars (:out-vars pattern)
-     :handles [handle]
-     :leaves [{:order (:order pattern)}]}))
+    (if acc
+      {:stream (.addBinary circuit
+                           (IncrementalJoinOp. (int (:key-arity node)) "incremental-join")
+                           left
+                           projected)
+       :vars (:out-vars node)
+       :handles (conj (:handles acc) handle)
+       :leaves (conj (:leaves acc) {:order (:order node)})}
+      {:stream projected
+       :vars (:out-vars node)
+       :handles [handle]
+       :leaves [{:order (:order node)}]})))
 
 (defn- project-stream
   "Projects or reorders [stream] from [source-vars] to [target-vars]."
@@ -500,73 +502,37 @@
                (MapOp/permute (int-array (indices-of source-vars target-vars)))
                stream)))
 
-(declare assemble-rel)
-(declare assemble-step)
+(declare assemble-node)
 
 (defn- assemble-union
-  "Wires a standalone :union relation node into [circuit]: each branch is
-  recursively assembled, the branch streams are folded left-to-right with
-  `PlusOp`, and the union is fed into a `DistinctOp` to enforce set-union
-  semantics. Returns
-
-   {:stream <Stream>
-    :handles […]
-    :leaves […]}
-
-  with handles/leaves concatenated across all branches in plan order."
-  [^Circuit circuit {:keys [branches out-vars]}]
-  (let [wired (mapv #(assemble-rel circuit %) branches)
-        ;; union-plan targets each branch at out-vars, so this is normally a no-op.
-        ;; Keep the projection here as an assembly boundary guard.
-        wired (mapv (fn [{:keys [stream vars] :as branch}]
-                      (assoc branch :stream (project-stream circuit stream vars out-vars)
-                                    :vars out-vars))
-                    wired)
-        summed (reduce (fn [acc {:keys [stream]}]
-                         (.addBinary circuit (PlusOp.) acc stream))
-                       (:stream (first wired))
-                       (rest wired))
+  "Wires a `:union` node into [circuit]: every branch is assembled against
+  the same running relation [acc] (or standalone when there is none), the
+  branch streams are folded left-to-right with `PlusOp`, and the union is fed
+  into a `DistinctOp` to enforce set-union semantics. Handles/leaves
+  concatenate [acc]'s with every branch's in plan order."
+  [^Circuit circuit {:keys [branches out-vars]} acc]
+  (let [branch-acc (some-> acc (assoc :handles [] :leaves []))
+        wired (mapv #(assemble-node circuit % branch-acc) branches)
+        ;; the planner arranges every branch to out-vars, so this is normally
+        ;; a no-op. Keep the projection here as an assembly boundary guard.
+        branch-streams (mapv #(project-stream circuit (:stream %) (:vars %) out-vars) wired)
+        summed (reduce (fn [acc-stream s] (.addBinary circuit (PlusOp.) acc-stream s))
+                       (first branch-streams)
+                       (rest branch-streams))
         distinct-out (.addUnary circuit (DistinctOp.) summed)]
     {:stream distinct-out
      :vars out-vars
-     :handles (vec (mapcat :handles wired))
-     :leaves (vec (mapcat :leaves wired))}))
+     :handles (into (vec (:handles acc)) (mapcat :handles wired))
+     :leaves (into (vec (:leaves acc)) (mapcat :leaves wired))}))
 
-(defn- assemble-chain
-  "Wires a :chain relation node into [circuit]: the base relation is
-  assembled once and each step then extends the running stream."
-  [^Circuit circuit {:keys [base steps]}]
-  (reduce (fn [acc step] (assemble-step circuit acc step))
-          (assemble-rel circuit base)
-          steps))
-
-(defn- assemble-join-step
-  "Extends the running stream with a `:join` step: permute the running layout
-  when the key columns do not already lead, then `IncrementalJoin` with the
-  step's right relation."
+(defn- assemble-difference
+  "Wires a `:difference` node into [circuit]: extends the running relation A
+  as A - semijoin(A, distinct(keys(B))), with the negative relation B
+  assembled standalone."
   [^Circuit circuit
-   {:keys [stream handles leaves]}
-   {:keys [right key-arity left-permute out-vars]}]
-  (let [left (if left-permute
-               (.addUnary circuit (MapOp/permute (int-array left-permute)) stream)
-               stream)
-        right-wired (assemble-rel circuit right)
-        joined (.addBinary circuit
-                           (IncrementalJoinOp. (int key-arity) "incremental-join")
-                           left
-                           (:stream right-wired))]
-    {:stream joined
-     :vars out-vars
-     :handles (into handles (:handles right-wired))
-     :leaves (into leaves (:leaves right-wired))}))
-
-(defn- assemble-difference-step
-  "Extends the running stream A with a `:difference` step as
-  A - semijoin(A, distinct(keys(B)))."
-  [^Circuit circuit
-   {:keys [stream vars handles leaves]}
-   {:keys [negative key-vars keyed-vars out-vars]}]
-  (let [negative-wired (assemble-rel circuit negative)
+   {:keys [negative key-vars keyed-vars out-vars]}
+   {:keys [stream vars handles leaves]}]
+  (let [negative-wired (assemble-node circuit negative nil)
         positive-keyed (project-stream circuit stream vars keyed-vars)
         negative-keys (project-stream circuit
                                       (:stream negative-wired)
@@ -585,62 +551,35 @@
      :handles (into handles (:handles negative-wired))
      :leaves (into leaves (:leaves negative-wired))}))
 
-(defn- assemble-union-step
-  "Extends the running stream with a `:union` step: the running stream fans
-  out into every branch's step chain, the branch streams are folded
-  left-to-right with `PlusOp`, and the union is fed into a `DistinctOp` to
-  enforce set-union semantics."
-  [^Circuit circuit
-   {:keys [stream vars handles leaves]}
-   {:keys [branches out-vars]}]
-  (let [wired (mapv (fn [branch-steps]
-                      (reduce (fn [acc step] (assemble-step circuit acc step))
-                              {:stream stream :vars vars :handles [] :leaves []}
-                              branch-steps))
-                    branches)
-        ;; union-step appends a :permute step when a branch layout differs,
-        ;; so this is normally a no-op. Keep it as an assembly boundary guard.
-        branch-streams (mapv #(project-stream circuit (:stream %) (:vars %) out-vars) wired)
-        summed (reduce (fn [acc s] (.addBinary circuit (PlusOp.) acc s))
-                       (first branch-streams)
-                       (rest branch-streams))
-        distinct-out (.addUnary circuit (DistinctOp.) summed)]
-    {:stream distinct-out
-     :vars out-vars
-     :handles (into handles (mapcat :handles wired))
-     :leaves (into leaves (mapcat :leaves wired))}))
-
-(defn- assemble-step
-  "Extends the running stream [acc] (`{:stream :vars :handles :leaves}`) with
-  one planned step, dispatching on its `:op`."
-  [^Circuit circuit acc step]
-  (case (:op step)
-    :join (assemble-join-step circuit acc step)
-    :difference (assemble-difference-step circuit acc step)
-    :union (assemble-union-step circuit acc step)
-    :permute {:stream (.addUnary circuit
-                                 (MapOp/permute (int-array (:indices step)))
-                                 (:stream acc))
-              :vars (:out-vars step)
-              :handles (:handles acc)
-              :leaves (:leaves acc)}))
-
-(defn- assemble-rel
-  "Dispatches relation assembly by [rel]'s `:kind`.
-  Returns
+(defn- assemble-node
+  "Wires one plan node into [circuit] and returns
 
    {:stream <Stream>
     :vars […]
     :handles [...]
     :leaves [...]}
 
-  `:handles` and `:leaves` are equal-length flat vectors,
-  one entry per leaf input triple."
-  [^Circuit circuit rel]
-  (case (:kind rel)
-    :triple (assemble-triple circuit rel)
-    :union  (assemble-union  circuit rel)
-    :chain  (assemble-chain  circuit rel)))
+  [acc] (same shape) is the running relation the node extends, or nil when
+  the node produces its stream standalone. `:handles` and `:leaves` are
+  equal-length flat vectors, one entry per leaf input triple."
+  [^Circuit circuit node acc]
+  (when-let [incoming (:incoming node)]
+    (assert (= (vec incoming) (vec (:vars acc)))
+            (str "running relation layout " (:vars acc)
+                 " does not match the node's planned :incoming " incoming)))
+  (case (:kind node)
+    :triple (assemble-triple circuit node acc)
+    :chain (reduce (fn [running child] (assemble-node circuit child running))
+                   acc
+                   (:children node))
+    :union (assemble-union circuit node acc)
+    :difference (assemble-difference circuit node acc)
+    :permute {:stream (.addUnary circuit
+                                 (MapOp/permute (int-array (:indices node)))
+                                 (:stream acc))
+              :vars (:out-vars node)
+              :handles (:handles acc)
+              :leaves (:leaves acc)}))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
@@ -650,11 +589,11 @@
      :leaves  [{:order …} ...]      ; parallel to :inputs
      :output  <OutputHandle>}
 
-  The circuit is per-leaf `Source -> Filter? -> Map`, recursive relation assembly,
+  The circuit is per-leaf `Source -> Filter? -> Map`, recursive node assembly,
   and a final `Map` projecting to `:find`."
   [{:keys [where-plan final-permute]}]
   (let [circuit (Circuit.)
-        wired (assemble-rel circuit where-plan)
+        wired (assemble-node circuit where-plan nil)
         ;; wire up the find clause
         projected (.addUnary circuit (MapOp/permute (int-array final-permute)) (:stream wired))]
     {:circuit circuit
