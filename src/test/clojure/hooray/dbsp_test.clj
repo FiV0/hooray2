@@ -60,17 +60,20 @@
       (is (= {:kind :constant, :value :name} (:attr p)))
       (is (= {:kind :variable :var '?e} (:entity p)))
       (is (= {:kind :variable :var 'name} (:value p)))
-      (is (= '[?e name] (:vars p)))))
+      (is (= '[?e name] (:vars p)))
+      (is (= '[?e name] (:groundable p)))))
 
   (testing "constant value"
     (let [[p] (patterns '{:find [?e] :where [[?e :name "Ivan"]]})]
       (is (= {:kind :constant :value "Ivan"} (:value p)))
-      (is (= '[?e] (:vars p)))))
+      (is (= '[?e] (:vars p)))
+      (is (= '[?e] (:groundable p)))))
 
   (testing "constant entity"
     (let [[p] (patterns '{:find [name] :where [[1 :name name]]})]
       (is (= {:kind :constant :value 1} (:entity p)))
-      (is (= '[name] (:vars p)))))
+      (is (= '[name] (:vars p)))
+      (is (= '[name] (:groundable p)))))
 
   (testing "indices follow :where position"
     (is (= [0 1 2]
@@ -99,6 +102,7 @@
                                       [?e :sex :female])]})]
       (is (= :or (:kind p)))
       (is (= '[?e] (:vars p)))
+      (is (= '[?e] (:groundable p)))
       (is (= 2 (count (:branches p))))
       (is (every? #(= :triple (:kind %)) (:branches p)))))
 
@@ -151,8 +155,10 @@
                                       (and [?e :name "Bob"]
                                            [?e :age 30]))]})]
       (is (= :or (:kind p)))
+      (is (= '[?e] (:groundable p)))
       (is (= :and (:kind (second (:branches p)))))
       (is (= '[?e] (:vars (second (:branches p)))))
+      (is (= '[?e] (:groundable (second (:branches p)))))
       (is (= [:triple :triple]
              (mapv :kind (:children (second (:branches p))))))))
 
@@ -163,7 +169,10 @@
                                              (not [?e :name "Bob"]))]})]
       (is (= :or (:kind p)))
       (is (= :not (:kind (second (:branches p)))))
-      (is (= '[?e] (:vars (second (:branches p)))))))
+      (is (= '[?e] (:vars (second (:branches p)))))
+      ;; the :not branch grounds nothing, so neither does the :or
+      (is (= [] (:groundable (second (:branches p)))))
+      (is (= [] (:groundable p)))))
 
   (testing "nested :or inside :and is preserved"
     (let [[p] (patterns '{:find [?e]
@@ -182,6 +191,7 @@
                                          (not [?e :last-name "Smith"])]})]
       (is (= :not (:kind p)))
       (is (= '[?e] (:vars p)))
+      (is (= [] (:groundable p)))
       (is (= 1 (count (:children p))))
       (is (= :triple (:kind (first (:children p)))))))
 
@@ -190,6 +200,29 @@
                  (dbsp/parse '{:find [?e]
                                :where [[?e :name name]
                                        (not [?other :last-name "Smith"])]})))))
+
+(deftest compile-pattern-groundable-test
+  (testing "vars from an outer scope are not groundable by an inner and/not"
+    (let [[_outer p] (patterns '{:find [?n]
+                                 :where [[?e :name ?n]
+                                         (or (and [?e :age 30]
+                                                  (not [?e :name ?n]
+                                                       [?e :age 35])))]})
+          and-branch (first (:branches p))]
+      (is (= :or (:kind p)))
+      (is (= :and (:kind and-branch)))
+      (is (= '[?e ?n] (:vars and-branch)))
+      (is (= '[?e] (:groundable and-branch)))
+      (is (= '[?e ?n] (:vars p)))
+      (is (= '[?e] (:groundable p)))))
+
+  (testing "an or of only not branches grounds nothing"
+    (let [[_outer p] (patterns '{:find [?e]
+                                 :where [[?e :name ?n]
+                                         (or (not [?e :age 1]))]})]
+      (is (= :or (:kind p)))
+      (is (= '[?e] (:vars p)))
+      (is (= [] (:groundable p))))))
 
 ;; --------------------------------------------------------------------------
 ;; Left-deep join order
