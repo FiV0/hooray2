@@ -84,8 +84,6 @@
           {:index index
            :kind :or
            :branches branches
-           ;; query validation guarantees all branches share the same free
-           ;; variable *set*, so the first branch is a correct representative.
            :vars (:vars (first branches))
            :groundable (vec groundable)})
 
