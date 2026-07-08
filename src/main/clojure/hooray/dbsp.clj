@@ -181,8 +181,8 @@
 ;;
 ;; Tuples flow through the circuit as positional value vectors. A base
 ;; pattern's Source emits 3-column `[a e v]` (`:aev`) or `[a v e]` (`:ave`)
-;; tuples; a Filter drops rows that miss the pattern's constants; a Map
-;; projects to the pattern's variable columns.
+;; tuples. A Filter drops rows that miss the pattern's constants; a DBSP Map
+;; operator projects to the pattern's variable columns.
 ;;
 ;; A scope (the top-level `:where`, an `and`, an `or` branch, a `not` body)
 ;; plans as a left-deep chain `{:kind :chain :base <rel> :steps [<step> …]}`:
@@ -196,7 +196,7 @@
 ;;                        `IncrementalJoin` keys on the leading columns shared
 ;;                        with the running relation, the triple's `:order` is
 ;;                        picked so its variables already lead correctly, and
-;;                        a permuting Map is inserted when the running layout
+;;                        a permuting Map operator is inserted when the running layout
 ;;                        does not
 ;;   {:op :union …}       or-continuation; every branch extends the same
 ;;                        running stream (so branches can anti-join outer
