@@ -328,8 +328,14 @@
      :project (projection descriptor order)
      :out-vars (vec target)}))
 
-
+;; A joining `:triple` node: extends the running relation (layout [incoming])
+;; with [descriptor]'s triple stream — the standard join. The join's key
+;; column *order* is fixed by the running (left) layout, and the triple's own
+;; source pipeline is arranged to that same key order so both sides' leading
+;; columns line up; `:left-permute` reorders the running relation when its
+;; key columns do not already lead.
 (defmethod plan-node :triple
+
   [descriptor incoming target]
   (if-not incoming
     (triple-plan descriptor (or target (:vars descriptor)))
