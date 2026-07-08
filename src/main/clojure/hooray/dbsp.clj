@@ -130,13 +130,12 @@
 
   Tracks the set of variables grounded so far, seeded with [grounded] (empty
   for a top-level scope, the running relation's variables for a nested
-  scope). A descriptor becomes introducible once every variable it cannot
-  ground itself — `(set :vars) - (set :groundable)` — is grounded. Among the
+  scope). A descriptor becomes introducible once every ungroundable variable
+  (`(set :vars) - (set :groundable)`) is grounded by previous patterns. Among the
   introducible descriptors the one sharing the most variables with the
-  grounded set is appended next; ties and fully disconnected patterns, which
-  become Cartesian joins, are broken by lowest original index. Throws
-  `:db.error/insufficient-binding` when descriptors remain but none is
-  introducible. Deterministic: the same input always yields the same order."
+  grounded set is appended next; ties and fully disconnected patterns are
+  broken by lowest original index. Throws `:db.error/insufficient-binding`
+  when descriptors remain but none is introducible."
   ([patterns] (left-deep-order patterns #{}))
   ([patterns grounded]
    (loop [chosen []
