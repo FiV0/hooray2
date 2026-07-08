@@ -208,10 +208,12 @@
 ;;                 whatever stream it follows)
 ;;
 ;; A scope (the top-level `:where`, an `and`, an `or` branch, a `not` body)
-;; plans as a `:chain` over its descriptors in `left-deep-order`;
-;; `(set (:out-vars <previous child>))` is by construction the set of
-;; variables grounded so far, which is what `left-deep-order` checks
-;; introducibility against.
+;; plans its descriptors in `left-deep-order`, each node extending its
+;; predecessor's output; `(set (:out-vars <previous node>))` is by
+;; construction the set of variables grounded so far, which is what
+;; `left-deep-order` checks introducibility against. A scope that plans to
+;; a single node (e.g. an `or` branch holding one triple) is that node
+;; directly; only a multi-node scope is wrapped in a `:chain`.
 
 (defn- variable? [el] (= :variable (:kind el)))
 
