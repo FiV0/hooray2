@@ -394,20 +394,33 @@
        :keyed-vars (lead-with (set key-vars) incoming)
        :out-vars (vec incoming)})))
 
-(defn- plan-node
-  "Plans one [descriptor] as a plan node. With [incoming] — the running
-  relation's column layout — the node extends that relation; without it the
-  node produces its stream standalone. With [target], the node's output is
-  arranged to that variable order. `and` is ordinary conjunction, so it
-  lowers directly to a left-deep scope over its children."
+(defmulti ^:private plan-node
+  "Plans one [descriptor] as a plan node, dispatching on its `:kind`. With
+  [incoming] — the running relation's column layout — the node extends that
+  relation; without it the node produces its stream standalone. With
+  [target], each method arranges the node's output to that variable order."
+  (fn [descriptor _incoming _target] (:kind descriptor)))
+
+(defmethod plan-node :triple
   [descriptor incoming target]
-  (case (:kind descriptor)
-    :triple (if incoming
-              (ensure-target (triple-join-node descriptor incoming) target)
-              (triple-plan descriptor (or target (:vars descriptor))))
-    :or (ensure-target (union-node descriptor incoming target) target)
-    :and (plan-scope (:children descriptor) incoming target)
-    :not (ensure-target (difference-node descriptor incoming) target)))
+  (if incoming
+    (ensure-target (triple-join-node descriptor incoming) target)
+    ;; a standalone triple reaches [target] directly through its :order
+    (triple-plan descriptor (or target (:vars descriptor)))))
+
+(defmethod plan-node :or
+  [descriptor incoming target]
+  (ensure-target (union-node descriptor incoming target) target))
+
+;; `and` is ordinary conjunction, so it lowers directly to a left-deep scope
+;; over its children; `plan-scope` arranges to [target] itself.
+(defmethod plan-node :and
+  [descriptor incoming target]
+  (plan-scope (:children descriptor) incoming target))
+
+(defmethod plan-node :not
+  [descriptor incoming target]
+  (ensure-target (difference-node descriptor incoming) target))
 
 (defn- plan-scope
   "Plans [descriptors] as one left-deep scope in `left-deep-order`. Without
