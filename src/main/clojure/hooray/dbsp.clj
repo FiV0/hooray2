@@ -143,28 +143,23 @@
           remaining (vec patterns)]
      (if (empty? remaining)
        chosen
-       (let [introducible? (fn [p]
-                             (set/subset? (set/difference (set (:vars p))
-                                                          (set (:groundable p)))
-                                          grounded))
+       (let [ungroundable (fn [p] (set/difference (set (:vars p)) (set (:groundable p))))
+             introducible? (fn [p]
+                             (set/subset? (ungroundable p) grounded))
              candidates (filter introducible? remaining)]
          (if (empty? candidates)
            (let [p (apply min-key :index remaining)
-                 unbound (first (sort (set/difference (set (:vars p))
-                                                      (set (:groundable p))
-                                                      grounded)))]
+                 unbound (first (sort (set/difference (ungroundable p) grounded)))]
              (err/incorrect-ex (format "%s not bound" unbound)
                                {:unbound-var unbound :grounded grounded}
                                :db.error/insufficient-binding))
            (let [best (->> candidates
                            (sort-by (fn [p]
-                                      [(- (count (set/intersection
-                                                  grounded (set (:vars p)))))
-                                       (:index p)]))
+                                      [(- (count (set/intersection grounded (set (:vars p))))) (:index p)]))
                            first)]
              (recur (conj chosen best)
                     (into grounded (:vars best))
-                    (vec (remove #(= (:index %) (:index best)) remaining))))))))))
+                    (vec (remove #{best} remaining))))))))))
 
 (defn parse
   "Conforms a raw query and returns
