@@ -358,7 +358,6 @@
 ;; branches are arranged to the union's `:out-vars` (with [incoming] the
 ;; running variables plus the variables the `or` grounds, standalone the
 ;; requested [target]) so the branch streams can be unioned directly.
-
 (defmethod plan-node :or
   [descriptor incoming target]
   (let [out-vars (if incoming
@@ -368,7 +367,7 @@
              :branches (mapv #(plan-node % incoming out-vars) (:branches descriptor))
              :out-vars out-vars}
       incoming (assoc :incoming (vec incoming))
-      :always (ensure-target target))))
+      target (ensure-target target))))
 
 (declare plan-scope)
 
@@ -401,41 +400,39 @@
                        :incoming (vec incoming)
                        :missing-vars (vec missing-vars)})))
     (let [key-vars (vec (filter (set negative-vars) incoming))]
-      (-> {:kind :difference
-           :incoming (vec incoming)
-           :negative (plan-scope (:children descriptor) nil key-vars)
-           :key-vars key-vars
-           :keyed-vars (lead-with (set key-vars) incoming)
-           :out-vars (vec incoming)}
-          (ensure-target target)))))
+      (cond-> {:kind :difference
+               :incoming (vec incoming)
+               :negative (plan-scope (:children descriptor) nil key-vars)
+               :key-vars key-vars
+               :keyed-vars (lead-with (set key-vars) incoming)
+               :out-vars (vec incoming)}
+        target (ensure-target target)))))
 
 (defn- plan-scope
-  "Plans [descriptors] as one left-deep scope in `left-deep-order`. Without
-  [incoming] the scope opens with a standalone base relation; with it every
-  descriptor (the first included) extends the running relation. Returns the
+  "Plans [descriptors] as one left-deep tree in `left-deep-order`. Without
+  [incoming] the scope opens with a standalone base relation that must produce a stream.
+  With it every descriptor (the first included) extends the running relation stream
+  (that is going to be available at circuit construction). Returns the
   sole node directly when the scope plans to a single node, otherwise a
   `:chain`. With [target], the result is arranged to that variable order."
   [descriptors incoming target]
   (let [ordered (left-deep-order descriptors (set incoming))]
-    (when (empty? ordered)
-      (throw (ex-info "query has no patterns" {})))
-    (let [;; a lone standalone descriptor can take the target directly;
-          ;; a multi-descriptor scope plans its base in natural order and
-          ;; reaches the target through a final :permute instead (the base
-          ;; may not even carry all the target's variables).
-          base-target (when (and (nil? incoming) (= 1 (count ordered)))
-                        target)
-          children (reduce (fn [children d]
-                             (conj children (plan-node d (:out-vars (peek children)) nil)))
-                           [(plan-node (first ordered) incoming base-target)]
-                           (rest ordered))
-          node (if (= 1 (count children))
-                 (first children)
-                 (cond-> {:kind :chain
-                          :children children
-                          :out-vars (:out-vars (peek children))}
-                   incoming (assoc :incoming (vec incoming))))]
-      (ensure-target node target))))
+    (cond
+      (empty? ordered)
+      (throw (ex-info "query has no patterns" {}))
+
+      (= 1 (count ordered))
+      (plan-node (first ordered) incoming target)
+
+      :else (let [children (reduce (fn [children d]
+                                     (conj children (plan-node d (:out-vars (peek children)) nil)))
+                                   [(plan-node (first ordered) incoming nil)]
+                                   (rest ordered))]
+              (cond-> {:kind :chain
+                       :children children
+                       :out-vars (:out-vars (peek children))}
+                incoming (assoc :incoming (vec incoming))
+                target (ensure-target target))))))
 
 (defn plan
   "Builds the full circuit plan for [query]:
