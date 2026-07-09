@@ -187,27 +187,25 @@
 ;; The plan is a tree of nodes `{:kind … :out-vars […] …}` with kinds
 ;; `:triple`, `:chain`, `:union`, `:difference` and `:permute`. A node
 ;; optionally carries `:incoming`, the column layout of the running relation
-;; it extends. By running relation, we mean the stream that has already been built.
-;; The left partial sub-tree of the query that has already been built.
-
-;; Without `:incoming` a node produces its stream standalone,
-;; rooted at its own Source(s). With it the node consumes the running stream:
+;; it extends — the stream of the already-built left partial sub-tree of the
+;; query. Without `:incoming` a node produces its stream standalone, rooted
+;; at its own Source(s); with it the node consumes the running stream:
 ;;
-;;   :triple
-;; Without `:incoming`, the triple simply produces it's values as a stream. With `:incoming` and standard
-;; join with the running relations is produced (this could be a cartesian product if there is no variable overlap).
-;;   :chain
-;; If `:incoming` is set the running stream is the base of the chain, otherwise the first child. Every child
-;;                 extends its predecessor's output (child i's `:incoming`
-;;                 is child i-1's `:out-vars`)
-;;   :union
-;;
-;; If `:incoming` is set, every branch extends the *same* running stream.
-;;                 If `:incoming` is not set every branch produces the same column set.
-;; In both cases the branch streams are unioned.
-;;   :difference   anti-joins a `not`'s relation off the running one. The
-;;                 not body is itself planned against the running relation's
-;;                 key columns.
+;;   :triple       without `:incoming` simply produces its values as a
+;;                 stream; with it, a standard join with the running
+;;                 relation (a cartesian product when there is no variable
+;;                 overlap)
+;;   :chain        with `:incoming` the running stream is the base of the
+;;                 chain, otherwise the first child is; every child extends
+;;                 its predecessor's output (child i's `:incoming` is child
+;;                 i-1's `:out-vars`)
+;;   :union        with `:incoming` every branch extends the *same* running
+;;                 stream; without it every branch produces the same column
+;;                 set standalone; in both cases the branch streams are
+;;                 unioned
+;;   :difference   anti-joins a `not`'s relation off the running one
+;;                 (`:incoming` is required); the not body is itself planned
+;;                 against the running relation's key columns
 ;;   :permute      reorders the running stream to an explicit target layout;
 ;;                 never carries `:incoming` (it is a unary reordering of
 ;;                 whatever stream it follows)
