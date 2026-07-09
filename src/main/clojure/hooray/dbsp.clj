@@ -328,12 +328,13 @@
      :project (projection descriptor order)
      :out-vars (vec target)}))
 
-;; A joining `:triple` node: extends the running relation (layout [incoming])
-;; with [descriptor]'s triple stream — the standard join. The join's key
-;; column *order* is fixed by the running (left) layout, and the triple's own
-;; source pipeline is arranged to that same key order so both sides' leading
-;; columns line up; `:left-permute` reorders the running relation when its
-;; key columns do not already lead.
+
+;; A `:triple` node either produces values by itself (nil `incoming`) or
+;; extends/joins the running relation stream (layout [incoming]) with the values
+;; produced by this triple. The key column *order* needed for a join is fixed
+;; via the incoming stream (:aev vs. :ave). The triple's own source pipeline
+;; is arranged to that same key order so both sides' leading columns line up.
+;; `:left-permute` reorders the running relation when the key columns do not already lead.
 
 ;; TODO The :left-permute value of has the same purpose as the :permute node.
 ;; Maybe extract that logic into separate :permute, :join and :triple nodes.
@@ -354,13 +355,11 @@
                  :out-vars (into left-needed (remove ki (:vars descriptor))))
           (ensure-target target)))))
 
-;; A `:union` node for an `or` descriptor. Every branch is planned against
-;; the same [incoming] layout — each branch extends the *same* running stream,
-;; which is what lets a branch's inner `not` key on variables from the outer
-;; scope and a bare `not` branch anti-join the running relation itself. All
-;; branches are arranged to the union's `:out-vars` (with [incoming] the
-;; running variables plus the variables the `or` grounds, standalone the
-;; requested [target]) so the branch streams can be unioned directly.
+;; For an `or` descriptor an `:union` node is planned. Every branch is planned against
+;; the same [incoming] layout — each branch extends the *same* running stream.
+;; This is what let's a branch inner predicates or `not` patterns use the
+;; variables from the outer scope. All branches are arranged to the
+;; union's `:out-vars`, so the branch streams can be unioned directly.
 (defmethod plan-node :or
   [descriptor incoming target]
   (let [out-vars (if incoming
@@ -374,17 +373,17 @@
 
 (declare plan-scope)
 
-;; `and` is ordinary conjunction, so it lowers directly to a left-deep scope
+;; `and` is ordinary conjunction, so it lowers directly to a left-deep tree
 ;; over its children; `plan-scope` arranges to [target] itself.
 (defmethod plan-node :and
   [descriptor incoming target]
   (plan-scope (:children descriptor) incoming target))
 
-;; A `:difference` node for a `not` descriptor: anti-joins the running
-;; relation (layout [incoming]) with the `not`'s relation as
+;; A `:difference` node for a `not` descriptor anti-joins the running
+;; relation (which is required in this case) with the `not`'s relation as
 ;;   A - semijoin(A, distinct(keys(B))).
 
-;;   The negative relation B is planned standalone, keyed on the `not`'s
+;; The negative relation B is planned standalone, keyed on the `not`'s
 ;; variables (all grounded by the running relation, per `left-deep-order`).
 ;; A `not` body that is not itself self-groundable — e.g. a bare `not` inside
 ;; an `or` inside this `not` — therefore still fails with an
