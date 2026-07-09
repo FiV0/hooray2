@@ -517,20 +517,11 @@
       (is (= '[?e name] (:result-vars p)))
       (is (= '[?e name] (:out-vars diff)))
       (is (= '[?e] (:key-vars diff)))
+      ;; the anti key already leads the running layout — no re-order needed
+      (is (= '[?e name] (:keyed-vars diff)))
       (is (= :triple (:kind (:negative diff))))
       ;; the negative relation extends the running relation's key columns
       (is (= '[?e] (:incoming (:negative diff))))))
-
-  (testing "not keeps the running relation as-is when the anti key is already leading"
-    (let [p (dbsp/plan '{:find [name ?e]
-                         :where [[?e :name name]
-                                 (not [?e :last-name "Smith"])]})
-          diff (second (:children (:where-plan p)))]
-      (is (= :difference (:kind diff)))
-      (is (= '[?e] (:key-vars diff)))
-      ;; keyed layout equals the running layout — no re-order needed
-      (is (= '[?e name] (:keyed-vars diff)))
-      (is (= '[?e name] (:out-vars diff)))))
 
   (testing "not records the keyed positive shape when the anti key is not leading"
     (let [p (dbsp/plan '{:find [name city]
