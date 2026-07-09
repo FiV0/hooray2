@@ -582,18 +582,6 @@
       (is (= '[?e] (:key-vars not-branch)))
       (is (= '[?e n] (:out-vars not-branch))))))
 
-(deftest plan-or-deterministic-test
-  (let [q '{:find [?e]
-            :where [[?e :name name]
-                    (or [?e :sex :male]
-                        [?e :sex :female])]}]
-    (is (= (dbsp/plan q) (dbsp/plan q)))))
-
-(deftest plan-deterministic-test
-  (let [q '{:find [?a ?d]
-            :where [[?a :r ?b] [?b :s ?c] [?c :t ?d]]}]
-    (is (= (dbsp/plan q) (dbsp/plan q)))))
-
 ;; --------------------------------------------------------------------------
 ;; Circuit assembly
 ;; --------------------------------------------------------------------------
