@@ -332,7 +332,7 @@
 
 
 ;; A `:triple` node either produces values by itself (nil `incoming`) or
-;; extends/joins the running relation stream (layout [incoming]) with the values
+;; extends/joins the running relation (layout [incoming]) with the values
 ;; produced by this triple. The key column *order* needed for a join is fixed
 ;; via the incoming stream (:aev vs. :ave). The triple's own source pipeline
 ;; is arranged to that same key order so both sides' leading columns line up.
@@ -382,16 +382,12 @@
   (plan-scope (:children descriptor) incoming target))
 
 ;; A `:difference` node for a `not` descriptor anti-joins the running
-;; relation (which is required in this case) with the `not`'s relation as
+;; stream (which is required in this case) with the `not`'s relation as
 ;;   A - semijoin(A, distinct(keys(B))).
 
 ;; The negative relation B is planned against the running relation's key
-;; columns — at assembly it is seeded with the key projection of A — so body
-;; patterns that cannot ground their own variables (a bare `not` inside an
-;; `or` inside this `not`; eventually predicates) plan against the outer
-;; bindings. The threading recurses: a nested `not` body sees *its* scope's
-;; running relation. Without a running relation a `not` has no finite
-;; positive input domain and cannot be planned.
+;; columns, so the `not`s body patterns that can not produces variables (predicates)
+;; can still plan against the outer bindings. A `not` body itself has a running relation.
 (defmethod plan-node :not
   [descriptor incoming target]
   (when-not incoming
@@ -407,6 +403,8 @@
     (let [key-vars (vec (filter (set negative-vars) incoming))]
       (cond-> {:kind :difference
                :incoming (vec incoming)
+               ;; the difference operator needs to assure the incoming relation
+               ;; is reshuffled into leading key-vars before being joined with the negative.
                :negative (plan-scope (:children descriptor) key-vars key-vars)
                :key-vars key-vars
                :keyed-vars (lead-with (set key-vars) incoming)
