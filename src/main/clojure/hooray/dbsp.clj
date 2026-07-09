@@ -187,29 +187,32 @@
 ;; The plan is a tree of nodes `{:kind … :out-vars […] …}` with kinds
 ;; `:triple`, `:chain`, `:union`, `:difference` and `:permute`. A node
 ;; optionally carries `:incoming`, the column layout of the running relation
-;; it extends. Without `:incoming` a node produces its stream standalone,
-;; rooted at its own Source(s); with it the node consumes the running stream:
+;; it extends. By running relation, we mean the stream that has already been built.
+;; The left partial sub-tree of the query that has already been built.
+
+;; Without `:incoming` a node produces its stream standalone,
+;; rooted at its own Source(s). With it the node consumes the running stream:
 ;;
-;;   :triple       the standard join; the `IncrementalJoin` keys on the
-;;                 leading columns shared with the running relation, the
-;;                 triple's `:order` is picked so its variables lead in that
-;;                 key order, and a permuting Map operator (`:left-permute`)
-;;                 is inserted when the running layout does not already lead
-;;                 with the keys
-;;   :chain        the running stream is the base of the chain; every child
+;;   :triple
+;; Without `:incoming`, the triple simply produces it's values as a stream. With `:incoming` and standard
+;; join with the running relations is produced (this could be a cartesian product if there is no variable overlap).
+;;   :chain
+;; If `:incoming` is set the running stream is the base of the chain, otherwise the first child. Every child
 ;;                 extends its predecessor's output (child i's `:incoming`
 ;;                 is child i-1's `:out-vars`)
-;;   :union        every branch extends the *same* running stream (so
-;;                 branches can anti-join outer bindings) and the branch
-;;                 streams are unioned
-;;   :difference   anti-joins a `not`'s relation off the running one; the
+;;   :union
+;;
+;; If `:incoming` is set, every branch extends the *same* running stream.
+;;                 If `:incoming` is not set every branch produces the same column set.
+;; In both cases the branch streams are unioned.
+;;   :difference   anti-joins a `not`'s relation off the running one. The
 ;;                 not body is itself planned against the running relation's
-;;                 key columns (seeded with A's key projection at assembly)
+;;                 key columns.
 ;;   :permute      reorders the running stream to an explicit target layout;
 ;;                 never carries `:incoming` (it is a unary reordering of
 ;;                 whatever stream it follows)
 ;;
-;; A scope (the top-level `:where`, an `and`, an `or` branch, a `not` body)
+;; A scope (the top-level `:where`, an `and` and a `not` body)
 ;; plans its descriptors in `left-deep-order`, each node extending its
 ;; predecessor's output; `(set (:out-vars <previous node>))` is by
 ;; construction the set of variables grounded so far, which is what
