@@ -309,23 +309,29 @@
       (is (= [1 2] (:project pat)))
       (is (= '[?e name] (:out-vars pat))))))
 
-(deftest plan-multi-pattern-relation-tree-test
-  (testing "a multi-pattern query plans as a chain of joins off a base relation"
-    (let [p (dbsp/plan '{:find [?a ?d]
-                         :where [[?a :r ?b]
-                                 [?b :s ?c]
-                                 [?c :t ?d]]})
-          chain (:where-plan p)
-          [base & joins] (:children chain)]
+(deftest plan-multi-pattern-chain-test
+  (let [p (dbsp/plan '{:find [?a ?d]
+                       :where [[?a :r ?b]
+                               [?b :s ?c]
+                               [?c :t ?d]]})
+        chain (:where-plan p)
+        [base j1 j2] (:children chain)]
+    (testing "a multi-pattern query plans as a chain of joins off a base relation"
       (is (= :chain (:kind chain)))
       (is (nil? (:incoming chain)))
       (is (= 3 (count (:children chain))))
       (is (= :triple (:kind base)))
       (is (nil? (:incoming base)))
-      (is (every? #(= :triple (:kind %)) joins))
+      (is (every? #(= :triple (:kind %)) [j1 j2]))
       ;; each child extends the layout produced by its predecessor
-      (is (= (mapv :out-vars (butlast (:children chain)))
-             (mapv :incoming joins))))))
+      (is (= (mapv :out-vars [base j1])
+             (mapv :incoming [j1 j2]))))
+
+    (testing "later joins re-permute the running relation so the key columns lead"
+      (is (= [1 0] (:left-permute j1)))
+      (is (= [2 0 1] (:left-permute j2)))
+      (is (= '[?c ?b ?a ?d] (:result-vars p)))
+      (is (= [2 3] (:final-permute p))))))
 
 (deftest plan-two-pattern-join-test
   (let [p (dbsp/plan '{:find [name age]
@@ -380,21 +386,6 @@
       (is (= {0 :name, 1 1} (:filter pat)))
       (is (= [2] (:project pat)))
       (is (= '[name] (:out-vars pat))))))
-
-(deftest plan-chain-intermediate-permute-test
-  (testing "later joins re-permute the running relation so the key columns lead"
-    (let [p (dbsp/plan '{:find [?a ?d]
-                         :where [[?a :r ?b]
-                                 [?b :s ?c]
-                                 [?c :t ?d]]})
-          chain (:where-plan p)
-          [_base j1 j2] (:children chain)]
-      (is (= :chain (:kind chain)))
-      (is (= 3 (count (:children chain))))
-      (is (= [1 0] (:left-permute j1)))
-      (is (= [2 0 1] (:left-permute j2)))
-      (is (= '[?c ?b ?a ?d] (:result-vars p)))
-      (is (= [2 3] (:final-permute p))))))
 
 (deftest plan-triangle-test
   (testing "a cyclic query joins the closing pattern on a two-variable key"
