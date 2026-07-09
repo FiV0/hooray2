@@ -357,7 +357,7 @@
 
 ;; For an `or` descriptor an `:union` node is planned. Every branch is planned against
 ;; the same [incoming] layout — each branch extends the *same* running stream.
-;; This is what let's a branch inner predicates or `not` patterns use the
+;; This is what lets a branch's inner predicates or `not` patterns use the
 ;; variables from the outer scope. All branches are arranged to the
 ;; union's `:out-vars`, so the branch streams can be unioned directly.
 (defmethod plan-node :or
