@@ -335,7 +335,6 @@
 ;; columns line up; `:left-permute` reorders the running relation when its
 ;; key columns do not already lead.
 (defmethod plan-node :triple
-
   [descriptor incoming target]
   (if-not incoming
     (triple-plan descriptor (or target (:vars descriptor)))
@@ -352,15 +351,15 @@
                  :out-vars (into left-needed (remove ki (:vars descriptor))))
           (ensure-target target)))))
 
+;; A `:union` node for an `or` descriptor. Every branch is planned against
+;; the same [incoming] layout — each branch extends the *same* running stream,
+;; which is what lets a branch's inner `not` key on variables from the outer
+;; scope and a bare `not` branch anti-join the running relation itself. All
+;; branches are arranged to the union's `:out-vars` (with [incoming] the
+;; running variables plus the variables the `or` grounds, standalone the
+;; requested [target]) so the branch streams can be unioned directly.
 
-(defn- union-node
-  "A `:union` node for an `or` descriptor. Every branch is planned against
-  the same [incoming] layout — each branch extends the *same* running stream,
-  which is what lets a branch's inner `not` key on variables from the outer
-  scope and a bare `not` branch anti-join the running relation itself. All
-  branches are arranged to the union's `:out-vars` (with [incoming] the
-  running variables plus the variables the `or` grounds, standalone the
-  requested [target]) so the branch streams can be unioned directly."
+(defmethod plan-node :or
   [descriptor incoming target]
   (let [out-vars (if incoming
                    (into (vec incoming) (remove (set incoming) (:vars descriptor)))
@@ -368,11 +367,8 @@
     (cond-> {:kind :union
              :branches (mapv #(plan-node % incoming out-vars) (:branches descriptor))
              :out-vars out-vars}
-      incoming (assoc :incoming (vec incoming)))))
-
-(defmethod plan-node :or
-  [descriptor incoming target]
-  (ensure-target (union-node descriptor incoming target) target))
+      incoming (assoc :incoming (vec incoming))
+      :always (ensure-target target))))
 
 (declare plan-scope)
 
@@ -382,18 +378,18 @@
   [descriptor incoming target]
   (plan-scope (:children descriptor) incoming target))
 
-(defn- difference-node
-  "A `:difference` node for a `not` descriptor: anti-joins the running
-  relation (layout [incoming]) with the `not`'s relation as
-  A - semijoin(A, distinct(keys(B))).
+;; A `:difference` node for a `not` descriptor: anti-joins the running
+;; relation (layout [incoming]) with the `not`'s relation as
+;;   A - semijoin(A, distinct(keys(B))).
 
-  The negative relation B is planned standalone, keyed on the `not`'s
-  variables (all grounded by the running relation, per `left-deep-order`).
-  A `not` body that is not itself self-groundable — e.g. a bare `not` inside
-  an `or` inside this `not` — therefore still fails with an
-  insufficient-binding error. Without a running relation a `not` has no
-  finite positive input domain and cannot be planned."
-  [descriptor incoming]
+;;   The negative relation B is planned standalone, keyed on the `not`'s
+;; variables (all grounded by the running relation, per `left-deep-order`).
+;; A `not` body that is not itself self-groundable — e.g. a bare `not` inside
+;; an `or` inside this `not` — therefore still fails with an
+;; insufficient-binding error. Without a running relation a `not` has no
+;; finite positive input domain and cannot be planned.
+(defmethod plan-node :not
+  [descriptor incoming target]
   (when-not incoming
     (err/unsupported-ex "DBSP-standard engine cannot plan `not` without a positive relation"
                         {:descriptor descriptor}))
@@ -405,16 +401,13 @@
                        :incoming (vec incoming)
                        :missing-vars (vec missing-vars)})))
     (let [key-vars (vec (filter (set negative-vars) incoming))]
-      {:kind :difference
-       :incoming (vec incoming)
-       :negative (plan-scope (:children descriptor) nil key-vars)
-       :key-vars key-vars
-       :keyed-vars (lead-with (set key-vars) incoming)
-       :out-vars (vec incoming)})))
-
-(defmethod plan-node :not
-  [descriptor incoming target]
-  (ensure-target (difference-node descriptor incoming) target))
+      (-> {:kind :difference
+           :incoming (vec incoming)
+           :negative (plan-scope (:children descriptor) nil key-vars)
+           :key-vars key-vars
+           :keyed-vars (lead-with (set key-vars) incoming)
+           :out-vars (vec incoming)}
+          (ensure-target target)))))
 
 (defn- plan-scope
   "Plans [descriptors] as one left-deep scope in `left-deep-order`. Without
