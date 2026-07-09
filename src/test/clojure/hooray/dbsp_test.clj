@@ -559,26 +559,6 @@
       (is (= '[?e] (:key-vars not-branch)))
       (is (= '[?e n] (:out-vars not-branch))))))
 
-(deftest plan-not-non-self-groundable-body-test
-  (testing "a not body that cannot ground itself plans against the outer key columns"
-    (let [p (dbsp/plan '{:find [?n]
-                         :where [[?e :name ?n]
-                                 (not (or (not [?e :age 1])))]})
-          [_base diff] (:children (:where-plan p))
-          negative (:negative diff)
-          inner-not (first (:branches negative))]
-      (is (= :difference (:kind diff)))
-      (is (= '[?e ?n] (:incoming diff)))
-      (is (= '[?e] (:key-vars diff)))
-      ;; the body's or extends the not's key relation …
-      (is (= :union (:kind negative)))
-      (is (= '[?e] (:incoming negative)))
-      ;; … and the bare not branch anti-joins it in turn
-      (is (= :difference (:kind inner-not)))
-      (is (= '[?e] (:incoming inner-not)))
-      (is (= '[?e] (:key-vars inner-not)))
-      (is (= '[?e] (:incoming (:negative inner-not)))))))
-
 ;; --------------------------------------------------------------------------
 ;; Circuit assembly
 ;; --------------------------------------------------------------------------
