@@ -504,7 +504,7 @@
       (is (= '[?e] (:out-vars nested-or))))))
 
 (deftest plan-not-test
-  (testing "not plans as an anti-semijoin :difference node off the running relation"
+  (testing "`not` plans as an anti-semijoin :difference node off the running relation"
     (let [p (dbsp/plan '{:find [name]
                          :where [[?e :name name]
                                  (not [?e :last-name "Smith"])]})
@@ -523,7 +523,7 @@
       ;; the negative relation extends the running relation's key columns
       (is (= '[?e] (:incoming (:negative diff))))))
 
-  (testing "not records the keyed positive shape when the anti key is not leading"
+  (testing "`not` records the keyed positive shape when the anti key is not leading"
     (let [p (dbsp/plan '{:find [name city]
                          :where [[?e :name name]
                                  [name :city city]
@@ -535,7 +535,7 @@
       (is (= '[name ?e city] (:out-vars diff)))
       (is (= '[?e name city] (:keyed-vars diff)))))
 
-  (testing "a bare not branch inside or anti-joins the running relation"
+  (testing "a bare `not` branch inside `or` anti-joins the running relation"
     (let [p (dbsp/plan '{:find [?e]
                          :where [[?e :name n]
                                  (or [?e :name "Ada"]
