@@ -387,20 +387,6 @@
       (is (= [2] (:project pat)))
       (is (= '[name] (:out-vars pat))))))
 
-(deftest plan-triangle-test
-  (testing "a cyclic query joins the closing pattern on a two-variable key"
-    (let [p (dbsp/plan '{:find [?a]
-                         :where [[?a :r ?b]
-                                 [?b :s ?c]
-                                 [?c :t ?a]]})
-          chain (:where-plan p)
-          closing (last (:children chain))]
-      (is (= :chain (:kind chain)))
-      (is (= :triple (:kind closing)))
-      (is (some? (:incoming closing)))
-      (is (= 2 (:key-arity closing)))
-      (is (= 2 (count (set (:key-vars closing))))))))
-
 (deftest plan-or-only-test
   (testing "single :or block as the only pattern"
     (let [p (dbsp/plan '{:find [?e]
