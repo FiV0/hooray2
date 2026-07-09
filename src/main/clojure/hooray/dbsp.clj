@@ -387,8 +387,9 @@
 ;;   A - semijoin(A, distinct(keys(B))).
 
 ;; The negative relation B is planned against the running relation's key
-;; columns, so the `not`s body patterns that can not produces variables (predicates)
-;; can still plan against the outer bindings. A `not` body itself has a running relation.
+;; columns, so the `not` body patterns that cannot produce variables themselves
+;; (predicates) can still plan against the outer bindings. A `not` body itself
+;; has a running relation.
 (defmethod plan-node :not
   [descriptor incoming target]
   (when-not incoming
@@ -459,12 +460,45 @@
 ;; Phase 2 — circuit assembly
 ;; --------------------------------------------------------------------------
 
-(defn- assemble-triple
-  "Wires a `:triple` node into [circuit]. Standalone (no running relation
-  [acc]) the node is its own Source -> Filter? -> Map(project) pipeline;
-  extending, the running stream (permuted when the key columns do not
-  already lead) is `IncrementalJoin`ed with that pipeline."
+(defn- project-stream
+  "Projects or reorders [stream] from [source-vars] to [target-vars]."
+  [^Circuit circuit stream source-vars target-vars]
+  (if (= (vec source-vars) (vec target-vars))
+    stream
+    (.addUnary circuit
+               (MapOp/permute (int-array (indices-of source-vars target-vars)))
+               stream)))
+
+(defn- check-incoming!
+  "Asserts the running relation [acc]'s layout matches the layout the node
+  was planned against (`:incoming`)."
+  [node acc]
+  (when-let [incoming (:incoming node)]
+    (assert (= (vec incoming) (vec (:vars acc)))
+            (str "running relation layout " (:vars acc)
+                 " does not match the node's planned :incoming " incoming))))
+
+(defmulti ^:private assemble-node
+  "Wires one plan node into [circuit], dispatching on the node's `:kind`,
+  and returns
+
+   {:stream <Stream>
+    :vars […]
+    :handles [...]
+    :leaves [...]}
+
+  [acc] (same shape) is the running relation the node extends, or nil when
+  the node produces its stream standalone. `:handles` and `:leaves` are
+  equal-length flat vectors, one entry per leaf input triple."
+  (fn [_circuit node _acc] (:kind node)))
+
+;; Standalone (no running relation [acc]) a `:triple` node is its own
+;; Source -> Filter? -> Map(project) pipeline; extending, the running stream
+;; (permuted when the key columns do not already lead) is `IncrementalJoin`ed
+;; with that pipeline.
+(defmethod assemble-node :triple
   [^Circuit circuit node acc]
+  (check-incoming! node acc)
   (let [left (when acc
                (if-let [left-permute (:left-permute node)]
                  (.addUnary circuit (MapOp/permute (int-array left-permute)) (:stream acc))
@@ -496,24 +530,24 @@
        :handles [handle]
        :leaves [{:order (:order node)}]})))
 
-(defn- project-stream
-  "Projects or reorders [stream] from [source-vars] to [target-vars]."
-  [^Circuit circuit stream source-vars target-vars]
-  (if (= (vec source-vars) (vec target-vars))
-    stream
-    (.addUnary circuit
-               (MapOp/permute (int-array (indices-of source-vars target-vars)))
-               stream)))
+;; The running relation threads through a `:chain`'s children: the first
+;; child sees the chain's [acc] (nil for a standalone chain), each
+;; subsequent child its predecessor's output.
+(defmethod assemble-node :chain
+  [^Circuit circuit node acc]
+  (check-incoming! node acc)
+  (reduce (fn [running child] (assemble-node circuit child running))
+          acc
+          (:children node)))
 
-(declare assemble-node)
-
-(defn- assemble-union
-  "Wires a `:union` node into [circuit]: every branch is assembled against
-  the same running relation [acc] (or standalone when there is none), the
-  branch streams are folded left-to-right with `PlusOp`, and the union is fed
-  into a `DistinctOp` to enforce set-union semantics. Handles/leaves
-  concatenate [acc]'s with every branch's in plan order."
-  [^Circuit circuit {:keys [branches out-vars]} acc]
+;; Every branch of a `:union` is assembled against the same running relation
+;; [acc] (or standalone when there is none), the branch streams are folded
+;; left-to-right with `PlusOp`, and the union is fed into a `DistinctOp` to
+;; enforce set-union semantics. Handles/leaves concatenate [acc]'s with
+;; every branch's in plan order.
+(defmethod assemble-node :union
+  [^Circuit circuit {:keys [branches out-vars] :as node} acc]
+  (check-incoming! node acc)
   (let [branch-acc (some-> acc (assoc :handles [] :leaves []))
         wired (mapv #(assemble-node circuit % branch-acc) branches)
         ;; the planner arranges every branch to out-vars, so this is normally
@@ -528,17 +562,17 @@
      :handles (into (vec (:handles acc)) (mapcat :handles wired))
      :leaves (into (vec (:leaves acc)) (mapcat :leaves wired))}))
 
-(defn- assemble-difference
-  "Wires a `:difference` node into [circuit]: extends the running relation A
-  as A - semijoin(A, distinct(keys(B))), with the negative relation B
-  assembled against A's key projection. The seed is fed raw — A's key
-  multiplicities may flow through B's operators, but the distinct on
-  `keys(B)` normalizes the semijoin selector to weight 1 per key, which is
-  all the subtraction needs to cancel exactly."
-  [^Circuit circuit
-   {:keys [negative key-vars keyed-vars out-vars]}
-   {:keys [stream vars handles leaves]}]
-  (let [positive-keyed (project-stream circuit stream vars keyed-vars)
+;; A `:difference` extends the running relation A as
+;; A - semijoin(A, distinct(keys(B))), with the negative relation B
+;; assembled against A's key projection. The seed is fed raw — A's key
+;; multiplicities may flow through B's operators, but the distinct on
+;; `keys(B)` normalizes the semijoin selector to weight 1 per key, which is
+;; all the subtraction needs to cancel exactly.
+(defmethod assemble-node :difference
+  [^Circuit circuit {:keys [negative key-vars keyed-vars out-vars] :as node} acc]
+  (check-incoming! node acc)
+  (let [{:keys [stream vars handles leaves]} acc
+        positive-keyed (project-stream circuit stream vars keyed-vars)
         negative-seed {:stream (project-stream circuit positive-keyed keyed-vars key-vars)
                        :vars key-vars
                        :handles []
@@ -561,35 +595,16 @@
      :handles (into handles (:handles negative-wired))
      :leaves (into leaves (:leaves negative-wired))}))
 
-(defn- assemble-node
-  "Wires one plan node into [circuit] and returns
-
-   {:stream <Stream>
-    :vars […]
-    :handles [...]
-    :leaves [...]}
-
-  [acc] (same shape) is the running relation the node extends, or nil when
-  the node produces its stream standalone. `:handles` and `:leaves` are
-  equal-length flat vectors, one entry per leaf input triple."
+;; A `:permute` is a unary reordering of the running stream to the node's
+;; target layout; it never carries `:incoming`.
+(defmethod assemble-node :permute
   [^Circuit circuit node acc]
-  (when-let [incoming (:incoming node)]
-    (assert (= (vec incoming) (vec (:vars acc)))
-            (str "running relation layout " (:vars acc)
-                 " does not match the node's planned :incoming " incoming)))
-  (case (:kind node)
-    :triple (assemble-triple circuit node acc)
-    :chain (reduce (fn [running child] (assemble-node circuit child running))
-                   acc
-                   (:children node))
-    :union (assemble-union circuit node acc)
-    :difference (assemble-difference circuit node acc)
-    :permute {:stream (.addUnary circuit
-                                 (MapOp/permute (int-array (:indices node)))
-                                 (:stream acc))
-              :vars (:out-vars node)
-              :handles (:handles acc)
-              :leaves (:leaves acc)}))
+  {:stream (.addUnary circuit
+                      (MapOp/permute (int-array (:indices node)))
+                      (:stream acc))
+   :vars (:out-vars node)
+   :handles (:handles acc)
+   :leaves (:leaves acc)})
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
