@@ -202,7 +202,9 @@
 ;;   :union        every branch extends the *same* running stream (so
 ;;                 branches can anti-join outer bindings) and the branch
 ;;                 streams are unioned
-;;   :difference   anti-joins a `not`'s relation off the running one
+;;   :difference   anti-joins a `not`'s relation off the running one; the
+;;                 not body is itself planned against the running relation's
+;;                 key columns (seeded with A's key projection at assembly)
 ;;   :permute      reorders the running stream to an explicit target layout;
 ;;                 never carries `:incoming` (it is a unary reordering of
 ;;                 whatever stream it follows)
@@ -383,12 +385,13 @@
 ;; relation (which is required in this case) with the `not`'s relation as
 ;;   A - semijoin(A, distinct(keys(B))).
 
-;; The negative relation B is planned standalone, keyed on the `not`'s
-;; variables (all grounded by the running relation, per `left-deep-order`).
-;; A `not` body that is not itself self-groundable — e.g. a bare `not` inside
-;; an `or` inside this `not` — therefore still fails with an
-;; insufficient-binding error. Without a running relation a `not` has no
-;; finite positive input domain and cannot be planned.
+;; The negative relation B is planned against the running relation's key
+;; columns — at assembly it is seeded with the key projection of A — so body
+;; patterns that cannot ground their own variables (a bare `not` inside an
+;; `or` inside this `not`; eventually predicates) plan against the outer
+;; bindings. The threading recurses: a nested `not` body sees *its* scope's
+;; running relation. Without a running relation a `not` has no finite
+;; positive input domain and cannot be planned.
 (defmethod plan-node :not
   [descriptor incoming target]
   (when-not incoming
@@ -404,7 +407,7 @@
     (let [key-vars (vec (filter (set negative-vars) incoming))]
       (cond-> {:kind :difference
                :incoming (vec incoming)
-               :negative (plan-scope (:children descriptor) nil key-vars)
+               :negative (plan-scope (:children descriptor) key-vars key-vars)
                :key-vars key-vars
                :keyed-vars (lead-with (set key-vars) incoming)
                :out-vars (vec incoming)}
@@ -529,12 +532,19 @@
 (defn- assemble-difference
   "Wires a `:difference` node into [circuit]: extends the running relation A
   as A - semijoin(A, distinct(keys(B))), with the negative relation B
-  assembled standalone."
+  assembled against A's key projection. The seed is fed raw — A's key
+  multiplicities may flow through B's operators, but the distinct on
+  `keys(B)` normalizes the semijoin selector to weight 1 per key, which is
+  all the subtraction needs to cancel exactly."
   [^Circuit circuit
    {:keys [negative key-vars keyed-vars out-vars]}
    {:keys [stream vars handles leaves]}]
-  (let [negative-wired (assemble-node circuit negative nil)
-        positive-keyed (project-stream circuit stream vars keyed-vars)
+  (let [positive-keyed (project-stream circuit stream vars keyed-vars)
+        negative-seed {:stream (project-stream circuit positive-keyed keyed-vars key-vars)
+                       :vars key-vars
+                       :handles []
+                       :leaves []}
+        negative-wired (assemble-node circuit negative negative-seed)
         negative-keys (project-stream circuit
                                       (:stream negative-wired)
                                       (:vars negative-wired)

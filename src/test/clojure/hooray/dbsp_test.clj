@@ -541,8 +541,8 @@
       (is (= '[?e name] (:out-vars diff)))
       (is (= '[?e] (:key-vars diff)))
       (is (= :triple (:kind (:negative diff))))
-      ;; the negative relation is planned standalone
-      (is (nil? (:incoming (:negative diff))))))
+      ;; the negative relation extends the running relation's key columns
+      (is (= '[?e] (:incoming (:negative diff))))))
 
   (testing "not keeps the running relation as-is when the anti key is already leading"
     (let [p (dbsp/plan '{:find [name ?e]
@@ -581,6 +581,26 @@
       (is (= '[?e n] (:incoming not-branch)))
       (is (= '[?e] (:key-vars not-branch)))
       (is (= '[?e n] (:out-vars not-branch))))))
+
+(deftest plan-not-non-self-groundable-body-test
+  (testing "a not body that cannot ground itself plans against the outer key columns"
+    (let [p (dbsp/plan '{:find [?n]
+                         :where [[?e :name ?n]
+                                 (not (or (not [?e :age 1])))]})
+          [_base diff] (:children (:where-plan p))
+          negative (:negative diff)
+          inner-not (first (:branches negative))]
+      (is (= :difference (:kind diff)))
+      (is (= '[?e ?n] (:incoming diff)))
+      (is (= '[?e] (:key-vars diff)))
+      ;; the body's or extends the not's key relation …
+      (is (= :union (:kind negative)))
+      (is (= '[?e] (:incoming negative)))
+      ;; … and the bare not branch anti-joins it in turn
+      (is (= :difference (:kind inner-not)))
+      (is (= '[?e] (:incoming inner-not)))
+      (is (= '[?e] (:key-vars inner-not)))
+      (is (= '[?e] (:incoming (:negative inner-not)))))))
 
 ;; --------------------------------------------------------------------------
 ;; Circuit assembly
@@ -719,7 +739,7 @@
       (is (= 1 (count (filter #(= "distinct" %) ops)))))))
 
 (deftest assemble-not-test
-  (testing "not assembles as distinct negative keys, semijoin, and difference"
+  (testing "not assembles as body joined onto the key seed, distinct negative keys, semijoin, and difference"
     (let [{:keys [circuit inputs leaves]} (assemble
                                            '{:find [name]
                                              :where [[?e :name name]
@@ -728,7 +748,8 @@
       (is (= 2 (count inputs)))
       (is (= 2 (count leaves)))
       (is (= 1 (count (filter #(= "distinct" %) ops))))
-      (is (= 1 (count (filter #(= "incremental-join" %) ops))))
+      ;; the body join onto the key seed + the anti-semijoin
+      (is (= 2 (count (filter #(= "incremental-join" %) ops))))
       (is (= 1 (count (filter #(= "difference" %) ops)))))))
 
 ;; --------------------------------------------------------------------------
@@ -1138,6 +1159,36 @@
                             {:db/id 2 :name "Bob" :age 35}])
     (is (= #{[["Ivan"] 1] [["Bob"] 1]}
            (set (h/consume-delta! iq))))))
+
+(deftest e2e-not-double-negation-test
+  (testing "(not (or (not B))) ≡ B — the not body anti-joins the outer key relation"
+    (let [iq (h/q-inc fix/*node* '{:find [?n]
+                                   :where [[?e :name ?n]
+                                           (not (or (not [?e :age 1])))]})]
+      (h/transact fix/*node* [{:db/id 1 :name "Ivan" :age 1}
+                              {:db/id 2 :name "Bob" :age 2}
+                              {:db/id 3 :name "Eve"}])
+      (is (= [[["Ivan"] 1]] (h/consume-delta! iq)))
+      ;; Bob's age flips to 1: he now satisfies the double negation
+      (h/transact fix/*node* [{:db/id 2 :age 1}])
+      (is (= [[["Bob"] 1]] (h/consume-delta! iq)))
+      ;; retracting Ivan's age removes him again
+      (h/transact fix/*node* [[:db/retract 1 :age 1]])
+      (is (= [[["Ivan"] -1]] (h/consume-delta! iq))))))
+
+(deftest e2e-not-conjunction-via-double-negation-test
+  (testing "(not (or (not B1) (not B2))) ≡ B1 ∧ B2 over a cardinality-many attribute"
+    (let [iq (h/q-inc fix/*node* '{:find [?n]
+                                   :where [[?e :name ?n]
+                                           (not (or (not [?e :edge 10])
+                                                    (not [?e :edge 20])))]})]
+      ;; only entities carrying BOTH edges qualify
+      (h/transact fix/*node* [{:db/id 1 :name "Ivan" :edge 10}])
+      (is (nil? (h/consume-delta! iq)))
+      (h/transact fix/*node* [{:db/id 1 :edge 20}])
+      (is (= [[["Ivan"] 1]] (h/consume-delta! iq)))
+      (h/transact fix/*node* [[:db/retract 1 :edge 10]])
+      (is (= [[["Ivan"] -1]] (h/consume-delta! iq))))))
 
 (deftest e2e-or-only-not-branches-retraction-test
   (testing "cross-branch distinct state: a row leaves only when no branch supports it"
