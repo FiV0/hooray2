@@ -305,7 +305,7 @@
 
 (defmulti ^:private plan-node
   "Plans one [descriptor] as a plan node, dispatching on its `:kind`. With
-  [incoming] — the running relation's column layout — the node extends that
+  [incoming] being the running relation stream column layout. The node extends that
   relation; without it the node produces its stream standalone. With
   [target], each method arranges the node's output to that variable order."
   (fn [descriptor _incoming _target] (:kind descriptor)))
@@ -334,6 +334,9 @@
 ;; source pipeline is arranged to that same key order so both sides' leading
 ;; columns line up; `:left-permute` reorders the running relation when its
 ;; key columns do not already lead.
+
+;; TODO The :left-permute value of has the same purpose as the :permute node.
+;; Maybe extract that logic into separate :permute, :join and :triple nodes.
 (defmethod plan-node :triple
   [descriptor incoming target]
   (if-not incoming
