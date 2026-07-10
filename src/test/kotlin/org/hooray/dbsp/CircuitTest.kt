@@ -147,7 +147,7 @@ class CircuitTest {
         val circuit = Circuit()
         val (input, _) = circuit.addInput<Int>()
         circuit.addUnary(Doubler(), input)
-        assertEquals(listOf("input", "double"), circuit.operatorNames())
+        assertEquals(listOf("input-0", "double"), circuit.operatorNames())
         assertEquals(2, circuit.nodeCount)
     }
 }

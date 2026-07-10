@@ -559,21 +559,16 @@
 
 (defn- circuit->tree
   "Renders [circuit]'s wiring as a nested vector `[op-name & input-trees]`
-  rooted at the final (output) operator. `input` leaves are numbered in leaf
-  order — `[input 0]` is the circuit's first input. It should be noted that
-  streams being fed into multi sub-trees appear multiple times, but
-  this does not reflect the actual circuit tree, where they are just produced
+  rooted at the final (output) operator. Input sources are already named
+  `input-<n>` in creation order by the circuit. It should be noted that
+  streams being fed into multiple sub-trees appear multiple times, but
+  this does not reflect the actual circuit DAG, where they are just produced
   once."
   [circuit]
   (let [names (vec (.operatorNames circuit))
-        inputs (mapv vec (.nodeInputs circuit))
-        input-order (into {} (map-indexed (fn [i id] [id i])
-                                          (filter #(= "input" (nth names %))
-                                                  (range (count names)))))]
+        inputs (mapv vec (.nodeInputs circuit))]
     (letfn [(render [id]
-              (if (= "input" (names id))
-                ['input (input-order id)]
-                (into [(symbol (names id))] (map render (inputs id)))))]
+              (into [(symbol (nth names id))] (map render (nth inputs id))))]
       (render (dec (count names))))))
 
 (deftest assemble-single-pattern-test
@@ -582,7 +577,7 @@
     (is (= 1 (count leaves)))
     (is (some? output))
     ;; source pipeline (filter constants, project to variables), find projection
-    (is (= '[project [project [filter-constants [input 0]]]]
+    (is (= '[project [project [filter-constants [input-0]]]]
            (circuit->tree circuit)))))
 
 (deftest assemble-three-pattern-chain-test
@@ -597,9 +592,9 @@
              [incremental-join
               [project
                [incremental-join
-                [project [project [filter-constants [input 0]]]]
-                [project [filter-constants [input 1]]]]]
-              [project [filter-constants [input 2]]]]]
+                [project [project [filter-constants [input-0]]]]
+                [project [filter-constants [input-1]]]]]
+              [project [filter-constants [input-2]]]]]
            (circuit->tree circuit)))))
 
 (deftest assemble-leaves-test
@@ -632,7 +627,7 @@
     (let [{:keys [circuit leaves]} (assemble '{:find [?e]
                                                :where [(or [?e :name "Ada"])]})]
       (is (= 1 (count leaves)))
-      (is (= '[project [distinct [project [filter-constants [input 0]]]]]
+      (is (= '[project [distinct [project [filter-constants [input-0]]]]]
              (circuit->tree circuit))))))
 
 (deftest assemble-or-two-branch-test
@@ -644,8 +639,8 @@
       (is (= '[project
                [distinct
                 [plus
-                 [project [filter-constants [input 0]]]
-                 [project [filter-constants [input 1]]]]]]
+                 [project [filter-constants [input-0]]]
+                 [project [filter-constants [input-1]]]]]]
              (circuit->tree circuit))))))
 
 (deftest assemble-or-k-branch-test
@@ -671,11 +666,11 @@
                [distinct
                 [plus
                  [incremental-join
-                  [project [filter-constants [input 0]]]
-                  [project [filter-constants [input 1]]]]
+                  [project [filter-constants [input-0]]]
+                  [project [filter-constants [input-1]]]]
                  [incremental-join
-                  [project [filter-constants [input 0]]]
-                  [project [filter-constants [input 2]]]]]]]
+                  [project [filter-constants [input-0]]]
+                  [project [filter-constants [input-2]]]]]]]
              (circuit->tree circuit))))))
 
 (deftest assemble-nested-or-test
@@ -715,13 +710,13 @@
       ;; and (projected to the key columns) the seed of the negative body
       (is (= '[project
                [difference
-                [project [filter-constants [input 0]]]
+                [project [filter-constants [input-0]]]
                 [incremental-join
-                 [project [filter-constants [input 0]]]
+                 [project [filter-constants [input-0]]]
                  [distinct
                   [incremental-join
-                   [project [project [filter-constants [input 0]]]]
-                   [project [filter-constants [input 1]]]]]]]]
+                   [project [project [filter-constants [input-0]]]]
+                   [project [filter-constants [input-1]]]]]]]]
              (circuit->tree circuit))))))
 
 ;; --------------------------------------------------------------------------
