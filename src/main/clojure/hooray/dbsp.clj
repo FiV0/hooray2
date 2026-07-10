@@ -707,9 +707,7 @@
 
 (defn- push-deltas!
   "Pushes each leaf triple's delta (in its planned order) onto its input
-  handle. `:leaves` holds one `{:order … :handle …}` entry per leaf — for
-  triple-only plans that's one entry per pattern; an `:or` block contributes
-  one entry per branch."
+  handle. `:leaves` holds one `{:order … :handle …}` entry per leaf."
   [{:keys [leaves]} index-deltas]
   (doseq [{:keys [handle order]} leaves]
     (.push ^org.hooray.dbsp.InputHandle handle
