@@ -561,14 +561,14 @@
   "Renders [circuit]'s wiring as a nested vector `[op-name & input-trees]`
   rooted at the final (output) operator. `input` leaves are numbered in leaf
   order — `[input 0]` is the circuit's first input. It should be noted that
-  streams appearing being fed into multi sub-trees appear multiple times, but
+  streams being fed into multi sub-trees appear multiple times, but
   this does not reflect the actual circuit tree, where they are just produced
   once."
   [circuit]
   (let [names (vec (.operatorNames circuit))
         inputs (mapv vec (.nodeInputs circuit))
         input-order (into {} (map-indexed (fn [i id] [id i])
-                                          (filter #(= "input" (names %))
+                                          (filter #(= "input" (nth names %))
                                                   (range (count names)))))]
     (letfn [(render [id]
               (if (= "input" (names id))
