@@ -3,7 +3,7 @@
 
   Compiles a conjunctive Datalog query of standard triple patterns into a
   circuit of unary/binary operators (see `org.hooray.dbsp`), modelled on the
-  Feldera `dbsp` crate. This is the `:standard` engine."
+  Feldera `dbsp` crate."
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [hooray.db :as db]
