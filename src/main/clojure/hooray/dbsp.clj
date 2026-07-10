@@ -567,10 +567,13 @@
   (check-incoming! node acc)
   (let [{:keys [stream vars leaves]} acc
         positive-keyed (project-stream circuit stream vars keyed-vars)
+        ;; keyed-vars = key-vars ++ remaining vars. We strip to key-vars
         negative-seed {:stream (project-stream circuit positive-keyed keyed-vars key-vars)
                        :vars key-vars
                        :leaves []}
         negative-wired (assemble-node circuit negative negative-seed)
+        ;; This is a pure planner boundary check. Normally negative-wired returns
+        ;; tuples in key-vars order. This is currently a no-op.
         negative-keys (project-stream circuit
                                       (:stream negative-wired)
                                       (:vars negative-wired)
