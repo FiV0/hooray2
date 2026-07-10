@@ -43,9 +43,8 @@ class Circuit {
     }
 
     /**
-     * Adds an input source, named `input-<n>` by creation order. Returns the
-     * [Stream] to wire downstream and the [InputHandle] used to `push` a
-     * value before each [step].
+     * Adds an input source. Returns the [Stream] to wire downstream and the
+     * [InputHandle] used to `push` a value before each [step].
      */
     fun <D> addInput(): Pair<Stream<D>, InputHandle<D>> {
         checkBuildable()
