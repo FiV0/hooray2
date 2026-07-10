@@ -495,16 +495,16 @@
 ;; Source -> Filter? -> Map(project) pipeline. The triple pattern is joined with
 ;; the running stream (permuted when the key columns do not already lead) when acc is given.
 (defmethod assemble-node :triple
-  [^Circuit circuit node acc]
+  [^Circuit circuit {:keys [out-vars order left-permute filter project] :as node} acc]
   (check-incoming! node acc)
   (let [left (when acc
-               (if-let [left-permute (:left-permute node)]
+               (if left-permute
                  (.addUnary circuit (MapOp/permute (int-array left-permute)) (:stream acc))
                  (:stream acc)))
         pair (.addInput circuit)
         source (.getFirst pair)
         handle (.getSecond pair)
-        constants (:filter node)
+        constants filter
         filtered (if (seq constants)
                    (.addUnary circuit
                               (FilterOp/matchingConstants
@@ -513,18 +513,18 @@
                               source)
                    source)
         projected (.addUnary circuit
-                             (MapOp/permute (int-array (:project node)))
+                             (MapOp/permute (int-array project))
                              filtered)]
     (if acc
       {:stream (.addBinary circuit
                            (IncrementalJoinOp. (int (:key-arity node)) "incremental-join")
                            left
                            projected)
-       :vars (:out-vars node)
-       :leaves (conj (:leaves acc) {:order (:order node) :handle handle})}
+       :vars out-vars
+       :leaves (conj (:leaves acc) {:order order :handle handle})}
       {:stream projected
-       :vars (:out-vars node)
-       :leaves [{:order (:order node) :handle handle}]})))
+       :vars out-vars
+       :leaves [{:order order :handle handle}]})))
 
 ;; The running relation threads through a `:chain`'s children: the first
 ;; child sees the chain's [acc] (nil for a standalone chain), each
