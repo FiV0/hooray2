@@ -566,12 +566,6 @@
     (is (= ["input" "filter-constants" "permute" "permute"]
            (vec (.operatorNames circuit))))))
 
-(deftest assemble-constant-pattern-test
-  (let [{:keys [circuit]} (assemble '{:find [?e] :where [[?e :name "Ivan"]]})]
-    ;; input -> filter -> map(project) -> map(final)
-    (is (= ["input" "filter-constants" "permute" "permute"]
-           (vec (.operatorNames circuit))))))
-
 (deftest assemble-three-pattern-chain-test
   (let [{:keys [circuit leaves]} (assemble '{:find [?a ?d]
                                              :where [[?a :r ?b]
