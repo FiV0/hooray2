@@ -3,7 +3,7 @@ package org.hooray.dbsp
 /**
  * A synchronous dataflow circuit: an immutable DAG of [Operator]s.
  *
- * Built once via `addInput` / `addSource` / `addUnary` / `addBinary`, then
+ * Built once via `addInput` / `addUnary` / `addBinary`, then
  * driven one clock cycle at a time with [step]. Each [step] evaluates every
  * operator exactly once.
  *
@@ -17,12 +17,13 @@ package org.hooray.dbsp
  */
 class Circuit {
 
-    private class Node(val name: String, val compute: () -> Any?) {
+    private class Node(val name: String, val inputs: IntArray, val compute: () -> Any?) {
         var output: Any? = null
     }
 
     private val nodes = mutableListOf<Node>()
     private val sinks = mutableListOf<() -> Unit>()
+    private var inputCount = 0
     private var frozen = false
 
     /** Number of operator nodes in the circuit. */
@@ -30,6 +31,12 @@ class Circuit {
 
     /** Operator names in evaluation order — useful for inspecting a built circuit. */
     fun operatorNames(): List<String> = nodes.map { it.name }
+
+    /**
+     * Per-node input ids in evaluation order — together with [operatorNames]
+     * this is the circuit's full wiring.
+     */
+    fun nodeInputs(): List<List<Int>> = nodes.map { it.inputs.toList() }
 
     private fun checkBuildable() {
         check(!frozen) { "circuit is frozen: operators cannot be added after the first step" }
@@ -42,20 +49,13 @@ class Circuit {
     fun <D> addInput(): Pair<Stream<D>, InputHandle<D>> {
         checkBuildable()
         val handle = InputHandle<D>()
-        val node = Node("input") {
+        val node = Node("input-$inputCount", IntArray(0)) {
             handle.poll() ?: error("circuit input was not pushed before step")
         }
+        inputCount++
         val id = nodes.size
         nodes.add(node)
         return Stream<D>(id) to handle
-    }
-
-    /** Adds a source operator that produces a value each step with no inputs. */
-    fun <O> addSource(operator: SourceOperator<O>): Stream<O> {
-        checkBuildable()
-        val id = nodes.size
-        nodes.add(Node(operator.name) { operator.eval() })
-        return Stream(id)
     }
 
     /** Adds a unary operator wired to [input]. */
@@ -63,7 +63,7 @@ class Circuit {
         checkBuildable()
         val inputNode = nodes[input.nodeId]
         val id = nodes.size
-        nodes.add(Node(operator.name) {
+        nodes.add(Node(operator.name, intArrayOf(input.nodeId)) {
             @Suppress("UNCHECKED_CAST")
             operator.eval(inputNode.output as I)
         })
@@ -80,7 +80,7 @@ class Circuit {
         val leftNode = nodes[left.nodeId]
         val rightNode = nodes[right.nodeId]
         val id = nodes.size
-        nodes.add(Node(operator.name) {
+        nodes.add(Node(operator.name, intArrayOf(left.nodeId, right.nodeId)) {
             @Suppress("UNCHECKED_CAST")
             operator.eval(leftNode.output as I1, rightNode.output as I2)
         })

@@ -33,6 +33,6 @@ class MapOp(
          * column `order[i]`. Built from a plain `IntArray` for easy Clojure interop.
          */
         @JvmStatic
-        fun permute(order: IntArray): MapOp = MapOp("permute") { it.permute(order) }
+        fun project(order: IntArray): MapOp = MapOp("project") { it.project(order) }
     }
 }
