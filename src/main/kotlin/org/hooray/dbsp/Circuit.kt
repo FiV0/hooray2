@@ -3,7 +3,7 @@ package org.hooray.dbsp
 /**
  * A synchronous dataflow circuit: an immutable DAG of [Operator]s.
  *
- * Built once via `addInput` / `addSource` / `addUnary` / `addBinary`, then
+ * Built once via `addInput` / `addUnary` / `addBinary`, then
  * driven one clock cycle at a time with [step]. Each [step] evaluates every
  * operator exactly once.
  *
