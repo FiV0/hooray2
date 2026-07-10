@@ -1219,6 +1219,31 @@
             (set (h/consume-delta! iq)))
           transactions)))
 
+#_
+(deftest e2e-cyclic-and-groundability-is-clause-order-independent-test
+  (let [txs [[{:db/id 1 :name "left" :last-name "seed"}
+              {:db/id 2 :name "right"}]]
+        nested-first '{:find [?x ?y]
+                       :where [(or
+                                (and
+                                 (or (and [?x :name "left"]
+                                          (not [?y :city "blocked"])))
+                                 (or (and [?y :name "right"]
+                                          (not [?x :city "blocked"])))))
+                               [?x :last-name "seed"]]}
+        seed-first '{:find [?x ?y]
+                     :where [[?x :last-name "seed"]
+                             (or
+                              (and
+                               (or (and [?x :name "left"]
+                                        (not [?y :city "blocked"])))
+                               (or (and [?y :name "right"]
+                                        (not [?x :city "blocked"])))))]}
+        seed-first-deltas (query-deltas (fresh-node) seed-first txs)]
+    (is (= [#{[[1 2] 1]}] seed-first-deltas))
+    (is (= seed-first-deltas
+           (query-deltas (fresh-node) nested-first txs)))))
+
 (deftest e2e-nested-or-equals-flat-test
   (testing "nested (or A (or B C)) produces the same deltas as flat (or A B C)"
     (let [txs [[{:db/id 1 :name "Ada"}
