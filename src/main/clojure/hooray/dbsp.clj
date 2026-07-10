@@ -484,18 +484,16 @@
 
    {:stream <Stream>
     :vars […]
-    :handles [...]
-    :leaves [...]}
+    :leaves [{:order … :handle <InputHandle>} …]}
 
   [acc] (same shape) is the running relation the node extends, or nil when
-  the node produces its stream standalone. `:handles` and `:leaves` are
-  equal-length flat vectors, one entry per leaf input triple."
+  the node produces its stream standalone. `:leaves` is a flat vector with
+  one entry per leaf input triple."
   (fn [_circuit node _acc] (:kind node)))
 
-;; Standalone (no running relation [acc]) a `:triple` node is its own
-;; Source -> Filter? -> Map(project) pipeline; extending, the running stream
-;; (permuted when the key columns do not already lead) is `IncrementalJoin`ed
-;; with that pipeline.
+;; Standalone (no running relation acc) a `:triple` node is its own
+;; Source -> Filter? -> Map(project) pipeline. The triple pattern is joined with
+;; the running stream (permuted when the key columns do not already lead) when acc is given.
 (defmethod assemble-node :triple
   [^Circuit circuit node acc]
   (check-incoming! node acc)
@@ -523,12 +521,10 @@
                            left
                            projected)
        :vars (:out-vars node)
-       :handles (conj (:handles acc) handle)
-       :leaves (conj (:leaves acc) {:order (:order node)})}
+       :leaves (conj (:leaves acc) {:order (:order node) :handle handle})}
       {:stream projected
        :vars (:out-vars node)
-       :handles [handle]
-       :leaves [{:order (:order node)}]})))
+       :leaves [{:order (:order node) :handle handle}]})))
 
 ;; The running relation threads through a `:chain`'s children: the first
 ;; child sees the chain's [acc] (nil for a standalone chain), each
@@ -543,12 +539,11 @@
 ;; Every branch of a `:union` is assembled against the same running relation
 ;; [acc] (or standalone when there is none), the branch streams are folded
 ;; left-to-right with `PlusOp`, and the union is fed into a `DistinctOp` to
-;; enforce set-union semantics. Handles/leaves concatenate [acc]'s with
-;; every branch's in plan order.
+;; enforce set-union semantics.
 (defmethod assemble-node :union
   [^Circuit circuit {:keys [branches out-vars] :as node} acc]
   (check-incoming! node acc)
-  (let [branch-acc (some-> acc (assoc :handles [] :leaves []))
+  (let [branch-acc (some-> acc (assoc :leaves []))
         wired (mapv #(assemble-node circuit % branch-acc) branches)
         ;; the planner arranges every branch to out-vars, so this is normally
         ;; a no-op. Keep the projection here as an assembly boundary guard.
@@ -559,7 +554,6 @@
         distinct-out (.addUnary circuit (DistinctOp.) summed)]
     {:stream distinct-out
      :vars out-vars
-     :handles (into (vec (:handles acc)) (mapcat :handles wired))
      :leaves (into (vec (:leaves acc)) (mapcat :leaves wired))}))
 
 ;; A `:difference` extends the running relation A as
@@ -571,11 +565,10 @@
 (defmethod assemble-node :difference
   [^Circuit circuit {:keys [negative key-vars keyed-vars out-vars] :as node} acc]
   (check-incoming! node acc)
-  (let [{:keys [stream vars handles leaves]} acc
+  (let [{:keys [stream vars leaves]} acc
         positive-keyed (project-stream circuit stream vars keyed-vars)
         negative-seed {:stream (project-stream circuit positive-keyed keyed-vars key-vars)
                        :vars key-vars
-                       :handles []
                        :leaves []}
         negative-wired (assemble-node circuit negative negative-seed)
         negative-keys (project-stream circuit
@@ -592,7 +585,6 @@
         result (project-stream circuit difference keyed-vars out-vars)]
     {:stream result
      :vars out-vars
-     :handles (into handles (:handles negative-wired))
      :leaves (into leaves (:leaves negative-wired))}))
 
 ;; A `:permute` is a unary reordering of the running stream to the node's
@@ -603,15 +595,13 @@
                       (MapOp/permute (int-array (:indices node)))
                       (:stream acc))
    :vars (:out-vars node)
-   :handles (:handles acc)
    :leaves (:leaves acc)})
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns
 
     {:circuit <Circuit>
-     :inputs  [<InputHandle> ...]   ; flat, one per leaf triple
-     :leaves  [{:order …} ...]      ; parallel to :inputs
+     :leaves  [{:order … :handle <InputHandle>} ...]   ; flat, one per leaf triple
      :output  <OutputHandle>}
 
   The circuit is per-leaf `Source -> Filter? -> Map`, recursive node assembly,
@@ -622,7 +612,6 @@
         ;; wire up the find clause
         projected (.addUnary circuit (MapOp/permute (int-array final-permute)) (:stream wired))]
     {:circuit circuit
-     :inputs (:handles wired)
      :leaves (:leaves wired)
      :output (.output circuit projected)}))
 
@@ -714,14 +703,14 @@
 ;; --------------------------------------------------------------------------
 
 (defn- push-deltas!
-  "Pushes each leaf triple's delta (in its planned order) onto the circuit
-  inputs. `:leaves` and `:inputs` are parallel flat vectors, one entry per
-  leaf — for triple-only plans that's one entry per pattern; an `:or` block
-  contributes one entry per branch."
-  [{:keys [inputs leaves]} index-deltas]
-  (dotimes [i (count leaves)]
-    (.push ^org.hooray.dbsp.InputHandle (nth inputs i)
-           (index-delta-zset index-deltas (:order (nth leaves i))))))
+  "Pushes each leaf triple's delta (in its planned order) onto its input
+  handle. `:leaves` holds one `{:order … :handle …}` entry per leaf — for
+  triple-only plans that's one entry per pattern; an `:or` block contributes
+  one entry per branch."
+  [{:keys [leaves]} index-deltas]
+  (doseq [{:keys [handle order]} leaves]
+    (.push ^org.hooray.dbsp.InputHandle handle
+           (index-delta-zset index-deltas order))))
 
 (defn- zset->result-set
   "Renders an output `TupleZSet` as a seq of `[tuple-vector weight]` pairs."
@@ -731,7 +720,7 @@
            (.getValue ^IntegerWeight (.getValue entry))])
         (.entries zset)))
 
-(defrecord DbspQuery [id query plan circuit inputs leaves output queue])
+(defrecord DbspQuery [id query plan circuit leaves output queue])
 
 (defn dbsp-query?
   "True if [x] is a DBSP-standard incremental query (vs. a WCOJ one)."
@@ -743,8 +732,8 @@
   ^DbspQuery [db query]
   {:pre [(s/valid? ::query/query query) (query/validate-query (s/conform ::query/query query))]}
   (let [p (plan query)
-        {:keys [circuit inputs leaves output]} (plan->circuit p)
-        iq (->DbspQuery (random-uuid) query p circuit inputs leaves output
+        {:keys [circuit leaves output]} (plan->circuit p)
+        iq (->DbspQuery (random-uuid) query p circuit leaves output
                         (atom clojure.lang.PersistentQueue/EMPTY))]
     ;; prime the circuit with the database's existing facts; discard the output
     (push-deltas! iq (full-db-deltas db))

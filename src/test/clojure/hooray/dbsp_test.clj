@@ -558,9 +558,9 @@
   (dbsp/plan->circuit (dbsp/plan query)))
 
 (deftest assemble-single-pattern-test
-  (let [{:keys [circuit inputs output]} (assemble '{:find [name]
+  (let [{:keys [circuit leaves output]} (assemble '{:find [name]
                                                     :where [[?e :name name]]})]
-    (is (= 1 (count inputs)))
+    (is (= 1 (count leaves)))
     (is (some? output))
     ;; input -> filter(attribute constant) -> map(project) -> map(final projection)
     (is (= ["input" "filter-constants" "permute" "permute"]
@@ -573,11 +573,11 @@
            (vec (.operatorNames circuit))))))
 
 (deftest assemble-three-pattern-chain-test
-  (let [{:keys [circuit inputs]} (assemble '{:find [?a ?d]
+  (let [{:keys [circuit leaves]} (assemble '{:find [?a ?d]
                                              :where [[?a :r ?b]
                                                      [?b :s ?c]
                                                      [?c :t ?d]]})]
-    (is (= 3 (count inputs)))
+    (is (= 3 (count leaves)))
     ;; base (input, filter, permute); then per join: left permute + own
     ;; source pipeline + join; final permute.
     (is (= ["input" "filter-constants" "permute"
@@ -588,35 +588,34 @@
     (is (= 14 (.getNodeCount circuit)))))
 
 (deftest assemble-leaves-test
-  (testing "plan->circuit returns a :leaves vector parallel to :inputs"
-    (let [{:keys [inputs leaves]} (assemble '{:find [name]
-                                              :where [[?e :name name]]})]
+  (testing "plan->circuit returns one {:order … :handle …} leaf per input triple"
+    (let [{:keys [leaves]} (assemble '{:find [name]
+                                       :where [[?e :name name]]})]
       (is (= 1 (count leaves)))
-      (is (= (count inputs) (count leaves)))
-      (is (= :aev (:order (first leaves))))))
+      (is (= :aev (:order (first leaves))))
+      (is (some? (:handle (first leaves))))))
 
   (testing "each leaf carries :order; aev/ave mixed chain"
-    (let [{:keys [inputs leaves]} (assemble '{:find [?e ?p]
-                                              :where [[?e :name name]
-                                                      [?p :age name]]})]
-      (is (= 2 (count inputs)))
+    (let [{:keys [leaves]} (assemble '{:find [?e ?p]
+                                       :where [[?e :name name]
+                                               [?p :age name]]})]
       (is (= 2 (count leaves)))
       (is (every? #{:aev :ave} (map :order leaves)))))
 
   (testing "leaf count equals total triple count in a chain"
-    (let [{:keys [inputs leaves]} (assemble '{:find [?a ?d]
-                                              :where [[?a :r ?b]
-                                                      [?b :s ?c]
-                                                      [?c :t ?d]]})]
-      (is (= 3 (count inputs)))
+    (let [{:keys [leaves]} (assemble '{:find [?a ?d]
+                                       :where [[?a :r ?b]
+                                               [?b :s ?c]
+                                               [?c :t ?d]]})]
       (is (= 3 (count leaves)))
-      (is (every? :order leaves)))))
+      (is (every? :order leaves))
+      ;; every leaf has its own input handle
+      (is (= 3 (count (set (map :handle leaves))))))))
 
 (deftest assemble-or-single-branch-test
   (testing "single-branch :or — no plus, just distinct after the projection"
-    (let [{:keys [circuit inputs leaves]} (assemble '{:find [?e]
-                                                      :where [(or [?e :name "Ada"])]})]
-      (is (= 1 (count inputs)))
+    (let [{:keys [circuit leaves]} (assemble '{:find [?e]
+                                               :where [(or [?e :name "Ada"])]})]
       (is (= 1 (count leaves)))
       ;; branch: input -> filter -> permute; then distinct on the union; then final permute
       (is (= ["input" "filter-constants" "permute" "distinct" "permute"]
@@ -624,10 +623,9 @@
 
 (deftest assemble-or-two-branch-test
   (testing "two-branch :or — one plus, one distinct"
-    (let [{:keys [circuit inputs leaves]} (assemble '{:find [?e]
-                                                      :where [(or [?e :sex :male]
-                                                                  [?e :sex :female])]})]
-      (is (= 2 (count inputs)))
+    (let [{:keys [circuit leaves]} (assemble '{:find [?e]
+                                               :where [(or [?e :sex :male]
+                                                           [?e :sex :female])]})]
       (is (= 2 (count leaves)))
       (is (= ["input" "filter-constants" "permute"
               "input" "filter-constants" "permute"
@@ -636,23 +634,23 @@
 
 (deftest assemble-or-k-branch-test
   (testing "k-branch :or has (k - 1) plus operators and one distinct"
-    (let [{:keys [circuit inputs]} (assemble '{:find [?e]
+    (let [{:keys [circuit leaves]} (assemble '{:find [?e]
                                                :where [(or [?e :sex :male]
                                                            [?e :sex :female]
                                                            [?e :sex :other])]})
           ops (vec (.operatorNames circuit))]
-      (is (= 3 (count inputs)))
+      (is (= 3 (count leaves)))
       (is (= 2 (count (filter #(= "plus" %) ops))))
       (is (= 1 (count (filter #(= "distinct" %) ops)))))))
 
 (deftest assemble-or-with-outer-join-test
   (testing ":or after an outer triple joins the running stream into every branch"
-    (let [{:keys [circuit inputs]} (assemble '{:find [name]
+    (let [{:keys [circuit leaves]} (assemble '{:find [name]
                                                :where [[?e :name name]
                                                        (or [?e :sex :male]
                                                            [?e :sex :female])]})
           ops (vec (.operatorNames circuit))]
-      (is (= 3 (count inputs)))
+      (is (= 3 (count leaves)))
       ;; one incremental-join per branch — the running stream fans out
       (is (= 2 (count (filter #(= "incremental-join" %) ops))))
       (is (= 1 (count (filter #(= "plus" %) ops))))
@@ -660,13 +658,12 @@
 
 (deftest assemble-nested-or-test
   (testing "nested :or yields one plus + one distinct per :or node"
-    (let [{:keys [circuit inputs leaves]} (assemble
-                                           '{:find [?e]
-                                             :where [(or [?e :name "Ada"]
-                                                         (or [?e :name "Bob"]
-                                                             [?e :name "Carla"]))]})
+    (let [{:keys [circuit leaves]} (assemble
+                                    '{:find [?e]
+                                      :where [(or [?e :name "Ada"]
+                                                  (or [?e :name "Bob"]
+                                                      [?e :name "Carla"]))]})
           ops (vec (.operatorNames circuit))]
-      (is (= 3 (count inputs)))
       (is (= 3 (count leaves)))
       ;; two :or nodes -> two plus, two distinct
       (is (= 2 (count (filter #(= "plus" %) ops))))
@@ -674,13 +671,12 @@
 
 (deftest assemble-and-inside-or-test
   (testing ":and inside :or contributes its leaf triples and uses existing join"
-    (let [{:keys [circuit inputs leaves]} (assemble
-                                           '{:find [?e]
-                                             :where [(or [?e :sex :female]
-                                                         (and [?e :sex :male]
-                                                              [?e :name "Ivan"]))]})
+    (let [{:keys [circuit leaves]} (assemble
+                                    '{:find [?e]
+                                      :where [(or [?e :sex :female]
+                                                  (and [?e :sex :male]
+                                                       [?e :name "Ivan"]))]})
           ops (vec (.operatorNames circuit))]
-      (is (= 3 (count inputs)))
       (is (= 3 (count leaves)))
       (is (= 1 (count (filter #(= "incremental-join" %) ops))))
       (is (= 1 (count (filter #(= "plus" %) ops))))
@@ -688,12 +684,11 @@
 
 (deftest assemble-not-test
   (testing "not assembles as body joined onto the key seed, distinct negative keys, semijoin, and difference"
-    (let [{:keys [circuit inputs leaves]} (assemble
-                                           '{:find [name]
-                                             :where [[?e :name name]
-                                                     (not [?e :last-name "Smith"])]})
+    (let [{:keys [circuit leaves]} (assemble
+                                    '{:find [name]
+                                      :where [[?e :name name]
+                                              (not [?e :last-name "Smith"])]})
           ops (vec (.operatorNames circuit))]
-      (is (= 2 (count inputs)))
       (is (= 2 (count leaves)))
       (is (= 1 (count (filter #(= "distinct" %) ops))))
       ;; the body join onto the key seed + the anti-semijoin
