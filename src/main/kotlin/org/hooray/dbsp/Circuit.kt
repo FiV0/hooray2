@@ -56,14 +56,6 @@ class Circuit {
         return Stream<D>(id) to handle
     }
 
-    /** Adds a source operator that produces a value each step with no inputs. */
-    fun <O> addSource(operator: SourceOperator<O>): Stream<O> {
-        checkBuildable()
-        val id = nodes.size
-        nodes.add(Node(operator.name, IntArray(0)) { operator.eval() })
-        return Stream(id)
-    }
-
     /** Adds a unary operator wired to [input]. */
     fun <I, O> addUnary(operator: UnaryOperator<I, O>, input: Stream<I>): Stream<O> {
         checkBuildable()

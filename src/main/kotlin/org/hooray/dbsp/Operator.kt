@@ -14,11 +14,6 @@ interface Operator {
     val name: String
 }
 
-/** An operator with no inputs that produces one value per circuit step. */
-interface SourceOperator<O> : Operator {
-    fun eval(): O
-}
-
 /** An operator with one input stream and one output stream. */
 interface UnaryOperator<I, O> : Operator {
     fun eval(input: I): O
