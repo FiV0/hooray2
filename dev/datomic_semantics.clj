@@ -81,8 +81,37 @@
                                          [(< ?age 30)]))]}
                       (d/db *conn*)))))
 
+
+(def ^:private people-schema2
+  [{:db/ident :name
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :city
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :last-name
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}])
+
+(deftest cyclic-or-dependency-not-grounded-throws
+  (transact! people-schema2)
+
+  (transact! [{:name "left" :last-name "seed"}
+              {:name "right"}])
+
+  (t/is (thrown? Exception
+                 (d/q '{:find [?x ?y]
+                        :where [(or
+                                 (and
+                                  (or (and [?y :name "right"]
+                                           (not [?x :city "blocked"])))
+                                  (or (and [?x :name "left"]
+                                           (not [?y :city "blocked"])))))
+                                [?x :last-name "seed"]]}
+                      (d/db *conn*)))))
+
 (comment
   (t/run-all-tests)
-  (t/run-test-var #'or-bound-mentioned-example)
+  (t/run-test-var #'cyclic-or-dependency-with-wrong-order-throws)
 
   )
