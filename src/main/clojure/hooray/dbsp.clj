@@ -593,11 +593,11 @@
 ;; A `:permute` is a unary reordering of the running stream to the node's
 ;; target layout; it never carries `:incoming`.
 (defmethod assemble-node :permute
-  [^Circuit circuit node acc]
+  [^Circuit circuit {:keys [out-vars indices] :as _node} acc]
   {:stream (.addUnary circuit
-                      (MapOp/permute (int-array (:indices node)))
+                      (MapOp/permute (int-array indices))
                       (:stream acc))
-   :vars (:out-vars node)
+   :vars out-vars
    :leaves (:leaves acc)})
 
 (defn plan->circuit
