@@ -630,29 +630,21 @@
       (is (= '[project [distinct [project [filter-constants [input-0]]]]]
              (circuit->tree circuit))))))
 
-(deftest assemble-or-two-branch-test
-  (testing "two-branch :or — branches plus-folded, one distinct"
-    (let [{:keys [circuit leaves]} (assemble '{:find [?e]
-                                               :where [(or [?e :sex :male]
-                                                           [?e :sex :female])]})]
-      (is (= 2 (count leaves)))
-      (is (= '[project
-               [distinct
-                [plus
-                 [project [filter-constants [input-0]]]
-                 [project [filter-constants [input-1]]]]]]
-             (circuit->tree circuit))))))
-
 (deftest assemble-or-k-branch-test
-  (testing "k-branch :or has (k - 1) plus operators and one distinct"
+  (testing "k-branch :or — branches plus-folded left-to-right, one distinct on top"
     (let [{:keys [circuit leaves]} (assemble '{:find [?e]
                                                :where [(or [?e :sex :male]
                                                            [?e :sex :female]
-                                                           [?e :sex :other])]})
-          ops (vec (.operatorNames circuit))]
+                                                           [?e :sex :other])]})]
       (is (= 3 (count leaves)))
-      (is (= 2 (count (filter #(= "plus" %) ops))))
-      (is (= 1 (count (filter #(= "distinct" %) ops)))))))
+      (is (= '[project
+               [distinct
+                [plus
+                 [plus
+                  [project [filter-constants [input-0]]]
+                  [project [filter-constants [input-1]]]]
+                 [project [filter-constants [input-2]]]]]]
+             (circuit->tree circuit))))))
 
 (deftest assemble-or-with-outer-join-test
   (testing ":or after an outer triple joins the running stream into every branch"
