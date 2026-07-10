@@ -666,30 +666,43 @@
              (circuit->tree circuit))))))
 
 (deftest assemble-nested-or-test
-  (testing "nested :or yields one plus + one distinct per :or node"
+  (testing "nested :or yields one plus fold + one distinct per :or node"
     (let [{:keys [circuit leaves]} (assemble
                                     '{:find [?e]
                                       :where [(or [?e :name "Ada"]
                                                   (or [?e :name "Bob"]
-                                                      [?e :name "Carla"]))]})
-          ops (vec (.operatorNames circuit))]
+                                                      [?e :name "Carla"]))]})]
       (is (= 3 (count leaves)))
-      ;; two :or nodes -> two plus, two distinct
-      (is (= 2 (count (filter #(= "plus" %) ops))))
-      (is (= 2 (count (filter #(= "distinct" %) ops)))))))
+      ;; the inner :or is a fully assembled union whose distinct output is
+      ;; just another branch stream of the outer :or
+      (is (= '[project
+               [distinct
+                [plus
+                 [project [filter-constants [input-0]]]
+                 [distinct
+                  [plus
+                   [project [filter-constants [input-1]]]
+                   [project [filter-constants [input-2]]]]]]]]
+             (circuit->tree circuit))))))
 
 (deftest assemble-and-inside-or-test
-  (testing ":and inside :or contributes its leaf triples and uses existing join"
+  (testing ":and inside :or contributes its branch as a join chain"
     (let [{:keys [circuit leaves]} (assemble
                                     '{:find [?e]
                                       :where [(or [?e :sex :female]
                                                   (and [?e :sex :male]
-                                                       [?e :name "Ivan"]))]})
-          ops (vec (.operatorNames circuit))]
+                                                       [?e :name "Ivan"]))]})]
       (is (= 3 (count leaves)))
-      (is (= 1 (count (filter #(= "incremental-join" %) ops))))
-      (is (= 1 (count (filter #(= "plus" %) ops))))
-      (is (= 1 (count (filter #(= "distinct" %) ops)))))))
+      ;; the :and branch joins its two source pipelines; the join output is
+      ;; unioned with the plain triple branch
+      (is (= '[project
+               [distinct
+                [plus
+                 [project [filter-constants [input-0]]]
+                 [incremental-join
+                  [project [filter-constants [input-1]]]
+                  [project [filter-constants [input-2]]]]]]]
+             (circuit->tree circuit))))))
 
 (deftest assemble-not-test
   (testing "not assembles as body joined onto the key seed, distinct negative keys, semijoin, and difference"
