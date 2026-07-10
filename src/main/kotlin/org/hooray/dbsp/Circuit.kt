@@ -17,7 +17,7 @@ package org.hooray.dbsp
  */
 class Circuit {
 
-    private class Node(val name: String, val compute: () -> Any?) {
+    private class Node(val name: String, val inputs: IntArray, val compute: () -> Any?) {
         var output: Any? = null
     }
 
@@ -31,6 +31,12 @@ class Circuit {
     /** Operator names in evaluation order — useful for inspecting a built circuit. */
     fun operatorNames(): List<String> = nodes.map { it.name }
 
+    /**
+     * Per-node input ids in evaluation order — together with [operatorNames]
+     * this is the circuit's full wiring.
+     */
+    fun nodeInputs(): List<List<Int>> = nodes.map { it.inputs.toList() }
+
     private fun checkBuildable() {
         check(!frozen) { "circuit is frozen: operators cannot be added after the first step" }
     }
@@ -42,7 +48,7 @@ class Circuit {
     fun <D> addInput(): Pair<Stream<D>, InputHandle<D>> {
         checkBuildable()
         val handle = InputHandle<D>()
-        val node = Node("input") {
+        val node = Node("input", IntArray(0)) {
             handle.poll() ?: error("circuit input was not pushed before step")
         }
         val id = nodes.size
@@ -54,7 +60,7 @@ class Circuit {
     fun <O> addSource(operator: SourceOperator<O>): Stream<O> {
         checkBuildable()
         val id = nodes.size
-        nodes.add(Node(operator.name) { operator.eval() })
+        nodes.add(Node(operator.name, IntArray(0)) { operator.eval() })
         return Stream(id)
     }
 
@@ -63,7 +69,7 @@ class Circuit {
         checkBuildable()
         val inputNode = nodes[input.nodeId]
         val id = nodes.size
-        nodes.add(Node(operator.name) {
+        nodes.add(Node(operator.name, intArrayOf(input.nodeId)) {
             @Suppress("UNCHECKED_CAST")
             operator.eval(inputNode.output as I)
         })
@@ -80,7 +86,7 @@ class Circuit {
         val leftNode = nodes[left.nodeId]
         val rightNode = nodes[right.nodeId]
         val id = nodes.size
-        nodes.add(Node(operator.name) {
+        nodes.add(Node(operator.name, intArrayOf(left.nodeId, right.nodeId)) {
             @Suppress("UNCHECKED_CAST")
             operator.eval(leftNode.output as I1, rightNode.output as I2)
         })

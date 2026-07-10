@@ -557,14 +557,31 @@
 (defn- assemble [query]
   (dbsp/plan->circuit (dbsp/plan query)))
 
+(defn- circuit->tree
+  "Renders [circuit]'s wiring as a nested vector `[op-name & input-trees]`
+  rooted at the final (output) operator. `input` leaves are numbered in leaf
+  order — `[input 0]` is the circuit's first input. A stream consumed by
+  several operators appears once per consumer."
+  [circuit]
+  (let [names (vec (.operatorNames circuit))
+        inputs (mapv vec (.nodeInputs circuit))
+        input-order (into {} (map-indexed (fn [i id] [id i])
+                                          (filter #(= "input" (names %))
+                                                  (range (count names)))))]
+    (letfn [(render [id]
+              (if (= "input" (names id))
+                ['input (input-order id)]
+                (into [(symbol (names id))] (map render (inputs id)))))]
+      (render (dec (count names))))))
+
 (deftest assemble-single-pattern-test
   (let [{:keys [circuit leaves output]} (assemble '{:find [name]
                                                     :where [[?e :name name]]})]
     (is (= 1 (count leaves)))
     (is (some? output))
-    ;; input -> filter(attribute constant) -> map(project) -> map(final projection)
-    (is (= ["input" "filter-constants" "project" "project"]
-           (vec (.operatorNames circuit))))))
+    ;; source pipeline (filter constants, project to variables), find projection
+    (is (= '[project [project [filter-constants [input 0]]]]
+           (circuit->tree circuit)))))
 
 (deftest assemble-three-pattern-chain-test
   (let [{:keys [circuit leaves]} (assemble '{:find [?a ?d]
@@ -572,14 +589,16 @@
                                                      [?b :s ?c]
                                                      [?c :t ?d]]})]
     (is (= 3 (count leaves)))
-    ;; base (input, filter, permute); then per join: left permute + own
-    ;; source pipeline + join; final permute.
-    (is (= ["input" "filter-constants" "project"
-            "project" "input" "filter-constants" "project" "incremental-join"
-            "project" "input" "filter-constants" "project" "incremental-join"
-            "project"]
-           (vec (.operatorNames circuit))))
-    (is (= 14 (.getNodeCount circuit)))))
+    ;; each join permutes the running relation so its key columns lead, then
+    ;; joins the next triple's source pipeline; final find projection on top
+    (is (= '[project
+             [incremental-join
+              [project
+               [incremental-join
+                [project [project [filter-constants [input 0]]]]
+                [project [filter-constants [input 1]]]]]
+              [project [filter-constants [input 2]]]]]
+           (circuit->tree circuit)))))
 
 (deftest assemble-leaves-test
   (testing "plan->circuit returns one {:order … :handle …} leaf per input triple"
@@ -607,24 +626,25 @@
       (is (= 3 (count (set (map :handle leaves))))))))
 
 (deftest assemble-or-single-branch-test
-  (testing "single-branch :or — no plus, just distinct after the projection"
+  (testing "single-branch :or — no plus, just distinct after the branch"
     (let [{:keys [circuit leaves]} (assemble '{:find [?e]
                                                :where [(or [?e :name "Ada"])]})]
       (is (= 1 (count leaves)))
-      ;; branch: input -> filter -> permute; then distinct on the union; then final permute
-      (is (= ["input" "filter-constants" "project" "distinct" "project"]
-             (vec (.operatorNames circuit)))))))
+      (is (= '[project [distinct [project [filter-constants [input 0]]]]]
+             (circuit->tree circuit))))))
 
 (deftest assemble-or-two-branch-test
-  (testing "two-branch :or — one plus, one distinct"
+  (testing "two-branch :or — branches plus-folded, one distinct"
     (let [{:keys [circuit leaves]} (assemble '{:find [?e]
                                                :where [(or [?e :sex :male]
                                                            [?e :sex :female])]})]
       (is (= 2 (count leaves)))
-      (is (= ["input" "filter-constants" "project"
-              "input" "filter-constants" "project"
-              "plus" "distinct" "project"]
-             (vec (.operatorNames circuit)))))))
+      (is (= '[project
+               [distinct
+                [plus
+                 [project [filter-constants [input 0]]]
+                 [project [filter-constants [input 1]]]]]]
+             (circuit->tree circuit))))))
 
 (deftest assemble-or-k-branch-test
   (testing "k-branch :or has (k - 1) plus operators and one distinct"
@@ -642,13 +662,19 @@
     (let [{:keys [circuit leaves]} (assemble '{:find [name]
                                                :where [[?e :name name]
                                                        (or [?e :sex :male]
-                                                           [?e :sex :female])]})
-          ops (vec (.operatorNames circuit))]
+                                                           [?e :sex :female])]})]
       (is (= 3 (count leaves)))
-      ;; one incremental-join per branch — the running stream fans out
-      (is (= 2 (count (filter #(= "incremental-join" %) ops))))
-      (is (= 1 (count (filter #(= "plus" %) ops))))
-      (is (= 1 (count (filter #(= "distinct" %) ops)))))))
+      ;; the running relation (input 0's pipeline) fans out into both branches
+      (is (= '[project
+               [distinct
+                [plus
+                 [incremental-join
+                  [project [filter-constants [input 0]]]
+                  [project [filter-constants [input 1]]]]
+                 [incremental-join
+                  [project [filter-constants [input 0]]]
+                  [project [filter-constants [input 2]]]]]]]
+             (circuit->tree circuit))))))
 
 (deftest assemble-nested-or-test
   (testing "nested :or yields one plus + one distinct per :or node"
@@ -681,13 +707,20 @@
     (let [{:keys [circuit leaves]} (assemble
                                     '{:find [name]
                                       :where [[?e :name name]
-                                              (not [?e :last-name "Smith"])]})
-          ops (vec (.operatorNames circuit))]
+                                              (not [?e :last-name "Smith"])]})]
       (is (= 2 (count leaves)))
-      (is (= 1 (count (filter #(= "distinct" %) ops))))
-      ;; the body join onto the key seed + the anti-semijoin
-      (is (= 2 (count (filter #(= "incremental-join" %) ops))))
-      (is (= 1 (count (filter #(= "difference" %) ops)))))))
+      ;; A = input 0's pipeline; it fans out into the minus, the semijoin,
+      ;; and (projected to the key columns) the seed of the negative body
+      (is (= '[project
+               [difference
+                [project [filter-constants [input 0]]]
+                [incremental-join
+                 [project [filter-constants [input 0]]]
+                 [distinct
+                  [incremental-join
+                   [project [project [filter-constants [input 0]]]]
+                   [project [filter-constants [input 1]]]]]]]]
+             (circuit->tree circuit))))))
 
 ;; --------------------------------------------------------------------------
 ;; Per-pattern delta construction
