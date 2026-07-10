@@ -24,7 +24,7 @@ class Tuple(values: Array<Any?>) {
      * `result[i] == this[order[i]]`. Handles both permutation (reordering all
      * columns) and projection (dropping or duplicating columns).
      */
-    fun permute(order: IntArray): Tuple {
+    fun project(order: IntArray): Tuple {
         val selected = arrayOfNulls<Any?>(order.size)
         for (i in order.indices) selected[i] = values[order[i]]
         return Tuple(selected)

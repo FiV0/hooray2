@@ -47,16 +47,16 @@ class TupleTest {
     }
 
     @Test
-    fun `permute reorders columns`() {
+    fun `project reorders columns`() {
         val t = Tuple.of("e", "v")
-        assertEquals(Tuple.of("v", "e"), t.permute(intArrayOf(1, 0)))
+        assertEquals(Tuple.of("v", "e"), t.project(intArrayOf(1, 0)))
     }
 
     @Test
-    fun `permute projects and duplicates columns`() {
+    fun `project drops and duplicates columns`() {
         val t = Tuple.of("a", "b", "c")
-        assertEquals(Tuple.of("c"), t.permute(intArrayOf(2)))
-        assertEquals(Tuple.of("b", "b"), t.permute(intArrayOf(1, 1)))
+        assertEquals(Tuple.of("c"), t.project(intArrayOf(2)))
+        assertEquals(Tuple.of("b", "b"), t.project(intArrayOf(1, 1)))
     }
 
     @Test

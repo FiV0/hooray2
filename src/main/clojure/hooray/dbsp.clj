@@ -466,7 +466,7 @@
   (if (= (vec source-vars) (vec target-vars))
     stream
     (.addUnary circuit
-               (MapOp/permute (int-array (indices-of source-vars target-vars)))
+               (MapOp/project (int-array (indices-of source-vars target-vars)))
                stream)))
 
 (defn- check-incoming!
@@ -499,7 +499,7 @@
   (check-incoming! node acc)
   (let [left (when acc
                (if left-permute
-                 (.addUnary circuit (MapOp/permute (int-array left-permute)) (:stream acc))
+                 (.addUnary circuit (MapOp/project (int-array left-permute)) (:stream acc))
                  (:stream acc)))
         pair (.addInput circuit)
         source (.getFirst pair)
@@ -513,7 +513,7 @@
                               source)
                    source)
         projected (.addUnary circuit
-                             (MapOp/permute (int-array project))
+                             (MapOp/project (int-array project))
                              filtered)]
     (if acc
       {:stream (.addBinary circuit
@@ -595,7 +595,7 @@
 (defmethod assemble-node :permute
   [^Circuit circuit {:keys [out-vars indices] :as _node} acc]
   {:stream (.addUnary circuit
-                      (MapOp/permute (int-array indices))
+                      (MapOp/project (int-array indices))
                       (:stream acc))
    :vars out-vars
    :leaves (:leaves acc)})
@@ -613,7 +613,7 @@
   (let [circuit (Circuit.)
         wired (assemble-node circuit where-plan nil)
         ;; wire up the find clause
-        projected (.addUnary circuit (MapOp/permute (int-array final-permute)) (:stream wired))]
+        projected (.addUnary circuit (MapOp/project (int-array final-permute)) (:stream wired))]
     {:circuit circuit
      :leaves (:leaves wired)
      :output (.output circuit projected)}))

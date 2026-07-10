@@ -40,22 +40,22 @@ class LinearOpsTest {
     // --- MapOp ---
 
     @Test
-    fun `map permute reorders columns`() {
-        val op = MapOp.permute(intArrayOf(1, 0))
+    fun `map project reorders columns`() {
+        val op = MapOp.project(intArrayOf(1, 0))
         val out = op.eval(zset(Tuple.of("e", "v") to 1))
         assertEquals(zset(Tuple.of("v", "e") to 1), out)
     }
 
     @Test
     fun `map projection sums weights of colliding tuples`() {
-        val op = MapOp.permute(intArrayOf(0))   // project to column 0
+        val op = MapOp.project(intArrayOf(0))   // project to column 0
         val out = op.eval(zset(Tuple.of("a", 1) to 1, Tuple.of("a", 2) to 2))
         assertEquals(zset(Tuple.of("a") to 3), out)
     }
 
     @Test
     fun `map projection drops tuples whose weights cancel to zero`() {
-        val op = MapOp.permute(intArrayOf(0))
+        val op = MapOp.project(intArrayOf(0))
         val out = op.eval(zset(Tuple.of("a", 1) to 1, Tuple.of("a", 2) to -1))
         assertTrue(out.isEmpty())
     }
@@ -69,6 +69,6 @@ class LinearOpsTest {
 
     @Test
     fun `map on empty input yields empty`() {
-        assertTrue(MapOp.permute(intArrayOf(0)).eval(emptyTupleZSet()).isEmpty())
+        assertTrue(MapOp.project(intArrayOf(0)).eval(emptyTupleZSet()).isEmpty())
     }
 }

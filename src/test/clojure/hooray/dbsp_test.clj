@@ -563,7 +563,7 @@
     (is (= 1 (count leaves)))
     (is (some? output))
     ;; input -> filter(attribute constant) -> map(project) -> map(final projection)
-    (is (= ["input" "filter-constants" "permute" "permute"]
+    (is (= ["input" "filter-constants" "project" "project"]
            (vec (.operatorNames circuit))))))
 
 (deftest assemble-three-pattern-chain-test
@@ -574,10 +574,10 @@
     (is (= 3 (count leaves)))
     ;; base (input, filter, permute); then per join: left permute + own
     ;; source pipeline + join; final permute.
-    (is (= ["input" "filter-constants" "permute"
-            "permute" "input" "filter-constants" "permute" "incremental-join"
-            "permute" "input" "filter-constants" "permute" "incremental-join"
-            "permute"]
+    (is (= ["input" "filter-constants" "project"
+            "project" "input" "filter-constants" "project" "incremental-join"
+            "project" "input" "filter-constants" "project" "incremental-join"
+            "project"]
            (vec (.operatorNames circuit))))
     (is (= 14 (.getNodeCount circuit)))))
 
@@ -612,7 +612,7 @@
                                                :where [(or [?e :name "Ada"])]})]
       (is (= 1 (count leaves)))
       ;; branch: input -> filter -> permute; then distinct on the union; then final permute
-      (is (= ["input" "filter-constants" "permute" "distinct" "permute"]
+      (is (= ["input" "filter-constants" "project" "distinct" "project"]
              (vec (.operatorNames circuit)))))))
 
 (deftest assemble-or-two-branch-test
@@ -621,9 +621,9 @@
                                                :where [(or [?e :sex :male]
                                                            [?e :sex :female])]})]
       (is (= 2 (count leaves)))
-      (is (= ["input" "filter-constants" "permute"
-              "input" "filter-constants" "permute"
-              "plus" "distinct" "permute"]
+      (is (= ["input" "filter-constants" "project"
+              "input" "filter-constants" "project"
+              "plus" "distinct" "project"]
              (vec (.operatorNames circuit)))))))
 
 (deftest assemble-or-k-branch-test
