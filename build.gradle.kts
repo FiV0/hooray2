@@ -85,8 +85,20 @@ tasks.clojureRepl {
     }
 }
 
-tasks.checkClojure {
-    enabled = false
+// Clojurephant's per-build classpath includes the Java classes dir and the
+// external compile classpath, but not the Kotlin compilation output. Our
+// Clojure namespaces import org.hooray.* Kotlin types, so add the compiled
+// Kotlin main classes to every Clojure compile/check task. Without this,
+// checkClojure and compileTestClojure fail with ClassNotFoundException and the
+// Clojure test suite never runs. (Adding the whole main source set output
+// would introduce a circular dependency, since clojurephant folds the Clojure
+// output back into it.)
+val kotlinMainClasses = tasks.named("compileKotlin").map { it.outputs.files }
+tasks.withType<dev.clojurephant.plugin.clojure.tasks.ClojureCheck>().configureEach {
+    classpath.from(kotlinMainClasses)
+}
+tasks.withType<dev.clojurephant.plugin.clojure.tasks.ClojureCompile>().configureEach {
+    classpath.from(kotlinMainClasses)
 }
 
 
