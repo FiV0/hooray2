@@ -1068,7 +1068,8 @@
 (deftest e2e-cardinality-many-duplicate-add-is-noop-test
   (let [node fix/*node*]
     (h/transact node [[:db/add 1 :edge 2]])
-    (let [iq (h/q-inc node '{:find [?to] :where [[1 :edge ?to]]})]
+    (let [iq (h/q-inc node '{:find [?to]
+                             :where [[1 :edge ?to]]})]
       (h/transact node [[:db/add 1 :edge 2]])
       (is (nil? (h/consume-delta! iq)))
       (h/transact node [[:db/retract 1 :edge 2]])
@@ -1076,7 +1077,8 @@
 
 (deftest e2e-unregister-standard-query-test
   (let [node fix/*node*
-        iq (h/q-inc node '{:find [name] :where [[?e :name name]]})]
+        iq (h/q-inc node '{:find [name]
+                           :where [[?e :name name]]})]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))
     (h/unregister-inc-q node iq)
