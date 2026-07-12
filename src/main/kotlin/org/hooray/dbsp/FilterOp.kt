@@ -2,6 +2,7 @@ package org.hooray.dbsp
 
 import org.hooray.incremental.IntegerWeight
 import org.hooray.incremental.ZSet
+import java.util.function.Predicate
 
 /**
  * Keeps only the tuples whose key satisfies [predicate]; weights are unchanged.
@@ -37,6 +38,15 @@ class FilterOp(
             return FilterOp("filter-constants") { tuple ->
                 columns.indices.all { tuple[columns[it]] == values[it] }
             }
+        }
+
+        /**
+         * Builds a tuple filter from a Java predicate for straightforward
+         * Clojure interop.
+         */
+        @JvmStatic
+        fun fromPredicate(name: String, predicate: Predicate<Tuple>): FilterOp {
+            return FilterOp(name) { tuple -> predicate.test(tuple) }
         }
     }
 }

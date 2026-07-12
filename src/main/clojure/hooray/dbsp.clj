@@ -10,7 +10,8 @@
             [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t])
-  (:import (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp MinusOp PlusOp Tuple)
+  (:import (java.util.function Predicate)
+           (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp MinusOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
 
 ;; --------------------------------------------------------------------------
@@ -62,7 +63,16 @@
     {:kind       :not
      :children   [<descriptor> …]}
 
-  Other clause types (`:predicate`, `:fn`) are not yet
+  Predicate descriptor:
+
+    {:kind       :predicate
+     :predicate  <symbol>
+     :args       [{:kind :constant :value v} | {:kind :variable :var s} …]}
+
+  A predicate grounds nothing (`:groundable` is `[]`), so `left-deep-order`
+  only schedules it once every variable it references is grounded.
+
+  Other clause types (`:fn`) are not yet
   supported and trigger `err/unsupported-ex`."
   [index [clause-type pattern]]
   (case clause-type
@@ -100,6 +110,15 @@
             :children children
             :vars (vec (distinct (mapcat :vars children)))
             :groundable []})
+
+    :predicate (let [{:keys [predicate args]} pattern
+                     args* (mapv elem args)]
+                 {:index index
+                  :kind :predicate
+                  :predicate predicate
+                  :args args*
+                  :vars (vec (distinct (keep elem-var args*)))
+                  :groundable []})
 
     (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
                         {:clause-type clause-type :pattern pattern})))
@@ -185,7 +204,7 @@
 ;; operator projects to the pattern's variable columns.
 ;;
 ;; The plan is a tree of nodes `{:kind … :out-vars […] …}` with kinds
-;; `:triple`, `:chain`, `:union`, `:difference` and `:permute`. A node
+;; `:triple`, `:chain`, `:union`, `:difference`, `:permute` and `:filter`. A node
 ;; optionally carries `:incoming`, the column layout of the running relation
 ;; it extends — the stream of the already-built left partial sub-tree of the
 ;; query. Without `:incoming` a node produces its stream standalone, rooted
@@ -209,6 +228,9 @@
 ;;   :permute      reorders the running stream to an explicit target layout;
 ;;                 never carries `:incoming` (it is a unary reordering of
 ;;                 whatever stream it follows)
+;;   :filter       applies a stateless predicate to the running stream
+;;                 (`:incoming` is required); rows that fail are dropped,
+;;                 the layout is unchanged (out-vars = incoming)
 ;;
 ;; A scope (the top-level `:where`, an `and` and a `not` body)
 ;; plans its descriptors in `left-deep-order`, each node extending its
@@ -308,8 +330,8 @@
 
 (defmulti ^:private plan-node
   "Plans one [descriptor] as a plan node, dispatching on its `:kind`. With
-  [incoming] being the running relation stream column layout. The node extends that
-  relation; without it the node produces its stream standalone. With
+  [incoming] being the running relation stream column layout. The node extends
+  that relation; without it the node produces its stream standalone. With
   [target], each method arranges the node's output to that variable order."
   (fn [descriptor _incoming _target] (:kind descriptor)))
 
@@ -412,6 +434,21 @@
                :keyed-vars (lead-with (set key-vars) incoming)
                :out-vars (vec incoming)}
         target (ensure-target target)))))
+
+;; A predicate cannot produce rows on its own. It filters the running relation
+;; in place. Its `:groundable` is empty, so `left-deep-order` only schedules it
+;; once all its variables are grounded; [incoming] is nil only when there is no
+;; positive relation to filter.
+(defmethod plan-node :predicate
+  [descriptor incoming target]
+  (when-not incoming
+    (err/unsupported-ex "DBSP-standard engine cannot plan a predicate without a positive relation"
+                        {:descriptor descriptor}))
+  (cond-> {:kind :filter
+           :incoming (vec incoming)
+           :predicate descriptor
+           :out-vars (vec incoming)}
+    target (ensure-target target)))
 
 (defn- plan-scope
   "Plans [descriptors] as one left-deep tree in `left-deep-order`. Without
@@ -599,6 +636,43 @@
                       (:stream acc))
    :vars out-vars
    :leaves (:leaves acc)})
+
+(defn- arg-reader [arg layout var->idx]
+  (case (:kind arg)
+    :constant (constantly (:value arg))
+    :variable (let [idx (var->idx (:var arg))]
+                (when (nil? idx)
+                  (throw (ex-info "variable not present in filter input layout"
+                                  {:var (:var arg) :layout layout})))
+                (let [idx (int idx)]
+                  (fn [^Tuple tuple] (.get tuple idx))))))
+
+;; `test` runs once per tuple per delta, so the common arities call [f]
+;; directly instead of paying `apply` + a lazy arg seq on every tuple.
+(defn- predicate-filter [{:keys [predicate args] :as _descriptor} layout]
+  (let [f (query/resolve-fn predicate)
+        var->idx (zipmap layout (range))
+        arg-readers (mapv #(arg-reader % layout var->idx) args)
+        [r0 r1 r2] arg-readers]
+    (case (count arg-readers)
+      0 (reify Predicate
+          (test [_ _tuple] (boolean (f))))
+      1 (reify Predicate
+          (test [_ tuple] (boolean (f (r0 tuple)))))
+      2 (reify Predicate
+          (test [_ tuple] (boolean (f (r0 tuple) (r1 tuple)))))
+      3 (reify Predicate
+          (test [_ tuple] (boolean (f (r0 tuple) (r1 tuple) (r2 tuple)))))
+      (reify Predicate
+        (test [_ tuple]
+          (boolean (apply f (mapv #(% tuple) arg-readers))))))))
+
+;; A `:filter` node lowers its predicate to one stateless FilterOp over the running stream
+(defmethod assemble-node :filter
+  [^Circuit circuit {:keys [predicate out-vars] :as node} {:keys [stream vars] :as acc}]
+  (check-incoming! node acc)
+  (let [stream (.addUnary circuit (FilterOp/fromPredicate "filter-predicate" (predicate-filter predicate vars)) stream)]
+    (assoc acc :stream stream :vars out-vars)))
 
 (defn plan->circuit
   "Assembles a Kotlin [org.hooray.dbsp.Circuit] from a [plan]. Returns

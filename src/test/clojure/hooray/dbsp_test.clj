@@ -84,12 +84,21 @@
            (mapv :index (patterns '{:find [name]
                                     :where [[?e :name name]
                                             [?e :age age]
-                                            [?e :last-name ln]]}))))))
+                                            [?e :last-name ln]]})))))
+
+  (testing "predicate descriptor records predicate args and free variables"
+    (let [[_ p] (patterns '{:find [name]
+                            :where [[?e :name name]
+                                    [(re-find #"A" name)]]})]
+      (is (= :predicate (:kind p)))
+      (is (= 're-find (:predicate p)))
+      (is (= [{:kind :constant :value "A"}
+              {:kind :variable :var 'name}]
+             (update-in (:args p) [0 :value] str)))
+      (is (= '[name] (:vars p)))
+      (is (= [] (:groundable p))))))
 
 (deftest rejects-unsupported-clauses-test
-  (testing "predicate clauses are rejected"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (dbsp/parse '{:find [?x] :where [[?x :age ?y] [(= ?y 1)]]}))))
   (testing "function clauses are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?s]
@@ -577,6 +586,72 @@
       (is (= '[?e] (:key-vars not-branch)))
       (is (= '[?e n] (:out-vars not-branch))))))
 
+(deftest plan-predicate-filter-test
+  (testing "a bound predicate plans as a :filter chain child after the joins"
+    (let [p (dbsp/plan '{:find [name]
+                         :where [[?e :name name]
+                                 [?e :age age]
+                                 [(< age 50)]]})
+          chain (:where-plan p)
+          [base join filter-node] (:children chain)]
+      (is (= :chain (:kind chain)))
+      (is (= 3 (count (:children chain))))
+      (is (= :triple (:kind base)))
+      (is (= :triple (:kind join)))
+      (is (= :filter (:kind filter-node)))
+      (is (= '[?e name age] (:incoming filter-node)))
+      (is (= '[?e name age] (:out-vars filter-node)))
+      (is (= '< (-> filter-node :predicate :predicate)))
+      (is (= '[?e name age] (:result-vars p)))))
+
+  (testing "a predicate is scheduled as soon as its variables are grounded"
+    (let [p (dbsp/plan '{:find [name]
+                         :where [[?e :name name]
+                                 [(re-find #"A" name)]
+                                 [?e :age age]]})
+          [_base filter-node join] (:children (:where-plan p))]
+      (is (= :filter (:kind filter-node)))
+      (is (= '[?e name] (:out-vars filter-node)))
+      (is (= :triple (:kind join)))
+      (is (= '[?e name] (:incoming join)))))
+
+  (testing "boolean predicate trees retain relational nodes and individual filter leaves"
+    (let [p (dbsp/plan '{:find [age]
+                         :where [[?e :age age]
+                                 (or (and [(> age 10)]
+                                          (not [(< age 30)]))
+                                     [(= age 42)])]})
+          [_base or-node] (:children (:where-plan p))
+          [and-branch equals-filter] (:branches or-node)
+          [greater-filter diff] (:children and-branch)
+          less-filter (:negative diff)
+          filters [greater-filter less-filter equals-filter]]
+      (is (= [:union :chain :difference]
+             (mapv :kind [or-node and-branch diff])))
+      (is (= [[:filter :predicate '>]
+              [:filter :predicate '<]
+              [:filter :predicate '=]]
+             (mapv (juxt :kind
+                         #(-> % :predicate :kind)
+                         #(-> % :predicate :predicate))
+                   filters)))))
+
+  (testing "predicate-only top-level queries are rejected as insufficient binding"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [age] :where [[(< age 30)]]}))))
+
+  (testing "a variable-free predicate with no positive relation before it is rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [age]
+                              :where [[(< 1 2)]
+                                      [?e :age age]]}))))
+
+  (testing "predicates with unbound variables are rejected"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [name]
+                              :where [[?e :name name]
+                                      [(< age 50)]]})))))
+
 ;; --------------------------------------------------------------------------
 ;; Circuit assembly
 ;; --------------------------------------------------------------------------
@@ -749,6 +824,15 @@
                   [incremental-join
                    [project [project [filter-constants [input-0]]]]
                    [project [filter-constants [input-1]]]]]]]]
+             (circuit->tree circuit))))))
+
+(deftest assemble-predicate-filter-test
+  (testing "a bound predicate assembles as a stateless filter over the running stream"
+    (let [{:keys [circuit leaves]} (assemble '{:find [name]
+                                               :where [[?e :name name]
+                                                       [(re-find #"A" name)]]})]
+      (is (= 1 (count leaves)))
+      (is (= '[project [filter-predicate [project [filter-constants [input-0]]]]]
              (circuit->tree circuit))))))
 
 ;; --------------------------------------------------------------------------
@@ -927,10 +1011,65 @@
              [["Bob" "Berlin"] 1]}
            (set (h/consume-delta! iq))))))
 
+(deftest e2e-predicate-filter-test
+  (testing "range predicate filters add and retract deltas"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [(< age 50)]]})]
+      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}
+                        {:db/id :dominic :name "Dominic" :age 50}])
+      (is (= [[["Ivan"] 1]] (h/consume-delta! iq)))
+      (h/transact node [[:db/retract :ivan :age 30]])
+      (is (= [[["Ivan"] -1]] (h/consume-delta! iq)))))
+
+  (testing "binary predicate filters joined rows"
+    (let [node (fresh-node)
+          iq (h/q-inc node '{:find [name1 name2]
+                             :where [[?e1 :name name1]
+                                     [?e1 :age age1]
+                                     [?e2 :name name2]
+                                     [?e2 :age age2]
+                                     [(<= age1 age2)]]})]
+      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}
+                        {:db/id :bob :name "Bob" :age 40}])
+      (is (= #{[["Ivan" "Ivan"] 1]
+               [["Ivan" "Bob"] 1]
+               [["Bob" "Bob"] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-predicate-only-or-test
+  (testing "overlapping predicate-only or branches filter outer-bound values with set semantics"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [age]
+                             :where [[?e :age age]
+                                     (or [(< age 30)]
+                                         [(< age 40)])]})]
+      (h/transact node [{:db/id :young :age 20}
+                        {:db/id :middle :age 35}
+                        {:db/id :older :age 45}])
+      (is (= #{[[20] 1] [[35] 1]}
+             (set (h/consume-delta! iq)))))))
+
+(deftest e2e-predicate-not-test
+  (testing "not over a bound predicate anti-joins rows matching the predicate"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     (not [(< age 30)])]})]
+      (h/transact node [{:db/id :young :name "Young" :age 20}
+                        {:db/id :middle :name "Middle" :age 35}
+                        {:db/id :older :name "Older" :age 50}])
+      (is (= #{[["Middle"] 1] [["Older"] 1]}
+             (set (h/consume-delta! iq)))))))
+
 (deftest e2e-cardinality-many-duplicate-add-is-noop-test
   (let [node fix/*node*]
     (h/transact node [[:db/add 1 :edge 2]])
-    (let [iq (h/q-inc node '{:find [?to] :where [[1 :edge ?to]]})]
+    (let [iq (h/q-inc node '{:find [?to]
+                             :where [[1 :edge ?to]]})]
       (h/transact node [[:db/add 1 :edge 2]])
       (is (nil? (h/consume-delta! iq)))
       (h/transact node [[:db/retract 1 :edge 2]])
@@ -938,7 +1077,8 @@
 
 (deftest e2e-unregister-standard-query-test
   (let [node fix/*node*
-        iq (h/q-inc node '{:find [name] :where [[?e :name name]]})]
+        iq (h/q-inc node '{:find [name]
+                           :where [[?e :name name]]})]
     (h/transact node [{:db/id 1 :name "Ivan"}])
     (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))
     (h/unregister-inc-q node iq)
@@ -949,16 +1089,16 @@
   (let [node fix/*node*]
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
-                                        :in [name]
-                                        :where [[?e :name name]]})))
+                                 :in [name]
+                                 :where [[?e :name name]]})))
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
-                                        :in []
-                                        :where [[?e :name name]]})))
+                                 :in []
+                                 :where [[?e :name name]]})))
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
-                                        :keys [name]
-                                        :where [[?e :name name]]})))))
+                                 :keys [name]
+                                 :where [[?e :name name]]})))))
 
 ;; --------------------------------------------------------------------------
 ;; End-to-end: flat :or
