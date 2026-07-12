@@ -1087,16 +1087,16 @@
   (let [node fix/*node*]
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
-                                        :in [name]
-                                        :where [[?e :name name]]})))
+                                 :in [name]
+                                 :where [[?e :name name]]})))
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
-                                        :in []
-                                        :where [[?e :name name]]})))
+                                 :in []
+                                 :where [[?e :name name]]})))
     (is (thrown? clojure.lang.ExceptionInfo
                  (h/q-inc node '{:find [name]
-                                        :keys [name]
-                                        :where [[?e :name name]]})))))
+                                 :keys [name]
+                                 :where [[?e :name name]]})))))
 
 ;; --------------------------------------------------------------------------
 ;; End-to-end: flat :or
