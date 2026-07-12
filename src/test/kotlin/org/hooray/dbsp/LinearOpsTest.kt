@@ -81,6 +81,13 @@ class LinearOpsTest {
     }
 
     @Test
+    fun `map from function appends a computed column and preserves weights`() {
+        val op = MapOp.fromFunction("half") { t -> t.concat(Tuple.of((t[1] as Int) / 2)) }
+        val out = op.eval(zset(Tuple.of("Ada", 36) to 2, Tuple.of("Bob", 17) to -1))
+        assertEquals(zset(Tuple.of("Ada", 36, 18) to 2, Tuple.of("Bob", 17, 8) to -1), out)
+    }
+
+    @Test
     fun `map on empty input yields empty`() {
         assertTrue(MapOp.project(intArrayOf(0)).eval(emptyTupleZSet()).isEmpty())
     }

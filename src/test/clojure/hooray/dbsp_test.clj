@@ -29,6 +29,10 @@
    {:db/id -5
     :db/ident :age
     :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one}
+   {:db/id -6
+    :db/ident :salary
+    :db/valueType :db.type/long
     :db/cardinality :db.cardinality/one}])
 
 (defn- fresh-node
@@ -98,12 +102,48 @@
       (is (= '[name] (:vars p)))
       (is (= [] (:groundable p))))))
 
+(deftest compile-pattern-fn-test
+  (testing "unary fn descriptor normalizes args and grounds its result variable"
+    (let [[_ p] (patterns '{:find [half]
+                            :where [[?e :age age]
+                                    [(quot age 2) half]]})]
+      (is (= :fn (:kind p)))
+      (is (= 'quot (:fn p)))
+      (is (= [{:kind :variable :var 'age}
+              {:kind :constant :value 2}]
+             (:args p)))
+      (is (= 'half (:ret-var p)))
+      (is (= '[age half] (:vars p)))
+      (is (= '[half] (:groundable p)))))
+
+  (testing "binary fn descriptor references both argument variables"
+    (let [[_ _ p] (patterns '{:find [c]
+                              :where [[?e :age a]
+                                      [?e :salary b]
+                                      [(+ a b) c]]})]
+      (is (= :fn (:kind p)))
+      (is (= '+ (:fn p)))
+      (is (= '[a b c] (:vars p)))
+      (is (= '[c] (:groundable p)))))
+
+  (testing "a self-referential fn clause cannot ground its own result variable"
+    (let [[_ p] (patterns '{:find [age]
+                            :where [[?e :age age]
+                                    [(inc age) age]]})]
+      (is (= '[age] (:vars p)))
+      (is (= [] (:groundable p))))))
+
 (deftest rejects-unsupported-clauses-test
-  (testing "function clauses are rejected"
-    (is (thrown? clojure.lang.ExceptionInfo
-                 (dbsp/parse '{:find [?s]
-                               :where [[?x :name ?n]
-                                       [(str ?n) ?s]]}))))
+  (testing "fn clauses with more than two arguments are rejected"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"unary and binary"
+                          (dbsp/parse '{:find [x]
+                                        :where [[?e :age a]
+                                                [(+ a 1 2) x]]}))))
+  (testing "unsupported fn names still fail query conformance"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid query"
+                          (dbsp/parse '{:find [x]
+                                        :where [[?e :age age]
+                                                [(* age 2) x]]}))))
   (testing "repeated variables inside one triple pattern are rejected"
     (is (thrown? clojure.lang.ExceptionInfo
                  (dbsp/parse '{:find [?x] :where [[?x :edge ?x]]})))))
@@ -291,6 +331,38 @@
       (is (thrown? clojure.lang.ExceptionInfo
                    (dbsp/left-deep-order [or-p])))
       (is (= [1] (mapv :index (dbsp/left-deep-order [or-p] '#{?e}))))))
+
+  (testing "a fn clause is deferred until its argument variables are grounded"
+    (is (= [1 0]
+           (order-indices '{:find [half]
+                            :where [[(quot age 2) half]
+                                    [?e :age age]]}))))
+
+  (testing "chained fn results ground one another in dependency order"
+    (is (= [2 1 0]
+           (order-indices '{:find [h2]
+                            :where [[(inc half) h2]
+                                    [(quot age 2) half]
+                                    [?e :age age]]}))))
+
+  (testing "a fn clause with an unbound argument fails with insufficient binding"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not bound"
+                          (dbsp/plan '{:find [y]
+                                       :where [[?e :name name]
+                                               [(inc x) y]]}))))
+
+  (testing "cyclically dependent fn clauses fail with insufficient binding"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not bound"
+                          (dbsp/plan '{:find [x y]
+                                       :where [[?e :name name]
+                                               [(inc x) y]
+                                               [(inc y) x]]}))))
+
+  (testing "a self-referential fn clause with an unbound variable fails"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not bound"
+                          (dbsp/plan '{:find [x]
+                                       :where [[?e :name name]
+                                               [(inc x) x]]}))))
 
   (testing "unbound variables fail planning with an insufficient-binding error"
     (let [ex (try (dbsp/plan '{:find [?n]
@@ -652,6 +724,69 @@
                               :where [[?e :name name]
                                       [(< age 50)]]})))))
 
+(deftest plan-function-test
+  (testing "a fn with a new result variable plans as a :function-map appending a column"
+    (let [p (dbsp/plan '{:find [half]
+                         :where [[?e :age age]
+                                 [(quot age 2) half]]})
+          chain (:where-plan p)
+          [base map-node] (:children chain)]
+      (is (= :chain (:kind chain)))
+      (is (= :triple (:kind base)))
+      (is (= :function-map (:kind map-node)))
+      (is (= '[?e age] (:incoming map-node)))
+      (is (= '[?e age half] (:out-vars map-node)))
+      (is (= 'quot (-> map-node :function :fn)))
+      (is (= '[?e age half] (:result-vars p)))
+      (is (= [2] (:final-permute p)))))
+
+  (testing "a fn whose result variable is already bound plans as a :function-filter"
+    (let [p (dbsp/plan '{:find [age]
+                         :where [[?e :age age]
+                                 [?e :salary half]
+                                 [(quot age 2) half]]})
+          [_base _join filter-node] (:children (:where-plan p))]
+      (is (= :function-filter (:kind filter-node)))
+      (is (= '[?e age half] (:incoming filter-node)))
+      (is (= '[?e age half] (:out-vars filter-node)))
+      (is (= 'quot (-> filter-node :function :fn)))))
+
+  (testing "fn branches of an or are arranged to the union layout"
+    (let [p (dbsp/plan '{:find [res]
+                         :where [[?e :age age]
+                                 (or [(inc age) res]
+                                     [(dec age) res])]})
+          [_base or-node] (:children (:where-plan p))]
+      (is (= :union (:kind or-node)))
+      (is (= '[?e age res] (:out-vars or-node)))
+      (is (= [[:function-map '[?e age res]]
+              [:function-map '[?e age res]]]
+             (mapv (juxt :kind :out-vars) (:branches or-node))))))
+
+  (testing "a fn inside a not body plans as a :function-filter over the key columns"
+    (let [p (dbsp/plan '{:find [name]
+                         :where [[?e :name name]
+                                 [?e :age age]
+                                 [?e :salary sal]
+                                 (not [(identity age) sal])]})
+          diff (peek (:children (:where-plan p)))
+          negative (:negative diff)]
+      (is (= :difference (:kind diff)))
+      (is (= '[age sal] (:key-vars diff)))
+      (is (= :function-filter (:kind negative)))
+      (is (= '[age sal] (:incoming negative)))
+      (is (= '[age sal] (:out-vars negative)))))
+
+  (testing "function-only queries are rejected"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"without a positive relation"
+                          (dbsp/plan '{:find [x] :where [[(inc 1) x]]}))))
+
+  (testing "a constant-args fn with no positive relation before it is rejected"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"without a positive relation"
+                          (dbsp/plan '{:find [x]
+                                       :where [[(inc 1) x]
+                                               [?e :age x]]})))))
+
 ;; --------------------------------------------------------------------------
 ;; Circuit assembly
 ;; --------------------------------------------------------------------------
@@ -833,6 +968,29 @@
                                                        [(re-find #"A" name)]]})]
       (is (= 1 (count leaves)))
       (is (= '[project [filter-predicate [project [filter-constants [input-0]]]]]
+             (circuit->tree circuit))))))
+
+(deftest assemble-function-map-test
+  (testing "a new-result fn assembles as a map-function over the running stream, adding no leaves"
+    (let [{:keys [circuit leaves]} (assemble '{:find [half]
+                                               :where [[?e :age age]
+                                                       [(quot age 2) half]]})]
+      (is (= 1 (count leaves)))
+      (is (= '[project [map-function [project [filter-constants [input-0]]]]]
+             (circuit->tree circuit))))))
+
+(deftest assemble-function-filter-test
+  (testing "a bound-result fn assembles as a filter-function over the running stream"
+    (let [{:keys [circuit leaves]} (assemble '{:find [age]
+                                               :where [[?e :age age]
+                                                       [?e :salary half]
+                                                       [(quot age 2) half]]})]
+      (is (= 2 (count leaves)))
+      (is (= '[project
+               [filter-function
+                [incremental-join
+                 [project [filter-constants [input-0]]]
+                 [project [filter-constants [input-1]]]]]]
              (circuit->tree circuit))))))
 
 ;; --------------------------------------------------------------------------
@@ -1064,6 +1222,109 @@
                         {:db/id :older :name "Older" :age 50}])
       (is (= #{[["Middle"] 1] [["Older"] 1]}
              (set (h/consume-delta! iq)))))))
+
+(deftest e2e-function-map-test
+  (testing "unary fn emits additions and retractions; unchanged results cancel"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name half]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [(quot age 2) half]]})]
+      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}])
+      (is (= #{[["Ivan" 15] 1]} (set (h/consume-delta! iq))))
+      ;; 30 -> 31 leaves quot unchanged, so the deltas cancel in the projection
+      (h/transact node [{:db/id :ivan :age 31}])
+      (is (nil? (h/consume-delta! iq)))
+      ;; 31 -> 32 changes the computed column
+      (h/transact node [{:db/id :ivan :age 32}])
+      (is (= #{[["Ivan" 15] -1] [["Ivan" 16] 1]} (set (h/consume-delta! iq))))))
+
+  (testing "binary fn combines two bound columns"
+    (let [node (fresh-node)
+          iq (h/q-inc node '{:find [name total]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [?e :salary sal]
+                                     [(+ age sal) total]]})]
+      (h/transact node [{:db/id :ivan :name "Ivan" :age 30 :salary 100}])
+      (is (= #{[["Ivan" 130] 1]} (set (h/consume-delta! iq))))
+      (h/transact node [[:db/retract :ivan :salary 100]])
+      (is (= #{[["Ivan" 130] -1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-function-rebinding-filters-test
+  (testing "a fn whose result variable is already bound keeps only matching rows"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [?e :salary sal]
+                                     [(identity age) sal]]})]
+      (h/transact node [{:db/id :eq :name "Eq" :age 30 :salary 30}
+                        {:db/id :neq :name "Neq" :age 30 :salary 40}])
+      (is (= #{[["Eq"] 1]} (set (h/consume-delta! iq))))
+      (h/transact node [{:db/id :neq :salary 30}])
+      (is (= #{[["Neq"] 1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-function-chain-test
+  (testing "a computed result feeds another fn and a predicate"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name h2]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [(quot age 2) half]
+                                     [(inc half) h2]
+                                     [(< h2 20)]]})]
+      ;; Ivan: h2 = 16 kept, Bob: h2 = 21 dropped
+      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}
+                        {:db/id :bob :name "Bob" :age 40}])
+      (is (= #{[["Ivan" 16] 1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-function-nil-false-values-test
+  (testing "nil and false results are values, not row-removal signals"
+    (let [node fix/*node*
+          nil-iq (h/q-inc node '{:find [name x]
+                                 :where [[?e :name name]
+                                         [(identity nil) x]]})
+          false-iq (h/q-inc node '{:find [name x]
+                                   :where [[?e :name name]
+                                           [(identity false) x]]})]
+      (h/transact node [{:db/id :ivan :name "Ivan"}])
+      (is (= #{[["Ivan" nil] 1]} (set (h/consume-delta! nil-iq))))
+      (is (= #{[["Ivan" false] 1]} (set (h/consume-delta! false-iq)))))))
+
+(deftest e2e-function-or-test
+  (testing "fn branches of an or emit both computed values"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [res]
+                             :where [[?e :age age]
+                                     (or [(inc age) res]
+                                         [(dec age) res])]})]
+      (h/transact node [{:db/id :ivan :age 30}])
+      (is (= #{[[29] 1] [[31] 1]} (set (h/consume-delta! iq))))))
+
+  (testing "overlapping fn branches collapse to distinct-union semantics"
+    (let [node (fresh-node)
+          iq (h/q-inc node '{:find [res]
+                             :where [[?e :age age]
+                                     (or [(inc age) res]
+                                         [(+ age 1) res])]})]
+      (h/transact node [{:db/id :bob :age 40}])
+      (is (= #{[[41] 1]} (set (h/consume-delta! iq)))))))
+
+(deftest e2e-function-not-test
+  (testing "not over a bound fn clause anti-joins matching rows"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [?e :salary sal]
+                                     (not [(identity age) sal])]})]
+      (h/transact node [{:db/id :eq :name "Eq" :age 30 :salary 30}
+                        {:db/id :neq :name "Neq" :age 30 :salary 40}])
+      (is (= #{[["Neq"] 1]} (set (h/consume-delta! iq))))
+      ;; making the salaries match flips Neq out of the result
+      (h/transact node [{:db/id :neq :salary 30}])
+      (is (= #{[["Neq"] -1]} (set (h/consume-delta! iq)))))))
 
 (deftest e2e-cardinality-many-duplicate-add-is-noop-test
   (let [node fix/*node*]
