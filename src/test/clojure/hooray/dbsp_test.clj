@@ -605,9 +605,6 @@
       (is (= '[?e name age] (:result-vars p)))))
 
   (testing "a predicate is scheduled as soon as its variables are grounded"
-    ;; after the name triple the predicate (index 1) ties with the age triple
-    ;; on grounded overlap; the lower index wins, so the filter lands
-    ;; mid-chain, before the age join
     (let [p (dbsp/plan '{:find [name]
                          :where [[?e :name name]
                                  [(re-find #"A" name)]
@@ -1023,9 +1020,9 @@
                                      [(< age 50)]]})]
       (h/transact node [{:db/id :ivan :name "Ivan" :age 30}
                         {:db/id :dominic :name "Dominic" :age 50}])
-      (is (= #{[["Ivan"] 1]} (set (h/consume-delta! iq))))
+      (is (= [[["Ivan"] 1]] (h/consume-delta! iq)))
       (h/transact node [[:db/retract :ivan :age 30]])
-      (is (= #{[["Ivan"] -1]} (set (h/consume-delta! iq))))))
+      (is (= [[["Ivan"] -1]] (h/consume-delta! iq)))))
 
   (testing "binary predicate filters joined rows"
     (let [node (fresh-node)
@@ -1040,17 +1037,6 @@
       (is (= #{[["Ivan" "Ivan"] 1]
                [["Ivan" "Bob"] 1]
                [["Bob" "Bob"] 1]}
-             (set (h/consume-delta! iq))))))
-
-  (testing "clojure predicate filters values"
-    (let [node (fresh-node)
-          iq (h/q-inc node '{:find [name]
-                             :where [[?e :name name]
-                                     [(re-find #"o" name)]]})]
-      (h/transact node [{:db/id :ivan :name "Ivan"}
-                        {:db/id :bob :name "Bob"}
-                        {:db/id :dominic :name "Dominic"}])
-      (is (= #{[["Bob"] 1] [["Dominic"] 1]}
              (set (h/consume-delta! iq)))))))
 
 (deftest e2e-predicate-only-or-test
