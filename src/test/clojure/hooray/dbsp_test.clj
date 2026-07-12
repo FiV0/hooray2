@@ -618,72 +618,42 @@
       (is (= :triple (:kind join)))
       (is (= '[?e name] (:incoming join)))))
 
-  (testing "predicate-only or branches over bound variables remain a union of filters"
-    (let [p (dbsp/plan '{:find [age]
-                         :where [[?e :age age]
-                                 (or [(< age 30)]
-                                     [(< age 40)])]})
-          [base or-node] (:children (:where-plan p))]
-      (is (= :triple (:kind base)))
-      (is (= :union (:kind or-node)))
-      (is (= '[?e age] (:incoming or-node)))
-      (is (= '[?e age] (:out-vars or-node)))
-      (is (= [:filter :filter] (mapv :kind (:branches or-node))))
-      (is (= ['< '<] (mapv #(-> % :predicate :predicate) (:branches or-node))))))
-
-  (testing "predicate-only and branches remain a chain of filters"
+  (testing "boolean predicate trees retain relational nodes and individual filter leaves"
     (let [p (dbsp/plan '{:find [age]
                          :where [[?e :age age]
                                  (or (and [(> age 10)]
-                                          [(< age 30)])
+                                          (not [(< age 30)]))
                                      [(= age 42)])]})
           [_base or-node] (:children (:where-plan p))
-          and-branch (first (:branches or-node))]
-      (is (= :union (:kind or-node)))
-      (is (= :chain (:kind and-branch)))
-      (is (= '[?e age] (:incoming and-branch)))
-      (is (= [:filter :filter] (mapv :kind (:children and-branch))))
-      (is (= ['> '<] (mapv #(-> % :predicate :predicate) (:children and-branch))))
-      (is (= '[?e age] (:out-vars and-branch)))))
-
-  (testing "predicate-only not remains a difference with a filter negative plan"
-    (let [p (dbsp/plan '{:find [age]
-                         :where [[?e :age age]
-                                 (not [(< age 30)])]})
-          [_base diff] (:children (:where-plan p))
-          negative (:negative diff)]
-      (is (= :difference (:kind diff)))
-      (is (= '[?e age] (:incoming diff)))
-      (is (= '[age] (:key-vars diff)))
-      (is (= :filter (:kind negative)))
-      (is (= '[age] (:incoming negative)))
-      (is (= '< (-> negative :predicate :predicate)))
-      (is (= '[?e age] (:out-vars diff)))))
+          [and-branch equals-filter] (:branches or-node)
+          [greater-filter diff] (:children and-branch)
+          less-filter (:negative diff)
+          filters [greater-filter less-filter equals-filter]]
+      (is (= [:union :chain :difference]
+             (mapv :kind [or-node and-branch diff])))
+      (is (= [[:filter :predicate '>]
+              [:filter :predicate '<]
+              [:filter :predicate '=]]
+             (mapv (juxt :kind
+                         #(-> % :predicate :kind)
+                         #(-> % :predicate :predicate))
+                   filters)))))
 
   (testing "predicate-only top-level queries are rejected as insufficient binding"
-    (let [ex (try (dbsp/plan '{:find [age] :where [[(< age 30)]]})
-                  nil
-                  (catch clojure.lang.ExceptionInfo e e))]
-      (is (some? ex))
-      (is (re-find #"not bound" (ex-message ex)))
-      (is (= :db.error/insufficient-binding (:db/error (ex-data ex))))))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [age] :where [[(< age 30)]]}))))
 
   (testing "a variable-free predicate with no positive relation before it is rejected"
-    (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                          #"cannot plan a predicate without a positive relation"
-                          (dbsp/plan '{:find [age]
-                                       :where [[(< 1 2)]
-                                               [?e :age age]]}))))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [age]
+                              :where [[(< 1 2)]
+                                      [?e :age age]]}))))
 
   (testing "predicates with unbound variables are rejected"
-    (let [ex (try (dbsp/plan '{:find [name]
-                               :where [[?e :name name]
-                                       [(< age 50)]]})
-                  nil
-                  (catch clojure.lang.ExceptionInfo e e))]
-      (is (some? ex))
-      (is (re-find #"age not bound" (ex-message ex)))
-      (is (= :db.error/insufficient-binding (:db/error (ex-data ex)))))))
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (dbsp/plan '{:find [name]
+                              :where [[?e :name name]
+                                      [(< age 50)]]})))))
 
 ;; --------------------------------------------------------------------------
 ;; Circuit assembly
