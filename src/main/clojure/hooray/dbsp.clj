@@ -658,13 +658,9 @@
 ;; A `:filter` node lowers its predicate to one stateless FilterOp over the
 ;; running stream; the tuple layout is unchanged and no leaves are added.
 (defmethod assemble-node :filter
-  [^Circuit circuit {:keys [predicate out-vars] :as node} acc]
+  [^Circuit circuit {:keys [predicate out-vars] :as node} {:keys [stream vars] :as acc}]
   (check-incoming! node acc)
-  (let [stream (.addUnary circuit
-                          (FilterOp/fromPredicate
-                           "filter-predicate"
-                           (predicate-filter predicate (:vars acc)))
-                          (:stream acc))]
+  (let [stream (.addUnary circuit (FilterOp/fromPredicate "filter-predicate" (predicate-filter predicate vars)) stream)]
     (assoc acc :stream stream :vars out-vars)))
 
 (defn plan->circuit
