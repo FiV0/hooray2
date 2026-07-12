@@ -655,8 +655,7 @@
       (test [_ tuple]
         (boolean (apply f (map #(% tuple) arg-readers)))))))
 
-;; A `:filter` node lowers its predicate to one stateless FilterOp over the
-;; running stream; the tuple layout is unchanged and no leaves are added.
+;; A `:filter` node lowers its predicate to one stateless FilterOp over the running stream
 (defmethod assemble-node :filter
   [^Circuit circuit {:keys [predicate out-vars] :as node} {:keys [stream vars] :as acc}]
   (check-incoming! node acc)
