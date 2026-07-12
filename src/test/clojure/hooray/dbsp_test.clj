@@ -601,7 +601,7 @@
       (is (= :filter (:kind filter-node)))
       (is (= '[?e name age] (:incoming filter-node)))
       (is (= '[?e name age] (:out-vars filter-node)))
-      (is (= ['<] (mapv :predicate (:predicates filter-node))))
+      (is (= '< (-> filter-node :predicate :predicate)))
       (is (= '[?e name age] (:result-vars p)))))
 
   (testing "a predicate is scheduled as soon as its variables are grounded"
@@ -618,18 +618,47 @@
       (is (= :triple (:kind join)))
       (is (= '[?e name] (:incoming join)))))
 
-  (testing "predicate-only or branches over bound variables plan as one composite filter"
+  (testing "predicate-only or branches over bound variables remain a union of filters"
     (let [p (dbsp/plan '{:find [age]
                          :where [[?e :age age]
                                  (or [(< age 30)]
                                      [(< age 40)])]})
-          [base filter-node] (:children (:where-plan p))
-          [or-pred] (:predicates filter-node)]
+          [base or-node] (:children (:where-plan p))]
       (is (= :triple (:kind base)))
-      (is (= :filter (:kind filter-node)))
-      (is (= :or (:kind or-pred)))
-      (is (= 2 (count (:branches or-pred))))
-      (is (= '[?e age] (:out-vars filter-node)))))
+      (is (= :union (:kind or-node)))
+      (is (= '[?e age] (:incoming or-node)))
+      (is (= '[?e age] (:out-vars or-node)))
+      (is (= [:filter :filter] (mapv :kind (:branches or-node))))
+      (is (= ['< '<] (mapv #(-> % :predicate :predicate) (:branches or-node))))))
+
+  (testing "predicate-only and branches remain a chain of filters"
+    (let [p (dbsp/plan '{:find [age]
+                         :where [[?e :age age]
+                                 (or (and [(> age 10)]
+                                          [(< age 30)])
+                                     [(= age 42)])]})
+          [_base or-node] (:children (:where-plan p))
+          and-branch (first (:branches or-node))]
+      (is (= :union (:kind or-node)))
+      (is (= :chain (:kind and-branch)))
+      (is (= '[?e age] (:incoming and-branch)))
+      (is (= [:filter :filter] (mapv :kind (:children and-branch))))
+      (is (= ['> '<] (mapv #(-> % :predicate :predicate) (:children and-branch))))
+      (is (= '[?e age] (:out-vars and-branch)))))
+
+  (testing "predicate-only not remains a difference with a filter negative plan"
+    (let [p (dbsp/plan '{:find [age]
+                         :where [[?e :age age]
+                                 (not [(< age 30)])]})
+          [_base diff] (:children (:where-plan p))
+          negative (:negative diff)]
+      (is (= :difference (:kind diff)))
+      (is (= '[?e age] (:incoming diff)))
+      (is (= '[age] (:key-vars diff)))
+      (is (= :filter (:kind negative)))
+      (is (= '[age] (:incoming negative)))
+      (is (= '< (-> negative :predicate :predicate)))
+      (is (= '[?e age] (:out-vars diff)))))
 
   (testing "predicate-only top-level queries are rejected as insufficient binding"
     (let [ex (try (dbsp/plan '{:find [age] :where [[(< age 30)]]})
@@ -1054,17 +1083,17 @@
       (is (= #{[["Bob"] 1] [["Dominic"] 1]}
              (set (h/consume-delta! iq)))))))
 
-(deftest e2e-predicate-only-or-filter-test
-  (testing "predicate-only or branches filter outer-bound values"
+(deftest e2e-predicate-only-or-test
+  (testing "overlapping predicate-only or branches filter outer-bound values with set semantics"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [age]
                              :where [[?e :age age]
                                      (or [(< age 30)]
-                                         [(> age 40)])]})]
+                                         [(< age 40)])]})]
       (h/transact node [{:db/id :young :age 20}
                         {:db/id :middle :age 35}
                         {:db/id :older :age 45}])
-      (is (= #{[[20] 1] [[45] 1]}
+      (is (= #{[[20] 1] [[35] 1]}
              (set (h/consume-delta! iq)))))))
 
 (deftest e2e-predicate-inside-or-and-branch-test
@@ -1083,8 +1112,8 @@
       (is (= #{[["Young"] 1] [["Fallback"] 1]}
              (set (h/consume-delta! iq)))))))
 
-(deftest e2e-predicate-not-filter-test
-  (testing "not over a bound predicate compiles as a negated filter"
+(deftest e2e-predicate-not-test
+  (testing "not over a bound predicate anti-joins rows matching the predicate"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
                              :where [[?e :name name]

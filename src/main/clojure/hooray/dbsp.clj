@@ -228,9 +228,9 @@
 ;;   :permute      reorders the running stream to an explicit target layout;
 ;;                 never carries `:incoming` (it is a unary reordering of
 ;;                 whatever stream it follows)
-;;   :filter       applies a composite stateless predicate to the running
-;;                 stream (`:incoming` is required); rows that fail are
-;;                 dropped, the layout is unchanged (out-vars = incoming)
+;;   :filter       applies a stateless predicate to the running stream
+;;                 (`:incoming` is required); rows that fail are dropped,
+;;                 the layout is unchanged (out-vars = incoming)
 ;;
 ;; A scope (the top-level `:where`, an `and` and a `not` body)
 ;; plans its descriptors in `left-deep-order`, each node extending its
@@ -328,29 +328,12 @@
                :out-vars target}
         (:incoming node) (assoc :incoming (:incoming node))))))
 
-(defn- filter-only-descriptor?
-  "True when [descriptor] is a boolean condition over an existing row rather
-  than a finite relation that can produce rows on its own."
-  [descriptor]
-  (case (:kind descriptor)
-    :predicate true
-    :and (every? filter-only-descriptor? (:children descriptor))
-    :or (every? filter-only-descriptor? (:branches descriptor))
-    :not (every? filter-only-descriptor? (:children descriptor))
-    false))
-
 (defmulti ^:private plan-node
-  "Plans one [descriptor] as a plan node, dispatching on its `:kind` —
-  except that a filter-only descriptor (a bare predicate, or an
-  `or`/`and`/`not` whose entire subtree is predicates) dispatches to
-  `:filter`. With [incoming] being the running relation stream column layout.
-  The node extends that relation; without it the node produces its stream
-  standalone. With [target], each method arranges the node's output to that
-  variable order."
-  (fn [descriptor _incoming _target]
-    (if (filter-only-descriptor? descriptor)
-      :filter
-      (:kind descriptor))))
+  "Plans one [descriptor] as a plan node, dispatching on its `:kind`. With
+  [incoming] being the running relation stream column layout. The node extends
+  that relation; without it the node produces its stream standalone. With
+  [target], each method arranges the node's output to that variable order."
+  (fn [descriptor _incoming _target] (:kind descriptor)))
 
 (defn- triple-plan
   "Plan for one triple descriptor, producing its variables in [target] order.
@@ -452,19 +435,18 @@
                :out-vars (vec incoming)}
         target (ensure-target target)))))
 
-;; A filter-only descriptor (a bare predicate, or an `or`/`and`/`not` whose
-;; entire subtree is predicates) cannot produce rows on its own: it filters
-;; the running relation in place. Its `:groundable` is empty, so
-;; `left-deep-order` only schedules it once all its variables are grounded;
-;; [incoming] is nil only when there is no positive relation to filter.
-(defmethod plan-node :filter
+;; A predicate cannot produce rows on its own: it filters the running relation
+;; in place. Its `:groundable` is empty, so `left-deep-order` only schedules it
+;; once all its variables are grounded; [incoming] is nil only when there is no
+;; positive relation to filter.
+(defmethod plan-node :predicate
   [descriptor incoming target]
   (when-not incoming
     (err/unsupported-ex "DBSP-standard engine cannot plan a predicate without a positive relation"
                         {:descriptor descriptor}))
   (cond-> {:kind :filter
            :incoming (vec incoming)
-           :predicates [descriptor]
+           :predicate descriptor
            :out-vars (vec incoming)}
     target (ensure-target target)))
 
@@ -664,8 +646,6 @@
                                   {:var (:var arg) :layout layout})))
                 (fn [^Tuple tuple] (.get tuple (int idx))))))
 
-(declare filter-predicate)
-
 (defn- predicate-filter [descriptor layout]
   (let [f (query/resolve-fn (:predicate descriptor))
         var->idx (zipmap layout (range))
@@ -674,48 +654,16 @@
       (test [_ tuple]
         (boolean (apply f (map #(% tuple) arg-readers)))))))
 
-(defn- and-filter [children layout]
-  (let [predicates (mapv #(filter-predicate % layout) children)]
-    (reify Predicate
-      (test [_ tuple]
-        (every? #(.test ^Predicate % tuple) predicates)))))
-
-(defn- or-filter [branches layout]
-  (let [predicates (mapv #(filter-predicate % layout) branches)]
-    (reify Predicate
-      (test [_ tuple]
-        (boolean (some #(.test ^Predicate % tuple) predicates))))))
-
-(defn- not-filter [children layout]
-  (let [predicate (and-filter children layout)]
-    (reify Predicate
-      (test [_ tuple]
-        (not (.test ^Predicate predicate tuple))))))
-
-(defn- filter-predicate
-  "Builds a composite `java.util.function.Predicate` over tuples in [layout]
-  for a filter-only descriptor."
-  [descriptor layout]
-  (case (:kind descriptor)
-    :predicate (predicate-filter descriptor layout)
-    :and (and-filter (:children descriptor) layout)
-    :or (or-filter (:branches descriptor) layout)
-    :not (not-filter (:children descriptor) layout)))
-
-;; A `:filter` node lowers to one stateless FilterOp per composite predicate
-;; over the running stream; the tuple layout is unchanged and no leaves are
-;; added.
+;; A `:filter` node lowers its predicate to one stateless FilterOp over the
+;; running stream; the tuple layout is unchanged and no leaves are added.
 (defmethod assemble-node :filter
-  [^Circuit circuit {:keys [predicates out-vars] :as node} acc]
+  [^Circuit circuit {:keys [predicate out-vars] :as node} acc]
   (check-incoming! node acc)
-  (let [stream (reduce (fn [stream predicate]
-                         (.addUnary circuit
-                                    (FilterOp/fromPredicate
-                                     "filter-predicate"
-                                     (filter-predicate predicate (:vars acc)))
-                                    stream))
-                       (:stream acc)
-                       predicates)]
+  (let [stream (.addUnary circuit
+                          (FilterOp/fromPredicate
+                           "filter-predicate"
+                           (predicate-filter predicate (:vars acc)))
+                          (:stream acc))]
     (assoc acc :stream stream :vars out-vars)))
 
 (defn plan->circuit
