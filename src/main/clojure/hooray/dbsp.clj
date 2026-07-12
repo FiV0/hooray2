@@ -644,16 +644,28 @@
                 (when (nil? idx)
                   (throw (ex-info "variable not present in filter input layout"
                                   {:var (:var arg) :layout layout})))
-                (fn [^Tuple tuple] (.get tuple (int idx))))))
+                (let [idx (int idx)]
+                  (fn [^Tuple tuple] (.get tuple idx))))))
 
-;; TODO The tuple extraction logic could be optimized.
+;; `test` runs once per tuple per delta, so the common arities call [f]
+;; directly instead of paying `apply` + a lazy arg seq on every tuple.
 (defn- predicate-filter [{:keys [predicate args] :as _descriptor} layout]
   (let [f (query/resolve-fn predicate)
         var->idx (zipmap layout (range))
-        arg-readers (mapv #(arg-reader % layout var->idx) args)]
-    (reify Predicate
-      (test [_ tuple]
-        (boolean (apply f (map #(% tuple) arg-readers)))))))
+        arg-readers (mapv #(arg-reader % layout var->idx) args)
+        [r0 r1 r2] arg-readers]
+    (case (count arg-readers)
+      0 (reify Predicate
+          (test [_ _tuple] (boolean (f))))
+      1 (reify Predicate
+          (test [_ tuple] (boolean (f (r0 tuple)))))
+      2 (reify Predicate
+          (test [_ tuple] (boolean (f (r0 tuple) (r1 tuple)))))
+      3 (reify Predicate
+          (test [_ tuple] (boolean (f (r0 tuple) (r1 tuple) (r2 tuple)))))
+      (reify Predicate
+        (test [_ tuple]
+          (boolean (apply f (mapv #(% tuple) arg-readers))))))))
 
 ;; A `:filter` node lowers its predicate to one stateless FilterOp over the running stream
 (defmethod assemble-node :filter
