@@ -435,7 +435,7 @@
                :out-vars (vec incoming)}
         target (ensure-target target)))))
 
-;; A predicate cannot produce rows on its own: it filters the running relation
+;; A predicate cannot produce rows on its own. It filters the running relation
 ;; in place. Its `:groundable` is empty, so `left-deep-order` only schedules it
 ;; once all its variables are grounded; [incoming] is nil only when there is no
 ;; positive relation to filter.
