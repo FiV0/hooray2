@@ -646,10 +646,11 @@
                                   {:var (:var arg) :layout layout})))
                 (fn [^Tuple tuple] (.get tuple (int idx))))))
 
-(defn- predicate-filter [descriptor layout]
-  (let [f (query/resolve-fn (:predicate descriptor))
+;; TODO The tuple extraction logic could be optimized.
+(defn- predicate-filter [{:keys [predicate args] :as _descriptor} layout]
+  (let [f (query/resolve-fn predicate)
         var->idx (zipmap layout (range))
-        arg-readers (mapv #(arg-reader % layout var->idx) (:args descriptor))]
+        arg-readers (mapv #(arg-reader % layout var->idx) args)]
     (reify Predicate
       (test [_ tuple]
         (boolean (apply f (map #(% tuple) arg-readers)))))))
