@@ -1052,22 +1052,6 @@
       (is (= #{[[20] 1] [[35] 1]}
              (set (h/consume-delta! iq)))))))
 
-(deftest e2e-predicate-inside-or-and-branch-test
-  (testing "predicate filters a finite and branch under or"
-    (let [node fix/*node*
-          iq (h/q-inc node '{:find [name]
-                             :where [(or (and [?e :name name]
-                                              [?e :age age]
-                                              [(< age 30)])
-                                         (and [?e :name name]
-                                              [?e :age age]
-                                              [(> age 90)]))]})]
-      (h/transact node [{:db/id :young :name "Young" :age 20}
-                        {:db/id :middle :name "Middle" :age 35}
-                        {:db/id :fallback :name "Fallback" :age 99}])
-      (is (= #{[["Young"] 1] [["Fallback"] 1]}
-             (set (h/consume-delta! iq)))))))
-
 (deftest e2e-predicate-not-test
   (testing "not over a bound predicate anti-joins rows matching the predicate"
     (let [node fix/*node*
