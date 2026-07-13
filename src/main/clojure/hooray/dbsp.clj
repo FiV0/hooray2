@@ -230,8 +230,8 @@
 ;; operator projects to the pattern's variable columns.
 ;;
 ;; The plan is a tree of nodes `{:kind … :out-vars […] …}` with kinds
-;; `:triple`, `:chain`, `:union`, `:difference`, `:permute`, `:filter`,
-;; `:function-map` and `:function-filter`. A node
+;; `:triple`, `:chain`, `:union`, `:difference`, `:permute`, `:filter` and
+;; `:function`. A node
 ;; optionally carries `:incoming`, the column layout of the running relation
 ;; it extends — the stream of the already-built left partial sub-tree of the
 ;; query. Without `:incoming` a node produces its stream standalone, rooted
@@ -258,13 +258,11 @@
 ;;   :filter       applies a stateless predicate to the running stream
 ;;                 (`:incoming` is required); rows that fail are dropped,
 ;;                 the layout is unchanged (out-vars = incoming)
-;;   :function-map appends a function clause's computed value to every row
-;;                 of the running stream as a new trailing column
-;;                 (`:incoming` is required; out-vars = incoming + ret-var)
-;;   :function-filter
-;;                 keeps only the running stream's rows whose already-bound
-;;                 result column equals the function clause's computed value
-;;                 (`:incoming` is required; out-vars = incoming)
+;;   :function     computes a function clause over the running stream. When
+;;                 its result variable is absent from `:incoming`, it appends
+;;                 the computed value as a new trailing column. When the result
+;;                 variable is already present, it keeps only rows where that
+;;                 column equals the computed value (`:incoming` is required)
 ;;
 ;; A scope (the top-level `:where`, an `and` and a `not` body)
 ;; plans its descriptors in `left-deep-order`, each node extending its
@@ -484,26 +482,23 @@
            :out-vars (vec incoming)}
     target (ensure-target target)))
 
-;; A function clause extends the running relation row-by-row. With a NEW
-;; result variable it appends the computed value as a trailing column
-;; (`:function-map`); with an already-bound result variable it keeps only the
-;; rows whose bound value equals the computed one (`:function-filter`).
+;; A function clause extends the running relation row-by-row. The single
+;; `:function` plan node records whether its result variable is already present
+;; in [incoming] through its input and output layouts; circuit construction
+;; chooses whether to append the result or join it with the existing binding.
 ;; [incoming] is nil only when there is no positive relation to extend.
 (defmethod plan-node :fn
   [{:keys [ret-var] :as descriptor} incoming target]
   (when-not incoming
     (err/unsupported-ex "DBSP-standard engine cannot plan a function without a positive relation"
                         {:descriptor descriptor}))
-  (let [incoming (vec incoming)]
-    (cond-> (if (some #{ret-var} incoming)
-              {:kind :function-filter
-               :incoming incoming
-               :function descriptor
-               :out-vars incoming}
-              {:kind :function-map
-               :incoming incoming
-               :function descriptor
-               :out-vars (conj incoming ret-var)})
+  (let [incoming (vec incoming)
+        out-vars (cond-> incoming
+                   (not (some #{ret-var} incoming)) (conj ret-var))]
+    (cond-> {:kind :function
+             :incoming incoming
+             :function descriptor
+             :out-vars out-vars}
       target (ensure-target target))))
 
 (defn- plan-scope
@@ -760,22 +755,22 @@
       2 (reify Predicate
           (test [_ tuple] (= (f (r0 tuple) (r1 tuple)) (ret-reader tuple)))))))
 
-;; A `:function-map` appends the computed value to every running-stream row.
-(defmethod assemble-node :function-map
-  [^Circuit circuit {:keys [function out-vars] :as node} {:keys [stream vars] :as acc}]
+;; A `:function` either appends a newly computed result or keeps rows whose
+;; existing result binding equals the computed value. The planned `:incoming`
+;; layout determines which circuit operator is required.
+(defmethod assemble-node :function
+  [^Circuit circuit {:keys [function incoming out-vars] :as node} {:keys [stream vars] :as acc}]
   (check-incoming! node acc)
-  (let [stream (.addUnary circuit
-                          (MapOp/fromFunction "map-function" (function-map-transform function vars))
-                          stream)]
-    (assoc acc :stream stream :vars out-vars)))
-
-;; A `:function-filter` keeps rows whose bound result equals the computed value.
-(defmethod assemble-node :function-filter
-  [^Circuit circuit {:keys [function out-vars] :as node} {:keys [stream vars] :as acc}]
-  (check-incoming! node acc)
-  (let [stream (.addUnary circuit
-                          (FilterOp/fromPredicate "filter-function" (function-filter-predicate function vars))
-                          stream)]
+  (let [{:keys [ret-var]} function
+        stream (if (some #{ret-var} incoming)
+                 (.addUnary circuit
+                            (FilterOp/fromPredicate "filter-function"
+                                                    (function-filter-predicate function vars))
+                            stream)
+                 (.addUnary circuit
+                            (MapOp/fromFunction "map-function"
+                                                (function-map-transform function vars))
+                            stream))]
     (assoc acc :stream stream :vars out-vars)))
 
 (defn plan->circuit

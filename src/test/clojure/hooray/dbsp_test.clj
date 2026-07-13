@@ -725,31 +725,31 @@
                                       [(< age 50)]]})))))
 
 (deftest plan-function-test
-  (testing "a fn with a new result variable plans as a :function-map appending a column"
+  (testing "a fn with a new result variable plans as a :function node appending a column"
     (let [p (dbsp/plan '{:find [half]
                          :where [[?e :age age]
                                  [(quot age 2) half]]})
           chain (:where-plan p)
-          [base map-node] (:children chain)]
+          [base function-node] (:children chain)]
       (is (= :chain (:kind chain)))
       (is (= :triple (:kind base)))
-      (is (= :function-map (:kind map-node)))
-      (is (= '[?e age] (:incoming map-node)))
-      (is (= '[?e age half] (:out-vars map-node)))
-      (is (= 'quot (-> map-node :function :fn)))
+      (is (= :function (:kind function-node)))
+      (is (= '[?e age] (:incoming function-node)))
+      (is (= '[?e age half] (:out-vars function-node)))
+      (is (= 'quot (-> function-node :function :fn)))
       (is (= '[?e age half] (:result-vars p)))
       (is (= [2] (:final-permute p)))))
 
-  (testing "a fn whose result variable is already bound plans as a :function-filter"
+  (testing "a fn whose result variable is already bound plans as a :function node"
     (let [p (dbsp/plan '{:find [age]
                          :where [[?e :age age]
                                  [?e :salary half]
                                  [(quot age 2) half]]})
-          [_base _join filter-node] (:children (:where-plan p))]
-      (is (= :function-filter (:kind filter-node)))
-      (is (= '[?e age half] (:incoming filter-node)))
-      (is (= '[?e age half] (:out-vars filter-node)))
-      (is (= 'quot (-> filter-node :function :fn)))))
+          [_base _join function-node] (:children (:where-plan p))]
+      (is (= :function (:kind function-node)))
+      (is (= '[?e age half] (:incoming function-node)))
+      (is (= '[?e age half] (:out-vars function-node)))
+      (is (= 'quot (-> function-node :function :fn)))))
 
   (testing "fn branches of an or are arranged to the union layout"
     (let [p (dbsp/plan '{:find [res]
@@ -759,11 +759,11 @@
           [_base or-node] (:children (:where-plan p))]
       (is (= :union (:kind or-node)))
       (is (= '[?e age res] (:out-vars or-node)))
-      (is (= [[:function-map '[?e age res]]
-              [:function-map '[?e age res]]]
+      (is (= [[:function '[?e age res]]
+              [:function '[?e age res]]]
              (mapv (juxt :kind :out-vars) (:branches or-node))))))
 
-  (testing "a fn inside a not body plans as a :function-filter over the key columns"
+  (testing "a fn inside a not body plans as a :function over the key columns"
     (let [p (dbsp/plan '{:find [name]
                          :where [[?e :name name]
                                  [?e :age age]
@@ -773,7 +773,7 @@
           negative (:negative diff)]
       (is (= :difference (:kind diff)))
       (is (= '[age sal] (:key-vars diff)))
-      (is (= :function-filter (:kind negative)))
+      (is (= :function (:kind negative)))
       (is (= '[age sal] (:incoming negative)))
       (is (= '[age sal] (:out-vars negative)))))
 
