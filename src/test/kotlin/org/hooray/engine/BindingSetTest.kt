@@ -256,7 +256,6 @@ class BindingSetTest {
 
         val index = bindings.indexBy(listOf("?age", "?e"))
 
-        assertEquals(listOf("?age", "?e"), index.variables)
         assertEquals(
             linkedMapOf(
                 listOf(35, "a") to listOf(0, 1),
@@ -428,6 +427,26 @@ class BindingSetTest {
             BindingSet(
                 variables = listOf("?e", "?age", "?name"),
                 rows = listOf(listOf("a", 35, "A")),
+            ),
+            left.join(right),
+        )
+    }
+
+    @Test
+    fun `natural join preserves multiplicity when every right variable is shared`() {
+        val left = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a"), listOf("b")),
+        )
+        val right = BindingSet(
+            variables = listOf("?e"),
+            rows = listOf(listOf("a"), listOf("a")),
+        )
+
+        assertEquals(
+            BindingSet(
+                variables = listOf("?e"),
+                rows = listOf(listOf("a"), listOf("a")),
             ),
             left.join(right),
         )

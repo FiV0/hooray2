@@ -8,7 +8,6 @@ data class RowExtension(
 )
 
 data class BindingIndex(
-    val variables: List<Any>,
     val rowIndexesByKey: Map<BindingRow, List<Int>>,
 )
 
@@ -84,7 +83,6 @@ data class BindingSet(
         }
 
         return BindingIndex(
-            variables = indexVariables,
             rowIndexesByKey = mutableIndex.mapValues { (_, rowIndexes) -> rowIndexes.toList() },
         )
     }
@@ -165,10 +163,13 @@ data class BindingSet(
     ): BindingSet {
         val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
         val leftKeyIndexes = sharedVariables.map(::columnIndex)
-        val rightIndex = other.indexBy(sharedVariables)
+        val rightKeyIndexes = sharedVariables.map(other::columnIndex)
+        val rightKeys = other.rows.mapTo(hashSetOf()) { row ->
+            rightKeyIndexes.map { index -> row[index] }
+        }
         val filteredRows = rows.filter { row ->
             val key = leftKeyIndexes.map { index -> row[index] }
-            rightIndex.rowIndexesByKey.containsKey(key) == keepMatches
+            (key in rightKeys) == keepMatches
         }
         return BindingSet(variables, filteredRows)
     }
