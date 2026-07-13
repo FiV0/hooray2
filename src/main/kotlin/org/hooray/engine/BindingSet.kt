@@ -1,5 +1,9 @@
 package org.hooray.engine
 
+import clojure.lang.Symbol
+
+typealias Variable = Symbol
+
 typealias BindingRow = List<Any>
 
 data class RowExtension(
@@ -12,10 +16,10 @@ data class BindingIndex(
 )
 
 data class BindingSet(
-    val variables: List<Any>,
+    val variables: List<Variable>,
     val rows: List<BindingRow>,
 ) {
-    val columnIndexes: Map<Any, Int>
+    val columnIndexes: Map<Variable, Int>
 
     init {
         require(variables.toSet().size == variables.size) {
@@ -32,17 +36,17 @@ data class BindingSet(
     val rowCount: Int
         get() = rows.size
 
-    fun valueAt(rowIndex: Int, variable: Any): Any {
+    fun valueAt(rowIndex: Int, variable: Variable): Any {
         return rows[rowIndex][columnIndex(variable)]
     }
 
-    fun columnIndex(variable: Any): Int {
+    fun columnIndex(variable: Variable): Int {
         return columnIndexes[variable]
             ?: throw IllegalArgumentException("Unknown variable $variable")
     }
 
     fun extend(
-        introducedVariables: List<Any>,
+        introducedVariables: List<Variable>,
         extensions: List<RowExtension>,
     ): BindingSet {
         require(introducedVariables.toSet().size == introducedVariables.size) {
@@ -70,7 +74,7 @@ data class BindingSet(
         return BindingSet(variables, rows.distinct())
     }
 
-    fun indexBy(indexVariables: List<Any>): BindingIndex {
+    fun indexBy(indexVariables: List<Variable>): BindingIndex {
         require(indexVariables.toSet().size == indexVariables.size) {
             "Index variables must be distinct"
         }
@@ -97,7 +101,7 @@ data class BindingSet(
         return BindingSet(variables, selectedRows)
     }
 
-    fun project(targetVariables: List<Any>): BindingSet {
+    fun project(targetVariables: List<Variable>): BindingSet {
         require(targetVariables.toSet().size == targetVariables.size) {
             "Projection variables must be distinct"
         }
@@ -146,7 +150,7 @@ data class BindingSet(
         return BindingSet(variables, (rows + alignedOther.rows).distinct())
     }
 
-    fun reorder(targetVariables: List<Any>): BindingSet {
+    fun reorder(targetVariables: List<Variable>): BindingSet {
         require(targetVariables.toSet().size == targetVariables.size) {
             "Target layout variables must be distinct"
         }
