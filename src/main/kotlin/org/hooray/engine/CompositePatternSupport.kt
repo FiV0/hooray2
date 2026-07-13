@@ -3,7 +3,7 @@ package org.hooray.engine
 import java.util.concurrent.ConcurrentHashMap
 
 internal data class GroundingClosure(
-    val groups: List<GroundingGroup>,
+    val groundable: List<Variable>,
     val covered: Set<Variable>,
 )
 
@@ -15,31 +15,30 @@ internal fun branchOrderedVariables(branch: PatternBranch): List<Variable> {
 
 internal fun groundingClosure(
     patterns: List<PlanPattern>,
-    initiallyBound: List<Variable>,
+    initiallyBound: Set<Variable>,
 ): GroundingClosure {
-    require(initiallyBound.toSet().size == initiallyBound.size) { "Bound variables must be distinct" }
     val covered = initiallyBound.toMutableSet()
-    val groups = mutableListOf<GroundingGroup>()
+    val groundable = mutableListOf<Variable>()
 
     var changed: Boolean
     do {
         changed = false
         for (pattern in patterns) {
-            for (group in pattern.groundingGroups(covered.toList())) {
-                require(pattern.orderedVariables.containsAll(group.variables)) {
-                    "Pattern returned a grounding group containing variables it does not contain"
+            for (variable in pattern.groundable(covered)) {
+                require(variable in pattern.orderedVariables) {
+                    "Pattern returned a groundable variable it does not contain"
                 }
-                require(group.variables.none { it in covered }) {
-                    "Pattern returned a grounding group containing an already bound variable"
+                require(variable !in covered) {
+                    "Pattern returned an already bound variable as groundable"
                 }
-                groups += group
-                covered += group.variables
+                groundable += variable
+                covered += variable
                 changed = true
             }
         }
     } while (changed)
 
-    return GroundingClosure(groups, covered)
+    return GroundingClosure(groundable, covered)
 }
 
 internal class CachedBranchExecutor(

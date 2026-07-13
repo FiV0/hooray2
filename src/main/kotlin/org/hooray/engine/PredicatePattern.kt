@@ -12,7 +12,7 @@ class PredicatePattern(
     override val orderedVariables: List<Variable> = arguments.orderedVariables()
     override val variables: Set<Variable> = orderedVariables.toSet()
 
-    override fun groundingGroups(bound: List<Variable>): List<GroundingGroup> = emptyList()
+    override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
 
     override fun validate(
         input: BindingSet,

@@ -16,7 +16,7 @@ class PredicateFunctionPatternTest {
             predicate = { left: Any, right: Any -> (left as Int) < (right as Int) },
         )
 
-        assertEquals(emptyList<GroundingGroup>(), pattern.groundingGroups(emptyList()))
+        assertEquals(emptyList<Variable>(), pattern.groundable(emptySet()))
         assertEquals(
             listOf(listOf(5)),
             pattern.validate(
@@ -37,7 +37,7 @@ class PredicateFunctionPatternTest {
         )
         val input = BindingSet(listOf(x), listOf(listOf(5), listOf(8)))
 
-        assertEquals(listOf(GroundingGroup(listOf(y))), pattern.groundingGroups(listOf(x)))
+        assertEquals(listOf(y), pattern.groundable(setOf(x)))
         assertEquals(
             listOf(Proposal(3, 1), Proposal(3, 1)),
             pattern.count(

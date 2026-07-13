@@ -20,8 +20,8 @@ class TriplePatternTest {
         val input = BindingSet(emptyList(), listOf(emptyList()))
 
         assertEquals(
-            listOf(GroundingGroup(listOf(e)), GroundingGroup(listOf(age))),
-            pattern.groundingGroups(emptyList()),
+            listOf(e, age),
+            pattern.groundable(emptySet()),
         )
         assertEquals(
             listOf(Proposal(0, 2)),

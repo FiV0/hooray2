@@ -20,14 +20,14 @@ class OrPattern(
         variables = orderedVariables.toSet()
     }
 
-    override fun groundingGroups(bound: List<Variable>): List<GroundingGroup> {
+    override fun groundable(bound: Set<Variable>): List<Variable> {
         val missing = orderedVariables.filterNot { it in bound }
         if (missing.isEmpty()) return emptyList()
 
         val everyBranchCoversMissing = branches.all { branch ->
             groundingClosure(branch.patterns, bound).covered.containsAll(missing)
         }
-        return if (everyBranchCoversMissing) listOf(GroundingGroup(missing)) else emptyList()
+        return if (everyBranchCoversMissing) missing else emptyList()
     }
 
     override fun count(

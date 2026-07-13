@@ -19,11 +19,8 @@ class TriplePattern(
         }
     }
 
-    override fun groundingGroups(bound: List<Variable>): List<GroundingGroup> {
-        return orderedVariables
-            .filterNot { it in bound }
-            .map { GroundingGroup(listOf(it)) }
-    }
+    override fun groundable(bound: Set<Variable>): List<Variable> =
+        orderedVariables.filterNot { it in bound }
 
     override fun count(
         input: BindingSet,

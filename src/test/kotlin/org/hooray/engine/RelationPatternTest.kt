@@ -17,12 +17,12 @@ class RelationPatternTest {
     )
 
     @Test
-    fun `exposes unbound relation variables as singleton grounding groups`() {
+    fun `exposes unbound relation variables as groundable`() {
         assertEquals(
-            listOf(GroundingGroup(listOf(e)), GroundingGroup(listOf(age))),
-            pattern.groundingGroups(emptyList()),
+            listOf(e, age),
+            pattern.groundable(emptySet()),
         )
-        assertEquals(listOf(GroundingGroup(listOf(age))), pattern.groundingGroups(listOf(e)))
+        assertEquals(listOf(age), pattern.groundable(setOf(e)))
     }
 
     @Test

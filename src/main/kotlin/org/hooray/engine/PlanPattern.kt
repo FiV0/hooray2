@@ -1,24 +1,10 @@
 package org.hooray.engine
 
-data class GroundingGroup(
-    val variables: List<Variable>,
-) {
-    init {
-        require(variables.isNotEmpty()) { "Grounding groups must not be empty" }
-        require(variables.toSet().size == variables.size) {
-            "Grounding group variables must be distinct"
-        }
-    }
-}
-
 interface PlanPattern {
     val orderedVariables: List<Variable>
 
-    /**
-     * Returns indivisible variable groups that this pattern can both propose and
-     * existentially validate from the supplied bound-variable shape.
-     */
-    fun groundingGroups(bound: List<Variable>): List<GroundingGroup>
+    /** Returns variables this pattern can ground from the supplied bound variables. */
+    fun groundable(bound: Set<Variable>): List<Variable>
 }
 
 enum class StageRequestMode {

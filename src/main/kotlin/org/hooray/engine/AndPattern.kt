@@ -10,8 +10,8 @@ class AndPattern(
     override val orderedVariables: List<Variable> = branchOrderedVariables(branch)
     override val variables: Set<Variable> = orderedVariables.toSet()
 
-    override fun groundingGroups(bound: List<Variable>): List<GroundingGroup> {
-        return groundingClosure(branch.patterns, bound).groups
+    override fun groundable(bound: Set<Variable>): List<Variable> {
+        return groundingClosure(branch.patterns, bound).groundable
     }
 
     override fun count(

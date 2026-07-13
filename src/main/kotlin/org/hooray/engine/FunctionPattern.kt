@@ -15,9 +15,9 @@ class FunctionPattern(
     override val orderedVariables: List<Variable> = argumentVariables + output
     override val variables: Set<Variable> = orderedVariables.toSet()
 
-    override fun groundingGroups(bound: List<Variable>): List<GroundingGroup> {
+    override fun groundable(bound: Set<Variable>): List<Variable> {
         return if (output !in bound && bound.containsAll(argumentVariables)) {
-            listOf(GroundingGroup(listOf(output)))
+            listOf(output)
         } else {
             emptyList()
         }

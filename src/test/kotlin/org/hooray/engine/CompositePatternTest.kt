@@ -10,7 +10,7 @@ class CompositePatternTest {
     private val y = Symbol.intern("?y")
 
     @Test
-    fun `and computes grounding groups to a fixed point`() {
+    fun `and computes groundable variables to a fixed point`() {
         val relation = RelationPattern(0, BindingSet(listOf(x), listOf(listOf(1))))
         val function = FunctionPattern(
             idx = 1,
@@ -24,13 +24,13 @@ class CompositePatternTest {
         )
 
         assertEquals(
-            listOf(GroundingGroup(listOf(x)), GroundingGroup(listOf(y))),
-            pattern.groundingGroups(emptyList()),
+            listOf(x, y),
+            pattern.groundable(emptySet()),
         )
     }
 
     @Test
-    fun `or exposes all missing variables as one group only when every branch covers them`() {
+    fun `or exposes missing variables only when every branch covers them`() {
         val first = PatternBranch(
             patterns = listOf(RelationPattern(0, BindingSet(listOf(x, y), listOf(listOf(1, 2))))),
             stageFactory = StageFactory { emptyList() },
@@ -41,9 +41,9 @@ class CompositePatternTest {
         )
         val pattern = OrPattern(2, listOf(first, second))
 
-        assertEquals(listOf(GroundingGroup(listOf(x, y))), pattern.groundingGroups(emptyList()))
-        assertEquals(listOf(GroundingGroup(listOf(y))), pattern.groundingGroups(listOf(x)))
-        assertEquals(emptyList<GroundingGroup>(), pattern.groundingGroups(listOf(x, y)))
+        assertEquals(listOf(x, y), pattern.groundable(emptySet()))
+        assertEquals(listOf(y), pattern.groundable(setOf(x)))
+        assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x, y)))
 
         val incompleteBranch = PatternBranch(
             patterns = listOf(
@@ -56,8 +56,8 @@ class CompositePatternTest {
             stageFactory = StageFactory { emptyList() },
         )
         assertEquals(
-            emptyList<GroundingGroup>(),
-            OrPattern(4, listOf(first, incompleteBranch)).groundingGroups(emptyList()),
+            emptyList<Variable>(),
+            OrPattern(4, listOf(first, incompleteBranch)).groundable(emptySet()),
         )
     }
 
