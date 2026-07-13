@@ -5,12 +5,9 @@ class TriplePattern(
     private val aev: Map<Any, Map<Any, Set<Any>>>,
     private val ave: Map<Any, Map<Any, Set<Any>>>,
     private val entity: PatternValue,
-    attribute: PatternValue,
+    private val attribute: Any,
     private val value: PatternValue,
 ) : PlanPattern, ExecPattern {
-    private val attribute = (attribute as? PatternValue.Constant)?.value
-        ?: throw IllegalArgumentException("Triple pattern attributes must be constant")
-
     override val orderedVariables: List<Variable> = listOf(entity, value).orderedVariables()
     override val variables: Set<Variable> = orderedVariables.toSet()
 

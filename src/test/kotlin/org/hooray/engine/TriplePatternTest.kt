@@ -14,7 +14,7 @@ class TriplePatternTest {
             TestTriple("a", "age", 35),
             TestTriple("b", "age", 40),
             entity = PatternValue.Variable(e),
-            attribute = PatternValue.Constant("age"),
+            attribute = "age",
             value = PatternValue.Variable(age),
         )
         val input = BindingSet(emptyList(), listOf(emptyList()))
@@ -39,7 +39,7 @@ class TriplePatternTest {
             TestTriple("a", "age", 35),
             TestTriple("b", "age", 40),
             entity = PatternValue.Variable(e),
-            attribute = PatternValue.Constant("age"),
+            attribute = "age",
             value = PatternValue.Variable(age),
         )
 
@@ -67,7 +67,7 @@ class TriplePatternTest {
             TestTriple("a", "age", 35),
             TestTriple("b", "name", "B"),
             entity = PatternValue.Variable(e),
-            attribute = PatternValue.Constant("age"),
+            attribute = "age",
             value = PatternValue.Variable(age),
         )
 
@@ -92,7 +92,7 @@ class TriplePatternTest {
     private fun triplePattern(
         vararg triples: TestTriple,
         entity: PatternValue,
-        attribute: PatternValue,
+        attribute: Any,
         value: PatternValue,
     ): TriplePattern {
         val indexes = indexes(*triples)
