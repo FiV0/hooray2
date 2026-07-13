@@ -9,7 +9,7 @@ class FactLSMTest {
 
     /** Exactly `count` distinct single-column facts, disjoint per `from`. */
     private fun distinctFacts(from: Int, count: Int): List<TestFact> =
-        (from until from + count).map { listOf(listOf(it and 0xFF)) }
+        (from until from + count).map { listOf<Any?>(it.toLong()) }
 
     @Test
     fun `push maintains the doubling invariant`() {
@@ -29,8 +29,8 @@ class FactLSMTest {
 
     @Test
     fun `flatten merges to the union of all facts`() {
-        val xs = fixedTuples(100, 2, 3)
-        val ys = fixedTuples(100, 2, 4)
+        val xs = longTuples(100, 2, 3)
+        val ys = longTuples(100, 2, 4)
         val lsm = FactLSM()
         lsm.push(forestOf(xs))
         lsm.push(forestOf(ys))
@@ -58,9 +58,9 @@ class FactLSMTest {
     @Test
     fun `pushing mismatched arities throws`() {
         val lsm = FactLSM()
-        lsm.push(forestOf(listOf(listOf(listOf(1)))))
+        lsm.push(forestOf(listOf(listOf<Any?>(1L))))
         assertThrows(IllegalArgumentException::class.java) {
-            lsm.push(forestOf(listOf(listOf(listOf(1), listOf(2)))))
+            lsm.push(forestOf(listOf(listOf<Any?>(1L, 2L))))
         }
     }
 }

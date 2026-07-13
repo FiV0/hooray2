@@ -27,7 +27,7 @@ class Layer(val bounds: Strides = Strides(), val values: Terms = Terms()) {
 
     /**
      * Appends lists `[lower, upper)` of `other` (Rust `Vecs::extend_from_self` at the
-     * outer level): bulk-copies their items, then pushes the shifted list bounds.
+     * outer level): one bulk copy of their items, then the shifted list bounds.
      */
     fun extendFromSelf(other: Layer, lower: Int, upper: Int) {
         if (lower >= upper) return

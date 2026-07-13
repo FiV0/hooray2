@@ -20,20 +20,10 @@ internal object Kernels {
      * `groups`, minting a new item for each distinct `(group, item)` pair and a new list
      * for each distinct group, rewriting `groups` with output item indexes unless `last`.
      *
-     * Mirrors `<Terms as FactColumn>::sort` (trie.rs:924-931): width-4 items take the
-     * radix path, widths 1-3 a fixed-width comparator inside [colSort], anything else the
-     * generic comparator. Deferred: the analogous width dispatch for union/intersect/
-     * retainLists/retainItems (Rust's `Some(1..=4)` match arms); the generic paths are
-     * always correct.
+     * Mirrors Rust's generic `col_sort` (trie.rs:1184-1209); datatoad's byte-width
+     * dispatch (radix and fixed-width paths) does not apply to object items.
      */
-    fun sort(items: Terms, groups: IntArray, indexs: IntArray, last: Boolean): Layer =
-        when (items.bounds.strided()) {
-            4 -> u32Sort(items, groups, indexs, last)
-            else -> colSort(items, groups, indexs, last)
-        }
-
-    /** The generic comparison-sort path (Rust `col_sort`, trie.rs:1184-1209). */
-    fun colSort(items: Terms, groups: IntArray, indexs: IntArray, last: Boolean): Layer {
+    fun sort(items: Terms, groups: IntArray, indexs: IntArray, last: Boolean): Layer {
         require(groups.size == indexs.size)
         val output = Layer()
         val n = groups.size
@@ -44,22 +34,9 @@ internal object Kernels {
         }
 
         val order = IntArray(n) { it }
-        val stride = items.bounds.strided()
-        val data = items.data.array
-        val comparator = if (stride in 1..3) {
-            IntComparator { a, b ->
-                val byGroup = groups[a].compareTo(groups[b])
-                if (byGroup != 0) byGroup
-                else java.util.Arrays.compareUnsigned(
-                    data, indexs[a] * stride, indexs[a] * stride + stride,
-                    data, indexs[b] * stride, indexs[b] * stride + stride,
-                )
-            }
-        } else {
-            IntComparator { a, b ->
-                val byGroup = groups[a].compareTo(groups[b])
-                if (byGroup != 0) byGroup else items.compareItems(indexs[a], items, indexs[b])
-            }
+        val comparator = IntComparator { a, b ->
+            val byGroup = groups[a].compareTo(groups[b])
+            if (byGroup != 0) byGroup else items.compareItems(indexs[a], items, indexs[b])
         }
         // A stable sort by (group, value) matches Rust's unstable sort of
         // (group, value, position) triples: ties keep their position order.
@@ -86,39 +63,6 @@ internal object Kernels {
             prevGroup = group
         }
         output.bounds.push(output.values.size)
-        return output
-    }
-
-    /**
-     * The radix-sort path for width-4 items (Rust `u32_sort`/`u32_sort_last`,
-     * trie.rs:1212-1286): rows pack as `group (BE) | value (BE)` into one Long key,
-     * with the enumerate position as payload (omitted when `last`).
-     */
-    fun u32Sort(items: Terms, groups: IntArray, indexs: IntArray, last: Boolean): Layer {
-        require(groups.size == indexs.size)
-        val output = Layer()
-        val n = groups.size
-        val keys = LongArray(n)
-        val payload = if (last) null else IntArray(n) { it }
-        val data = items.data.array
-        for (i in 0 until n) {
-            keys[i] = (groups[i].toLong() shl 32) or (readU32BE(data, indexs[i] * 4).toLong() and 0xFFFF_FFFFL)
-        }
-        RadixSort.lsbRange(keys, payload, 0, 8)
-
-        if (n > 0) {
-            var prev = keys[0]
-            output.values.pushU32BE(prev.toInt())
-            if (!last) groups[payload!![0]] = 0
-            for (p in 1 until n) {
-                val key = keys[p]
-                if ((prev ushr 32) != (key ushr 32)) output.bounds.push(output.values.size)
-                if (prev != key) output.values.pushU32BE(key.toInt())
-                if (!last) groups[payload!![p]] = output.values.size - 1
-                prev = key
-            }
-            output.bounds.push(output.values.size)
-        }
         return output
     }
 
@@ -329,12 +273,6 @@ internal object Kernels {
         }
         return lower
     }
-
-    private fun readU32BE(data: ByteArray, offset: Int): Int =
-        ((data[offset].toInt() and 0xFF) shl 24) or
-            ((data[offset + 1].toInt() and 0xFF) shl 16) or
-            ((data[offset + 2].toInt() and 0xFF) shl 8) or
-            (data[offset + 3].toInt() and 0xFF)
 
     /** Stable merge sort of `array[from, until)` to avoid boxed comparators. */
     private fun mergeSort(array: IntArray, temp: IntArray, from: Int, until: Int, comparator: IntComparator) {

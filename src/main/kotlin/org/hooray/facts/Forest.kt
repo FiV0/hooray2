@@ -64,7 +64,7 @@ class Forest private constructor(private val layers: MutableList<Layer>) {
      * group names columns whose values must all be equal. Each column should occur in
      * at most one constraint.
      */
-    fun filter(litFilters: List<Pair<Int, ByteArray>>, varFilters: List<List<Int>>): Forest? {
+    fun filter(litFilters: List<Pair<Int, Any?>>, varFilters: List<List<Int>>): Forest? {
         // Plan the constraints applied to each column, to visit them in order.
         val constraints = sortedMapOf<Int, Constraint>()
         for ((col, lit) in litFilters) constraints[col] = LitConstraint(lit)
@@ -234,7 +234,7 @@ class Forest private constructor(private val layers: MutableList<Layer>) {
     }
 
     private sealed interface Constraint
-    private class LitConstraint(val literal: ByteArray) : Constraint
+    private class LitConstraint(val literal: Any?) : Constraint
     private class VarConstraint(val column: Int) : Constraint
 
     companion object {

@@ -9,9 +9,9 @@ package org.hooray.facts
  * container these offsets describe spans `[offset(i - 1), offset(i))`, with `offset(-1)`
  * taken as 0.
  *
- * The strided form is load-bearing beyond compression: a `Terms` column whose items all
- * have width K keeps its bounds strided, which [strided] reports (datatoad's
- * `upgrade_hint`) and kernels use to dispatch to fixed-width fast paths.
+ * The strided form is load-bearing beyond compression: a `Layer` whose lists all hold K
+ * items keeps its bounds strided, which [strided] reports and `advanceBounds` uses to
+ * skip per-list lookups.
  */
 class Strides() {
     private var stride = 0
