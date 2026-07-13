@@ -7,6 +7,11 @@ data class RowExtension(
     val values: BindingRow,
 )
 
+data class BindingIndex(
+    val variables: List<Any>,
+    val rowIndexesByKey: Map<BindingRow, List<Int>>,
+)
+
 data class BindingSet(
     val variables: List<Any>,
     val rows: List<BindingRow>,
@@ -66,6 +71,83 @@ data class BindingSet(
         return BindingSet(variables, rows.distinct())
     }
 
+    fun indexBy(indexVariables: List<Any>): BindingIndex {
+        require(indexVariables.toSet().size == indexVariables.size) {
+            "Index variables must be distinct"
+        }
+
+        val keyIndexes = indexVariables.map(::columnIndex)
+        val mutableIndex = linkedMapOf<BindingRow, MutableList<Int>>()
+        rows.forEachIndexed { rowIndex, row ->
+            val key = keyIndexes.map { index -> row[index] }
+            mutableIndex.getOrPut(key, ::mutableListOf).add(rowIndex)
+        }
+
+        return BindingIndex(
+            variables = indexVariables,
+            rowIndexesByKey = mutableIndex.mapValues { (_, rowIndexes) -> rowIndexes.toList() },
+        )
+    }
+
+    fun selectRows(rowIndexes: List<Int>): BindingSet {
+        val selectedRows = rowIndexes.map { rowIndex ->
+            require(rowIndex in rows.indices) {
+                "Row index $rowIndex is out of bounds"
+            }
+            rows[rowIndex]
+        }
+        return BindingSet(variables, selectedRows)
+    }
+
+    fun project(targetVariables: List<Any>): BindingSet {
+        require(targetVariables.toSet().size == targetVariables.size) {
+            "Projection variables must be distinct"
+        }
+
+        val projection = targetVariables.map(::columnIndex)
+        return BindingSet(
+            variables = targetVariables,
+            rows = rows.map { row -> projection.map { index -> row[index] } },
+        )
+    }
+
+    fun join(other: BindingSet): BindingSet {
+        val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
+        val leftKeyIndexes = sharedVariables.map(::columnIndex)
+        val rightOnlyVariables = other.variables.filter { variable -> variable !in columnIndexes }
+        val rightOnlyIndexes = rightOnlyVariables.map(other::columnIndex)
+        val rightIndex = other.indexBy(sharedVariables)
+
+        val joinedRows = buildList {
+            rows.forEach { leftRow ->
+                val key = leftKeyIndexes.map { index -> leftRow[index] }
+                rightIndex.rowIndexesByKey[key].orEmpty().forEach { rightRowIndex ->
+                    val rightRow = other.rows[rightRowIndex]
+                    add(leftRow + rightOnlyIndexes.map { index -> rightRow[index] })
+                }
+            }
+        }
+
+        return BindingSet(variables + rightOnlyVariables, joinedRows)
+    }
+
+    fun semijoin(other: BindingSet): BindingSet {
+        return filterByExistence(other, keepMatches = true)
+    }
+
+    fun antijoin(other: BindingSet): BindingSet {
+        return filterByExistence(other, keepMatches = false)
+    }
+
+    fun unionDistinct(other: BindingSet): BindingSet {
+        require(variables.toSet() == other.variables.toSet()) {
+            "Union requires the same variables"
+        }
+
+        val alignedOther = if (variables == other.variables) other else other.reorder(variables)
+        return BindingSet(variables, (rows + alignedOther.rows).distinct())
+    }
+
     fun reorder(targetVariables: List<Any>): BindingSet {
         require(targetVariables.toSet().size == targetVariables.size) {
             "Target layout variables must be distinct"
@@ -74,10 +156,20 @@ data class BindingSet(
             "Target layout must contain the same variables"
         }
 
-        val order = targetVariables.map(::columnIndex)
-        return BindingSet(
-            variables = targetVariables,
-            rows = rows.map { row -> order.map { index -> row[index] } },
-        )
+        return project(targetVariables)
+    }
+
+    private fun filterByExistence(
+        other: BindingSet,
+        keepMatches: Boolean,
+    ): BindingSet {
+        val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
+        val leftKeyIndexes = sharedVariables.map(::columnIndex)
+        val rightIndex = other.indexBy(sharedVariables)
+        val filteredRows = rows.filter { row ->
+            val key = leftKeyIndexes.map { index -> row[index] }
+            rightIndex.rowIndexesByKey.containsKey(key) == keepMatches
+        }
+        return BindingSet(variables, filteredRows)
     }
 }
