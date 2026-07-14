@@ -13,9 +13,12 @@ class TriplePattern(
     private val ev = aev[attribute] ?: emptyMap()
     private val ve = ave[attribute] ?: emptyMap()
 
+    private val entityVariable = (entity as? PatternValue.Variable)?.name
+    private val valueVariable = (value as? PatternValue.Variable)?.name
+    private val entityConstant = (entity as? PatternValue.Constant)?.value
+    private val valueConstant = (value as? PatternValue.Constant)?.value
+
     init {
-        val entityVariable = (entity as? PatternValue.Variable)?.name
-        val valueVariable = (value as? PatternValue.Variable)?.name
         require(entityVariable == null || entityVariable != valueVariable) {
             "Triple pattern entity and value variables must be different"
         }
@@ -116,14 +119,55 @@ class TriplePattern(
         require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
             "Triple pattern cannot introduce variables it does not contain"
         }
-        val extensions = buildList {
-            input.rows.forEachIndexed { rowIndex, row ->
-                matchingIntroductions(input.variables, row, introduces).forEach { values ->
-                    add(RowExtension(rowIndex, values))
+        when  {
+            variables.size == 1 && introduces.size == 1 -> {
+                require (introduces[0] == entityVariable || introduces[0] == valueVariable) {
+                    "Triple pattern with one variable must introduce that variable"
                 }
+                when  {
+                    entityVariable != null -> {
+                        val value = valueConstant!!
+                        val es = ve[value]
+                        val extensions = buildList {
+                            input.rows.forEachIndexed { rowIndex, _ ->
+                                es?.forEach { entityValue ->
+                                    add(RowExtension(rowIndex, listOf(entityValue)))
+                                }
+                            }
+                        }
+                        return input.extend(introduces, extensions).reorder(targetVariables)
+                    }
+                    valueVariable != null -> {
+                        val entityValue = entityConstant!!
+                        val vs = ev[entityValue]
+                        val extensions = buildList {
+                            input.rows.forEachIndexed { rowIndex, row ->
+                                vs?.forEach { value ->
+                                    add(RowExtension(rowIndex, listOf(value)))
+                                }
+                            }
+                        }
+                        return input.extend(introduces, extensions).reorder(targetVariables)
+                    }
+                    else -> throw IllegalStateException("Triple pattern with one variable must have that variable in the entity or value position")
+                }
+
             }
+            variables.size == 2 && introduces.size == 1 -> {
+                TODO()
+            }
+            variables.size == 2 && introduces.size == 2 -> {
+                require (input.variables.intersect(introduces.toSet()).isEmpty()) {
+                    "Triple pattern with two variables cannot introduce a variable that is already bound"
+                }
+                val newRows =
+
+
+
+            }
+            else -> throw IllegalStateException("Triple pattern must have 1 or 2 variables, found ${variables.size}")
         }
-        return input.extend(introduces, extensions).reorder(targetVariables)
+        throw IllegalStateException("Unreachable")
     }
 
     override fun validate(
