@@ -3,8 +3,9 @@ package org.hooray.engine
 data class Stage(
     val introduces: List<Variable>,
     val participants: List<ExecPattern>,
-    val targetVariables: List<Variable>,
-) {
+    val targetVariables: List<Variable>
+)
+{
     init {
         require(introduces.toSet().size == introduces.size) {
             "Stage introduced variables must be distinct"
