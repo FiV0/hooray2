@@ -2,10 +2,10 @@ package org.hooray.engine
 
 class TriplePattern(
     override val idx: Int,
-    private val aev: Map<Any, Map<Any, Set<Any>>>,
-    private val ave: Map<Any, Map<Any, Set<Any>>>,
+    aev: Map<Any, Map<Any, Set<Any>>>,
+    ave: Map<Any, Map<Any, Set<Any>>>,
     private val entity: PatternValue,
-    private val attribute: Any,
+    attribute: Any,
     private val value: PatternValue,
 ) : PlanPattern, ExecPattern {
     override val orderedVariables: List<Variable> = listOf(entity, value).orderedVariables()
@@ -23,6 +23,11 @@ class TriplePattern(
 
     override fun groundable(bound: Set<Variable>): List<Variable> =
         orderedVariables.filterNot { it in bound }
+
+    private sealed interface Resolved {
+        data class Bound(val value: Any) : Resolved
+        data object Unbound : Resolved
+    }
 
     private fun resolve(slot: PatternValue, layout: List<Variable>, row: BindingRow): Resolved {
         return when (slot) {
@@ -49,11 +54,6 @@ class TriplePattern(
                 else valuesByVariable.put(slot.name, candidate) == null
             }
         }
-    }
-
-    private sealed interface Resolved {
-        data class Bound(val value: Any) : Resolved
-        data object Unbound : Resolved
     }
 
     private fun candidates(entity: Resolved, value: Resolved): List<Pair<Any, Any>> {
