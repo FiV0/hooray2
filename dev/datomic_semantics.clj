@@ -110,8 +110,17 @@
                                 [?x :last-name "seed"]]}
                       (d/db *conn*)))))
 
+#_
+(deftest test-fn-clause-before-input-binding
+  (transact! people-schema)
+  (transact! [{:db/id "ivan" :name "Ivan" :age 30}])
+  (t/is (= [[31]] (d/q '{:find [y]
+                         :where [[(inc age) y]
+                                 [e :age age]]}
+                       (d/db *conn*)))))
+
 (comment
   (t/run-all-tests)
-  (t/run-test-var #'cyclic-or-dependency-with-wrong-order-throws)
+  (t/run-test-var #'cyclic-or-dependency-not-grounded-throws)
 
   )
