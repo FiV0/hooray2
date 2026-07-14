@@ -141,6 +141,15 @@ data class BindingSet(
         return filterByExistence(other, keepMatches = false)
     }
 
+    fun union(other: BindingSet): BindingSet {
+        require(variables.toSet() == other.variables.toSet()) {
+            "Union requires the same variables"
+        }
+
+        val alignedOther = if (variables == other.variables) other else other.reorder(variables)
+        return BindingSet(variables, (rows + alignedOther.rows))
+    }
+
     fun unionDistinct(other: BindingSet): BindingSet {
         require(variables.toSet() == other.variables.toSet()) {
             "Union requires the same variables"
