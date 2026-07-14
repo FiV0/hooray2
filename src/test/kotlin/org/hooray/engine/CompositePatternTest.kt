@@ -8,10 +8,12 @@ import org.junit.jupiter.api.Test
 class CompositePatternTest {
     private val x = Symbol.intern("?x")
     private val y = Symbol.intern("?y")
+    private val testAttribute = Any()
+    private val present = Any()
 
     @Test
     fun `and computes groundable variables to a fixed point`() {
-        val relation = RelationPattern(0, BindingSet(listOf(x), listOf(listOf(1))))
+        val triple = unaryTriplePattern(0, x, 1)
         val function = FunctionPattern(
             idx = 1,
             arguments = listOf(PatternValue.Variable(x)),
@@ -20,7 +22,7 @@ class CompositePatternTest {
         )
         val pattern = AndPattern(
             idx = 2,
-            branch = PatternBranch(listOf(function, relation), StageFactory { emptyList() }),
+            branch = PatternBranch(listOf(function, triple), StageFactory { emptyList() }),
         )
 
         assertEquals(
@@ -32,11 +34,11 @@ class CompositePatternTest {
     @Test
     fun `or exposes missing variables only when every branch covers them`() {
         val first = PatternBranch(
-            patterns = listOf(RelationPattern(0, BindingSet(listOf(x, y), listOf(listOf(1, 2))))),
+            patterns = listOf(binaryTriplePattern(0, x, y, 1 to 2)),
             stageFactory = StageFactory { emptyList() },
         )
         val second = PatternBranch(
-            patterns = listOf(RelationPattern(1, BindingSet(listOf(x, y), listOf(listOf(3, 4))))),
+            patterns = listOf(binaryTriplePattern(1, x, y, 3 to 4)),
             stageFactory = StageFactory { emptyList() },
         )
         val pattern = OrPattern(2, listOf(first, second))
@@ -64,11 +66,11 @@ class CompositePatternTest {
     @Test
     fun `or rejects branches with different variable order`() {
         val first = PatternBranch(
-            listOf(RelationPattern(0, BindingSet(listOf(x, y), emptyList()))),
+            listOf(binaryTriplePattern(0, x, y)),
             StageFactory { emptyList() },
         )
         val second = PatternBranch(
-            listOf(RelationPattern(1, BindingSet(listOf(y, x), emptyList()))),
+            listOf(binaryTriplePattern(1, y, x)),
             StageFactory { emptyList() },
         )
 
@@ -80,16 +82,16 @@ class CompositePatternTest {
 
     @Test
     fun `and executes and caches proposal and validation approaches separately`() {
-        val relation = RelationPattern(0, BindingSet(listOf(x), listOf(listOf(1), listOf(2))))
+        val triple = unaryTriplePattern(0, x, 1, 2)
         val requests = mutableListOf<StageRequest>()
         val factory = StageFactory { request ->
             requests += request
             when (request.mode) {
-                StageRequestMode.PROPOSE -> listOf(Stage(listOf(x), listOf(relation), listOf(x)))
-                StageRequestMode.VALIDATE -> listOf(Stage(emptyList(), listOf(relation), request.seedVariables))
+                StageRequestMode.PROPOSE -> listOf(Stage(listOf(x), listOf(triple), listOf(x)))
+                StageRequestMode.VALIDATE -> listOf(Stage(emptyList(), listOf(triple), request.seedVariables))
             }
         }
-        val pattern = AndPattern(1, PatternBranch(listOf(relation), factory))
+        val pattern = AndPattern(1, PatternBranch(listOf(triple), factory))
         val unit = BindingSet(emptyList(), listOf(emptyList()))
 
         assertEquals(
@@ -109,10 +111,10 @@ class CompositePatternTest {
 
     @Test
     fun `or is a fallback proposer and unions branch results distinctly`() {
-        val firstRelation = RelationPattern(0, BindingSet(listOf(x), listOf(listOf(1), listOf(2))))
-        val secondRelation = RelationPattern(1, BindingSet(listOf(x), listOf(listOf(2), listOf(3))))
+        val firstTriple = unaryTriplePattern(0, x, 1, 2)
+        val secondTriple = unaryTriplePattern(1, x, 2, 3)
         val firstRequests = mutableListOf<StageRequest>()
-        fun branch(pattern: RelationPattern, requests: MutableList<StageRequest>) = PatternBranch(
+        fun branch(pattern: TriplePattern, requests: MutableList<StageRequest>) = PatternBranch(
             listOf(pattern),
             StageFactory { request ->
                 requests += request
@@ -125,7 +127,7 @@ class CompositePatternTest {
         )
         val pattern = OrPattern(
             idx = 5,
-            branches = listOf(branch(firstRelation, firstRequests), branch(secondRelation, mutableListOf())),
+            branches = listOf(branch(firstTriple, firstRequests), branch(secondTriple, mutableListOf())),
         )
         val unit = BindingSet(emptyList(), listOf(emptyList(), emptyList()))
 
@@ -147,19 +149,61 @@ class CompositePatternTest {
 
     @Test
     fun `or validates existential branch completions and not antijoins them`() {
-        val relation = RelationPattern(
-            0,
-            BindingSet(listOf(x, y), listOf(listOf(1, "a"), listOf(2, "b"))),
-        )
+        val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
         val factory = StageFactory { request ->
-            listOf(Stage(listOf(y), listOf(relation), request.seedVariables + y))
+            listOf(Stage(listOf(y), listOf(triple), request.seedVariables + y))
         }
-        val branch = PatternBranch(listOf(relation), factory)
+        val branch = PatternBranch(listOf(triple), factory)
         val or = OrPattern(1, listOf(branch))
         val not = NotPattern(2, branch)
         val input = BindingSet(listOf(x), listOf(listOf(1), listOf(3)))
 
         assertEquals(listOf(listOf(1)), or.validate(input, emptyList(), listOf(x)).rows)
         assertEquals(listOf(listOf(3)), not.validate(input, emptyList(), listOf(x)).rows)
+    }
+
+    private fun unaryTriplePattern(
+        idx: Int,
+        variable: Variable,
+        vararg values: Any,
+    ): TriplePattern = triplePattern(
+        idx = idx,
+        entity = PatternValue.Variable(variable),
+        value = PatternValue.Constant(present),
+        pairs = values.map { it to present },
+    )
+
+    private fun binaryTriplePattern(
+        idx: Int,
+        entityVariable: Variable,
+        valueVariable: Variable,
+        vararg pairs: Pair<Any, Any>,
+    ): TriplePattern = triplePattern(
+        idx = idx,
+        entity = PatternValue.Variable(entityVariable),
+        value = PatternValue.Variable(valueVariable),
+        pairs = pairs.toList(),
+    )
+
+    private fun triplePattern(
+        idx: Int,
+        entity: PatternValue,
+        value: PatternValue,
+        pairs: List<Pair<Any, Any>>,
+    ): TriplePattern {
+        val entities = linkedMapOf<Any, MutableSet<Any>>()
+        val values = linkedMapOf<Any, MutableSet<Any>>()
+        for ((entityValue, valueValue) in pairs) {
+            entities.getOrPut(entityValue, ::linkedSetOf).add(valueValue)
+            values.getOrPut(valueValue, ::linkedSetOf).add(entityValue)
+        }
+        return TriplePattern(
+            idx = idx,
+            aev = mapOf(testAttribute to entities),
+            ave = mapOf(testAttribute to values),
+            entity = entity,
+            attribute = testAttribute,
+            value = value,
+        )
     }
 }
