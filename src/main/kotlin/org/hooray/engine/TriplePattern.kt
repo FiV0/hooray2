@@ -10,6 +10,8 @@ class TriplePattern(
 ) : PlanPattern, ExecPattern {
     override val orderedVariables: List<Variable> = listOf(entity, value).orderedVariables()
     override val variables: Set<Variable> = orderedVariables.toSet()
+    private val ev = aev[attribute] ?: emptyMap()
+    private val ve = ave[attribute] ?: emptyMap()
 
     init {
         val entityVariable = (entity as? PatternValue.Variable)?.name
@@ -57,18 +59,18 @@ class TriplePattern(
     private fun candidates(entity: Resolved, value: Resolved): List<Pair<Any, Any>> {
         return when {
             entity is Resolved.Bound && value is Resolved.Bound -> {
-                if (aev[attribute]?.get(entity.value)?.contains(value.value) == true) {
+                if (ev[entity.value]?.contains(value.value) == true) {
                     listOf(entity.value to value.value)
                 } else {
                     emptyList()
                 }
             }
             entity is Resolved.Bound ->
-                aev[attribute]?.get(entity.value).orEmpty().map { entity.value to it }
+                ev[entity.value].orEmpty().map { entity.value to it }
             value is Resolved.Bound ->
-                ave[attribute]?.get(value.value).orEmpty().map { it to value.value }
+                ve[value.value].orEmpty().map { it to value.value }
             else ->
-                aev[attribute].orEmpty().flatMap { (candidateEntity, values) ->
+                ev.flatMap { (candidateEntity, values) ->
                     values.map { candidateValue -> candidateEntity to candidateValue }
                 }
         }
@@ -121,7 +123,7 @@ class TriplePattern(
                 }
             }
         }
-        return input.extend(introduces, extensions).reorder(targetVariables).distinctRows()
+        return input.extend(introduces, extensions).reorder(targetVariables)
     }
 
     override fun validate(
