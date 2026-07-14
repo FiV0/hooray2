@@ -1,6 +1,6 @@
 package org.hooray.engine
 
-class StageEngine {
+class GenericJoinEngine {
 
     private fun validateAll(
         input: BindingSet,

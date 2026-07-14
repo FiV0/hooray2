@@ -42,7 +42,7 @@ internal fun groundingClosure(
 }
 
 internal class CachedBranchExecutor(
-    private val engine: StageEngine,
+    private val engine: GenericJoinEngine,
 ) {
     private val stagesByRequest = ConcurrentHashMap<BranchRequest, List<Stage>>()
 

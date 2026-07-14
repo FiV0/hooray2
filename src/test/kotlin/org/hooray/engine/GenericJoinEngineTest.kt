@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
-class StageEngineTest {
+class GenericJoinEngineTest {
     private val e = Symbol.intern("?e")
     private val x = Symbol.intern("?x")
     private val y = Symbol.intern("?y")
@@ -23,7 +23,7 @@ class StageEngineTest {
             values = mapOf(listOf("a", 1) to listOf(listOf(2))),
         )
 
-        val result = StageEngine().execute(
+        val result = GenericJoinEngine().execute(
             stages = listOf(
                 Stage(listOf(x), listOf(first), listOf(e, x)),
                 Stage(listOf(y), listOf(second), listOf(e, x, y)),
@@ -53,7 +53,7 @@ class StageEngineTest {
             values = mapOf(listOf("a") to listOf(listOf(10))),
         )
 
-        val result = StageEngine().execute(
+        val result = GenericJoinEngine().execute(
             listOf(Stage(listOf(x), listOf(first, second), listOf(e, x))),
             input,
         )
@@ -77,7 +77,7 @@ class StageEngineTest {
         }
         val input = BindingSet(listOf(e), listOf(listOf("a"), listOf("b")))
 
-        val result = StageEngine().execute(
+        val result = GenericJoinEngine().execute(
             listOf(Stage(emptyList(), listOf(validator), listOf(e))),
             input,
         )
@@ -89,7 +89,7 @@ class StageEngineTest {
     fun `rejects stage layouts that do not extend the input exactly`() {
         val pattern = MapPattern(0, setOf(x), values = emptyMap())
         val error = assertThrows(IllegalArgumentException::class.java) {
-            StageEngine().execute(
+            GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
                 BindingSet(listOf(e), listOf(listOf("a"))),
             )
@@ -106,7 +106,7 @@ class StageEngineTest {
             counts = mapOf(listOf("a") to 0, listOf("b") to -1),
             values = emptyMap(),
         )
-        val result = StageEngine().execute(
+        val result = GenericJoinEngine().execute(
             listOf(Stage(listOf(x), listOf(pattern), listOf(e, x))),
             BindingSet(listOf(e), listOf(listOf("a"), listOf("b"))),
         )
@@ -134,7 +134,7 @@ class StageEngineTest {
         }
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            StageEngine().execute(
+            GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
             )
@@ -162,7 +162,7 @@ class StageEngineTest {
         }
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            StageEngine().execute(
+            GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
             )
@@ -195,7 +195,7 @@ class StageEngineTest {
             ) = input
         }
         val proposalError = assertThrows(IllegalArgumentException::class.java) {
-            StageEngine().execute(
+            GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(wrongProposal), listOf(e, x))),
                 BindingSet(listOf(e), listOf(listOf("a"))),
             )
@@ -213,7 +213,7 @@ class StageEngineTest {
             ) = BindingSet(emptyList(), listOf(emptyList()))
         }
         val validationError = assertThrows(IllegalArgumentException::class.java) {
-            StageEngine().execute(
+            GenericJoinEngine().execute(
                 listOf(Stage(emptyList(), listOf(wrongValidator), listOf(e))),
                 BindingSet(listOf(e), listOf(listOf("a"))),
             )

@@ -3,7 +3,7 @@ package org.hooray.engine
 class OrPattern(
     override val idx: Int,
     private val branches: List<PatternBranch>,
-    engine: StageEngine = StageEngine(),
+    engine: GenericJoinEngine = GenericJoinEngine(),
 ) : PlanPattern, ExecPattern {
     private val branchExecutor = CachedBranchExecutor(engine)
 

@@ -3,7 +3,7 @@ package org.hooray.engine
 class NotPattern(
     override val idx: Int,
     private val branch: PatternBranch,
-    engine: StageEngine = StageEngine(),
+    engine: GenericJoinEngine = GenericJoinEngine(),
 ) : PlanPattern, ExecPattern {
     private val branchExecutor = CachedBranchExecutor(engine)
 
