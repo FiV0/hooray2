@@ -102,6 +102,9 @@ data class BindingSet(
     }
 
     fun project(targetVariables: List<Variable>): BindingSet {
+        if (targetVariables == variables) {
+            return this
+        }
         require(targetVariables.toSet().size == targetVariables.size) {
             "Projection variables must be distinct"
         }
