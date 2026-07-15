@@ -105,6 +105,87 @@ class TriplePatternTest {
     }
 
     @Test
+    fun `counts one-variable triple patterns`() {
+        val byValue = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Constant(40),
+        )
+        val byEntity = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+        val proposals = listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE), Proposal(NO_PROPOSER, Int.MAX_VALUE))
+
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2)),
+            byValue.count(input, listOf(e), proposals),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2)),
+            byEntity.count(input, listOf(age), proposals),
+        )
+    }
+
+    @Test
+    fun `counts one of two variables with bound and unbound counterparts`() {
+        val pattern = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+        val proposals = listOf(
+            Proposal(NO_PROPOSER, Int.MAX_VALUE),
+            Proposal(NO_PROPOSER, Int.MAX_VALUE),
+            Proposal(NO_PROPOSER, Int.MAX_VALUE),
+        )
+
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            pattern.count(
+                BindingSet(listOf(e), listOf(listOf("a"), listOf("b"), listOf("c"))),
+                listOf(age),
+                proposals,
+            ),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            pattern.count(
+                BindingSet(listOf(age), listOf(listOf(40), listOf(35), listOf(99))),
+                listOf(e),
+                proposals,
+            ),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2), Proposal(0, 2)),
+            pattern.count(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2), listOf(3))),
+                listOf(e),
+                proposals,
+            ),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2), Proposal(0, 2)),
+            pattern.count(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2), listOf(3))),
+                listOf(age),
+                proposals,
+            ),
+        )
+    }
+
+    @Test
     fun `performs full and partial existential validation`() {
         val pattern = triplePattern(
             TestTriple("a", "age", 35),

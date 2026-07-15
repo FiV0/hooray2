@@ -101,14 +101,64 @@ class TriplePattern(
         introduces: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        require(introduces.isNotEmpty() && variables.intersect(introduces.toSet()).isNotEmpty()) {
+        require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
             "Triple pattern cannot introduce variables it does not contain"
         }
-        return updateProposals(
-            idx,
-            proposals,
-            input.rows.map { row -> matchingIntroductions(input.variables, row, introduces).size },
-        )
+        when  {
+            variables.size == 1 && introduces.size == 1 -> {
+                require (introduces[0] == entityVariable || introduces[0] == valueVariable) {
+                    "Triple pattern with one variable must introduce that variable"
+                }
+                when  {
+                    entityVariable != null -> {
+                        val value = valueConstant!!
+                        val es = ve[value]
+                        val counts = input.rows.map { es?.size ?: 0 }
+                        return updateProposals(idx, proposals, counts)
+                    }
+                    valueVariable != null -> {
+                        val entityValue = entityConstant!!
+                        val vs = ev[entityValue]
+                        val counts = input.rows.map { vs?.size ?: 0 }
+                        return updateProposals(idx, proposals, counts)
+                    }
+                    else -> throw IllegalStateException("Triple pattern with one variable must have that variable in the entity or value position")
+                }
+            }
+            variables.size == 2 && introduces.size == 1 -> {
+                val introduced = introduces.single()
+                when (introduced) {
+                    entityVariable -> {
+                        val valueIndex = input.columnIndexes[valueVariable]
+                        val counts = if (valueIndex != null) {
+                            input.rows.map { row -> ve[row[valueIndex]].orEmpty().size }
+                        } else {
+                            input.rows.map { ev.keys.size }
+                        }
+                        return updateProposals(idx, proposals, counts)
+                    }
+                    valueVariable -> {
+                        val entityIndex = input.columnIndexes[entityVariable]
+                        val counts = if (entityIndex != null) {
+                            input.rows.map { row -> ev[row[entityIndex]].orEmpty().size }
+                        } else {
+                            input.rows.map { ve.keys.size }
+                        }
+                        return updateProposals(idx, proposals, counts)
+                    }
+                    else -> throw IllegalStateException("Triple pattern with two variables must introduce one of those variables")
+                }
+            }
+            variables.size == 2 && introduces.size == 2 -> {
+                require (input.variables.intersect(introduces.toSet()).isEmpty()) {
+                    "Triple pattern with two variables cannot introduce a variable that is already bound"
+                }
+                val count = ev.values.sumOf { values -> values.size }
+                val counts = input.rows.map { count }
+                return updateProposals(idx, proposals, counts)
+            }
+            else -> throw IllegalStateException("Triple pattern must have 1 or 2 variables, found ${variables.size}")
+        }
     }
 
     // TODO the intermediate row extension lists seem wasted work
