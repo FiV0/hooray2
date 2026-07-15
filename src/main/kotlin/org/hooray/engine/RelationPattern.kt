@@ -4,7 +4,7 @@ import org.hooray.util.Trie
 
 class RelationPattern(
     override val idx: Int,
-    relation: BindingSet,
+    val relation: BindingSet,
 ) : PlanPattern, ExecPattern {
     override val orderedVariables: List<Variable> = relation.variables
     override val variables: Set<Variable> = orderedVariables.toSet()
@@ -19,12 +19,58 @@ class RelationPattern(
     override fun groundable(bound: Set<Variable>): List<Variable> =
         orderedVariables.filterNot { it in bound }
 
+    private fun trieNodeFor(
+        row: BindingRow,
+        prefixIndexes: List<Int>,
+    ): Trie.Node<Any>? {
+        var node = root
+        for (index in prefixIndexes) {
+            node = node.children[row[index]] ?: return null
+        }
+        return node
+    }
+
+    private fun countIntroductions(
+        node: Trie.Node<Any>?,
+        depth: Int,
+    ): Int {
+        if (node == null) return 0
+        if (depth == 0) return 1
+        return node.children.values.sumOf { child ->
+            countIntroductions(child, depth - 1)
+        }
+    }
+
+    private fun introductions(
+        node: Trie.Node<Any>?,
+        depth: Int,
+    ): List<BindingRow> {
+        if (node == null) return emptyList()
+        if (depth == 0) return listOf(emptyList())
+        return buildList {
+            node.children.forEach { (value, child) ->
+                introductions(child, depth - 1).forEach { suffix ->
+                    add(listOf(value) + suffix)
+                }
+            }
+        }
+    }
+
+    private fun isPrefix(prefixVars: List<Variable>): Boolean {
+       for (i in prefixVars.indices) {
+            if (prefixVars[i] != relation.variables[i]) return false
+        }
+        return true
+    }
+
     override fun count(
         input: BindingSet,
         introduces: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        if (introduces.isEmpty() || !variables.containsAll(introduces)) return proposals
+        if (!isPrefix(input.variables + introduces)) {
+            throw IllegalArgumentException("Input variables must be a prefix of the relation's variables")
+        }
         val introductionStart = orderedVariables.indexOf(introduces.first())
         val prefixIndexes = orderedVariables
             .take(introductionStart)
@@ -73,40 +119,4 @@ class RelationPattern(
         )
     }
 
-    private fun trieNodeFor(
-        row: BindingRow,
-        prefixIndexes: List<Int>,
-    ): Trie.Node<Any>? {
-        var node = root
-        for (index in prefixIndexes) {
-            node = node.children[row[index]] ?: return null
-        }
-        return node
-    }
-
-    private fun countIntroductions(
-        node: Trie.Node<Any>?,
-        depth: Int,
-    ): Int {
-        if (node == null) return 0
-        if (depth == 0) return 1
-        return node.children.values.sumOf { child ->
-            countIntroductions(child, depth - 1)
-        }
-    }
-
-    private fun introductions(
-        node: Trie.Node<Any>?,
-        depth: Int,
-    ): List<BindingRow> {
-        if (node == null) return emptyList()
-        if (depth == 0) return listOf(emptyList())
-        return buildList {
-            node.children.forEach { (value, child) ->
-                introductions(child, depth - 1).forEach { suffix ->
-                    add(listOf(value) + suffix)
-                }
-            }
-        }
-    }
 }
