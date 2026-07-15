@@ -1,11 +1,20 @@
 package org.hooray.engine
 
+import org.hooray.util.Trie
+
 class RelationPattern(
     override val idx: Int,
-    private val relation: BindingSet,
+    relation: BindingSet,
 ) : PlanPattern, ExecPattern {
     override val orderedVariables: List<Variable> = relation.variables
     override val variables: Set<Variable> = orderedVariables.toSet()
+    private val hasRows = relation.rows.isNotEmpty()
+    private val trie = Trie<Any>().apply {
+        relation.rows.forEach(::insert)
+    }
+    private val root = requireNotNull(trie.trieNodeFor(emptyList())) {
+        "Trie root must exist"
+    }
 
     override fun groundable(bound: Set<Variable>): List<Variable> =
         orderedVariables.filterNot { it in bound }
@@ -16,8 +25,12 @@ class RelationPattern(
         proposals: List<Proposal>,
     ): List<Proposal> {
         if (introduces.isEmpty() || !variables.containsAll(introduces)) return proposals
+        val introductionStart = orderedVariables.indexOf(introduces.first())
+        val prefixIndexes = orderedVariables
+            .take(introductionStart)
+            .map(input::columnIndex)
         val counts = input.rows.map { row ->
-            matchingIntroductions(input.variables, row, introduces).size
+            countIntroductions(trieNodeFor(row, prefixIndexes), introduces.size)
         }
         return updateProposals(idx, proposals, counts)
     }
@@ -30,9 +43,13 @@ class RelationPattern(
         require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
             "Relation pattern cannot introduce variables it does not contain"
         }
+        val introductionStart = orderedVariables.indexOf(introduces.first())
+        val prefixIndexes = orderedVariables
+            .take(introductionStart)
+            .map(input::columnIndex)
         val extensions = buildList {
             input.rows.forEachIndexed { rowIndex, row ->
-                matchingIntroductions(input.variables, row, introduces).forEach { values ->
+                introductions(trieNodeFor(row, prefixIndexes), introduces.size).forEach { values ->
                     add(RowExtension(rowIndex, values))
                 }
             }
@@ -44,24 +61,52 @@ class RelationPattern(
         input: BindingSet,
         introduces: List<Variable>,
         targetVariables: List<Variable>,
-    ): BindingSet = input.semijoin(relation)
+    ): BindingSet {
+        if (!hasRows) return BindingSet(input.variables, emptyList())
 
-    private fun matchingIntroductions(
-        inputVariables: List<Variable>,
-        inputRow: BindingRow,
-        introduces: List<Variable>,
-    ): List<BindingRow> {
-        val sharedVariables = inputVariables.filter { it in variables }
-        val inputIndexes = sharedVariables.map(inputVariables::indexOf)
-        val relationIndexes = sharedVariables.map(relation::columnIndex)
-        val introducedIndexes = introduces.map(relation::columnIndex)
-        val seen = linkedSetOf<BindingRow>()
-        for (relationRow in relation.rows) {
-            val matches = inputIndexes.indices.all { index ->
-                inputRow[inputIndexes[index]] == relationRow[relationIndexes[index]]
-            }
-            if (matches) seen += introducedIndexes.map { relationRow[it] }
+        val prefixIndexes = orderedVariables
+            .takeWhile { variable -> variable in input.columnIndexes }
+            .map(input::columnIndex)
+        return BindingSet(
+            variables = input.variables,
+            rows = input.rows.filter { row -> trieNodeFor(row, prefixIndexes) != null },
+        )
+    }
+
+    private fun trieNodeFor(
+        row: BindingRow,
+        prefixIndexes: List<Int>,
+    ): Trie.Node<Any>? {
+        var node = root
+        for (index in prefixIndexes) {
+            node = node.children[row[index]] ?: return null
         }
-        return seen.toList()
+        return node
+    }
+
+    private fun countIntroductions(
+        node: Trie.Node<Any>?,
+        depth: Int,
+    ): Int {
+        if (node == null) return 0
+        if (depth == 0) return 1
+        return node.children.values.sumOf { child ->
+            countIntroductions(child, depth - 1)
+        }
+    }
+
+    private fun introductions(
+        node: Trie.Node<Any>?,
+        depth: Int,
+    ): List<BindingRow> {
+        if (node == null) return emptyList()
+        if (depth == 0) return listOf(emptyList())
+        return buildList {
+            node.children.forEach { (value, child) ->
+                introductions(child, depth - 1).forEach { suffix ->
+                    add(listOf(value) + suffix)
+                }
+            }
+        }
     }
 }
