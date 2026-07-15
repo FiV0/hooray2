@@ -13,17 +13,6 @@ internal fun Iterable<PatternValue>.orderedVariables(): List<Variable> {
     return result.toList()
 }
 
-internal fun PatternValue.resolve(layout: List<Variable>, row: BindingRow): Any {
-    return when (this) {
-        is PatternValue.Constant -> value
-        is PatternValue.Variable -> {
-            val column = layout.indexOf(name)
-            require(column >= 0) { "Variable $name is not bound" }
-            row[column]
-        }
-    }
-}
-
 internal fun PatternValue.rowReader(columnIndexes: Map<Variable, Int>): (BindingRow) -> Any {
     return when (this) {
         is PatternValue.Constant -> {
