@@ -111,6 +111,7 @@ class TriplePattern(
         )
     }
 
+    // TODO the intermediate row extension lists seem wasted work
     override fun propose(
         input: BindingSet,
         introduces: List<Variable>,
