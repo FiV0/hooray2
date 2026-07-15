@@ -16,10 +16,20 @@ class FunctionPattern(
     override val variables: Set<Variable> = orderedVariables.toSet()
 
     override fun groundable(bound: Set<Variable>): List<Variable> {
-        return if (output !in bound && bound.containsAll(argumentVariables)) {
+        return if (bound.containsAll(argumentVariables)) {
             listOf(output)
         } else {
             emptyList()
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun evaluate(layout: List<Variable>, row: BindingRow): Any {
+        val values = arguments.map { it.resolve(layout, row) }
+        return when (values.size) {
+            1 -> (function as (Any) -> Any)(values[0])
+            2 -> (function as (Any, Any) -> Any)(values[0], values[1])
+            else -> error("Unreachable")
         }
     }
 
@@ -57,15 +67,5 @@ class FunctionPattern(
             input.variables,
             input.rows.filter { row -> row[outputIndex] == evaluate(input.variables, row) },
         )
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun evaluate(layout: List<Variable>, row: BindingRow): Any {
-        val values = arguments.map { it.resolve(layout, row) }
-        return when (values.size) {
-            1 -> (function as (Any) -> Any)(values[0])
-            2 -> (function as (Any, Any) -> Any)(values[0], values[1])
-            else -> error("Unreachable")
-        }
     }
 }
