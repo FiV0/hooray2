@@ -142,20 +142,54 @@ class RelationPatternTest {
     }
 
     @Test
-    fun `validates partial and complete relation prefixes`() {
-        val prefixPattern = RelationPattern(
+    fun `counts and proposes with unrelated variables interleaved through the relation prefix`() {
+        val interleavedPattern = RelationPattern(
             idx = 9,
             relation = BindingSet(
                 listOf(e, age, name),
                 listOf(listOf("a", 35, "Alice"), listOf("a", 36, "Ada"), listOf("b", 40, "Bob")),
             ),
         )
+        val input = BindingSet(
+            listOf(e, source, age),
+            listOf(listOf("a", "first", 35), listOf("a", "second", 40)),
+        )
+        val proposals = List(input.rowCount) { Proposal(NO_PROPOSER, Int.MAX_VALUE) }
+
+        assertEquals(
+            listOf(Proposal(9, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            interleavedPattern.count(input, listOf(name), proposals),
+        )
+
+        val proposed = interleavedPattern.propose(
+            input,
+            introduces = listOf(name),
+            targetVariables = listOf(source, name, e, age),
+        )
+        assertEquals(
+            BindingSet(
+                listOf(source, name, e, age),
+                listOf(listOf("first", "Alice", "a", 35)),
+            ),
+            proposed,
+        )
+    }
+
+    @Test
+    fun `validates partial and complete relation prefixes`() {
+        val prefixPattern = RelationPattern(
+            idx = 10,
+            relation = BindingSet(
+                listOf(e, age, name),
+                listOf(listOf("a", 35, "Alice"), listOf("a", 36, "Ada"), listOf("b", 40, "Bob")),
+            ),
+        )
         val partialInput = BindingSet(
-            listOf(source, e, age),
+            listOf(e, source, age),
             listOf(
-                listOf("first", "a", 35),
-                listOf("second", "a", 40),
-                listOf("third", "c", 35),
+                listOf("a", "first", 35),
+                listOf("a", "second", 40),
+                listOf("c", "third", 35),
             ),
         )
         val completeInput = BindingSet(
@@ -164,7 +198,7 @@ class RelationPatternTest {
         )
 
         assertEquals(
-            BindingSet(listOf(source, e, age), listOf(listOf("first", "a", 35))),
+            BindingSet(listOf(e, source, age), listOf(listOf("a", "first", 35))),
             prefixPattern.validate(partialInput, listOf(age), partialInput.variables),
         )
         assertEquals(
@@ -177,11 +211,11 @@ class RelationPatternTest {
     fun `validates zero variable relations by whether they contain a row`() {
         val input = BindingSet(listOf(source), listOf(listOf("first"), listOf("second")))
         val nonEmptyPattern = RelationPattern(
-            idx = 10,
+            idx = 11,
             relation = BindingSet(emptyList(), listOf(emptyList())),
         )
         val emptyPattern = RelationPattern(
-            idx = 11,
+            idx = 12,
             relation = BindingSet(emptyList(), emptyList()),
         )
 

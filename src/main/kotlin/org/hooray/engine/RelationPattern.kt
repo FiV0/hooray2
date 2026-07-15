@@ -67,10 +67,18 @@ class RelationPattern(
     }
 
     private fun isPrefix(prefixVars: List<Variable>): Boolean {
-       for (i in prefixVars.indices) {
-            if (prefixVars[i] != relation.variables[i]) return false
+        return prefixVars == orderedVariables.take(prefixVars.size)
+    }
+
+    private fun prefixIndexes(
+        input: BindingSet,
+        introduces: List<Variable>,
+    ): List<Int> {
+        val inputPrefix = input.variables.filter { variable -> variable in variables }
+        require(isPrefix(inputPrefix + introduces)) {
+            "Relation variables in the input followed by introduced variables must form a relation prefix"
         }
-        return true
+        return inputPrefix.map(input::columnIndex)
     }
 
     override fun count(
@@ -78,13 +86,8 @@ class RelationPattern(
         introduces: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        if (!isPrefix(input.variables + introduces)) {
-            throw IllegalArgumentException("Input variables must be a prefix of the relation's variables")
-        }
-        val introductionStart = orderedVariables.indexOf(introduces.first())
-        val prefixIndexes = orderedVariables
-            .take(introductionStart)
-            .map(input::columnIndex)
+        if (introduces.isEmpty()) return proposals
+        val prefixIndexes = prefixIndexes(input, introduces)
         val counts = input.rows.map { row ->
             countIntroductions(trieNodeFor(row, prefixIndexes), introduces.size)
         }
@@ -99,10 +102,7 @@ class RelationPattern(
         require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
             "Relation pattern cannot introduce variables it does not contain"
         }
-        val introductionStart = orderedVariables.indexOf(introduces.first())
-        val prefixIndexes = orderedVariables
-            .take(introductionStart)
-            .map(input::columnIndex)
+        val prefixIndexes = prefixIndexes(input, introduces)
         val extensions = buildList {
             input.rows.forEachIndexed { rowIndex, row ->
                 introductions(trieNodeFor(row, prefixIndexes), introduces.size).forEach { values ->
@@ -120,9 +120,7 @@ class RelationPattern(
     ): BindingSet {
         if (!hasRows) return BindingSet(input.variables, emptyList())
 
-        val prefixIndexes = orderedVariables
-            .takeWhile { variable -> variable in input.columnIndexes }
-            .map(input::columnIndex)
+        val prefixIndexes = prefixIndexes(input, emptyList())
         return BindingSet(
             variables = input.variables,
             rows = input.rows.filter { row -> trieNodeFor(row, prefixIndexes) != null },
