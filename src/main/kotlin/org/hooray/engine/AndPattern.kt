@@ -3,10 +3,8 @@ package org.hooray.engine
 class AndPattern(
     override val idx: Int,
     private val branch: PatternBranch,
-    engine: GenericJoinEngine = GenericJoinEngine(),
+    private val engine: GenericJoinEngine = GenericJoinEngine(),
 ) : PlanPattern, ExecPattern {
-    private val branchExecutor = CachedBranchExecutor(engine)
-
     override val orderedVariables: List<Variable> = branchOrderedVariables(branch)
     override val variables: Set<Variable> = orderedVariables.toSet()
 
@@ -20,19 +18,10 @@ class AndPattern(
         proposals: List<Proposal>,
     ): List<Proposal> {
         if (introduces.isEmpty() || !variables.containsAll(introduces)) return proposals
-        val targetVariables = input.variables + introduces
-        val request = StageRequest(
-            seedVariables = input.variables,
-            introduces = introduces,
-            targetVariables = targetVariables,
-            mode = StageRequestMode.PROPOSE,
-        )
         val counts = input.rows.map { row ->
-            val completed = branchExecutor.execute(
-                branchIndex = 0,
-                branch = branch,
-                request = request,
-                input = BindingSet(input.variables, listOf(row)),
+            val completed = engine.execute(
+                branch.proposalStages,
+                BindingSet(input.variables, listOf(row)),
             )
             completed.project(introduces).distinctRows().rowCount
         }
@@ -47,13 +36,7 @@ class AndPattern(
         require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
             "AND pattern cannot introduce variables it does not contain"
         }
-        val request = StageRequest(
-            seedVariables = input.variables,
-            introduces = introduces,
-            targetVariables = targetVariables,
-            mode = StageRequestMode.PROPOSE,
-        )
-        return branchExecutor.execute(0, branch, request, input)
+        return engine.execute(branch.proposalStages, input)
             .project(targetVariables)
             .distinctRows()
     }
@@ -63,13 +46,7 @@ class AndPattern(
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        val request = StageRequest(
-            seedVariables = input.variables,
-            introduces = introduces,
-            targetVariables = input.variables,
-            mode = StageRequestMode.VALIDATE,
-        )
-        val completed = branchExecutor.execute(0, branch, request, input)
+        val completed = engine.execute(branch.validationStages, input)
         return input.semijoin(completed.project(input.variables).distinctRows())
     }
 }

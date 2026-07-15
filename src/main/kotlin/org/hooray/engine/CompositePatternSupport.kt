@@ -1,7 +1,5 @@
 package org.hooray.engine
 
-import java.util.concurrent.ConcurrentHashMap
-
 internal data class GroundingClosure(
     val groundable: List<Variable>,
     val covered: Set<Variable>,
@@ -39,28 +37,4 @@ internal fun groundingClosure(
     } while (changed)
 
     return GroundingClosure(groundable, covered)
-}
-
-internal class CachedBranchExecutor(
-    private val engine: GenericJoinEngine,
-) {
-    private val stagesByRequest = ConcurrentHashMap<BranchRequest, List<Stage>>()
-
-    fun execute(
-        branchIndex: Int,
-        branch: PatternBranch,
-        request: StageRequest,
-        input: BindingSet,
-    ): BindingSet {
-        val key = BranchRequest(branchIndex, request)
-        val stages = stagesByRequest.computeIfAbsent(key) {
-            branch.stageFactory.stages(request).toList()
-        }
-        return engine.execute(stages, input)
-    }
-
-    private data class BranchRequest(
-        val branchIndex: Int,
-        val request: StageRequest,
-    )
 }

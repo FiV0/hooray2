@@ -22,7 +22,7 @@ class CompositePatternTest {
         )
         val pattern = AndPattern(
             idx = 2,
-            branch = PatternBranch(listOf(function, triple), StageFactory { emptyList() }),
+            branch = PatternBranch(listOf(function, triple), emptyList(), emptyList()),
         )
 
         assertEquals(
@@ -35,11 +35,13 @@ class CompositePatternTest {
     fun `or exposes missing variables only when every branch covers them`() {
         val first = PatternBranch(
             patterns = listOf(binaryTriplePattern(0, x, y, 1 to 2)),
-            stageFactory = StageFactory { emptyList() },
+            proposalStages = emptyList(),
+            validationStages = emptyList(),
         )
         val second = PatternBranch(
             patterns = listOf(binaryTriplePattern(1, x, y, 3 to 4)),
-            stageFactory = StageFactory { emptyList() },
+            proposalStages = emptyList(),
+            validationStages = emptyList(),
         )
         val pattern = OrPattern(2, listOf(first, second))
 
@@ -55,7 +57,8 @@ class CompositePatternTest {
                     { _: Any, _: Any -> true },
                 ),
             ),
-            stageFactory = StageFactory { emptyList() },
+            proposalStages = emptyList(),
+            validationStages = emptyList(),
         )
         assertEquals(
             emptyList<Variable>(),
@@ -67,11 +70,13 @@ class CompositePatternTest {
     fun `or rejects branches with different variable order`() {
         val first = PatternBranch(
             listOf(binaryTriplePattern(0, x, y)),
-            StageFactory { emptyList() },
+            emptyList(),
+            emptyList(),
         )
         val second = PatternBranch(
             listOf(binaryTriplePattern(1, y, x)),
-            StageFactory { emptyList() },
+            emptyList(),
+            emptyList(),
         )
 
         val error = assertThrows(IllegalArgumentException::class.java) {
@@ -81,17 +86,14 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `and executes and caches proposal and validation approaches separately`() {
+    fun `and executes construction-time proposal and validation stages`() {
         val triple = unaryTriplePattern(0, x, 1, 2)
-        val requests = mutableListOf<StageRequest>()
-        val factory = StageFactory { request ->
-            requests += request
-            when (request.mode) {
-                StageRequestMode.PROPOSE -> listOf(Stage(listOf(x), listOf(triple), listOf(x)))
-                StageRequestMode.VALIDATE -> listOf(Stage(emptyList(), listOf(triple), request.seedVariables))
-            }
-        }
-        val pattern = AndPattern(1, PatternBranch(listOf(triple), factory))
+        val branch = PatternBranch(
+            patterns = listOf(triple),
+            proposalStages = listOf(Stage(listOf(x), listOf(triple), listOf(x))),
+            validationStages = listOf(Stage(emptyList(), listOf(triple), listOf(x))),
+        )
+        val pattern = AndPattern(1, branch)
         val unit = BindingSet(emptyList(), listOf(emptyList()))
 
         assertEquals(
@@ -104,30 +106,20 @@ class CompositePatternTest {
             emptyList(),
             listOf(x),
         ).rows)
-
-        assertEquals(2, requests.size)
-        assertEquals(listOf(StageRequestMode.PROPOSE, StageRequestMode.VALIDATE), requests.map { it.mode })
     }
 
     @Test
     fun `or is a fallback proposer and unions branch results distinctly`() {
         val firstTriple = unaryTriplePattern(0, x, 1, 2)
         val secondTriple = unaryTriplePattern(1, x, 2, 3)
-        val firstRequests = mutableListOf<StageRequest>()
-        fun branch(pattern: TriplePattern, requests: MutableList<StageRequest>) = PatternBranch(
-            listOf(pattern),
-            StageFactory { request ->
-                requests += request
-                if (request.mode == StageRequestMode.PROPOSE) {
-                    listOf(Stage(listOf(x), listOf(pattern), listOf(x)))
-                } else {
-                    listOf(Stage(emptyList(), listOf(pattern), request.seedVariables))
-                }
-            },
+        fun branch(pattern: TriplePattern) = PatternBranch(
+            patterns = listOf(pattern),
+            proposalStages = listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
+            validationStages = listOf(Stage(emptyList(), listOf(pattern), listOf(x))),
         )
         val pattern = OrPattern(
             idx = 5,
-            branches = listOf(branch(firstTriple, firstRequests), branch(secondTriple, mutableListOf())),
+            branches = listOf(branch(firstTriple), branch(secondTriple)),
         )
         val unit = BindingSet(emptyList(), listOf(emptyList(), emptyList()))
 
@@ -143,17 +135,13 @@ class CompositePatternTest {
             listOf(listOf(1), listOf(2), listOf(3)),
             pattern.propose(unit, listOf(x), listOf(x)).rows,
         )
-        pattern.propose(unit, listOf(x), listOf(x))
-        assertEquals(1, firstRequests.size)
     }
 
     @Test
     fun `or validates existential branch completions and not antijoins them`() {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
-        val factory = StageFactory { request ->
-            listOf(Stage(listOf(y), listOf(triple), request.seedVariables + y))
-        }
-        val branch = PatternBranch(listOf(triple), factory)
+        val subStages = listOf(Stage(listOf(y), listOf(triple), listOf(x, y)))
+        val branch = PatternBranch(listOf(triple), subStages, subStages)
         val or = OrPattern(1, listOf(branch))
         val not = NotPattern(2, branch)
         val input = BindingSet(listOf(x), listOf(listOf(1), listOf(3)))

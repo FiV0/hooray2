@@ -3,10 +3,8 @@ package org.hooray.engine
 class OrPattern(
     override val idx: Int,
     private val branches: List<PatternBranch>,
-    engine: GenericJoinEngine = GenericJoinEngine(),
+    private val engine: GenericJoinEngine = GenericJoinEngine(),
 ) : PlanPattern, ExecPattern {
-    private val branchExecutor = CachedBranchExecutor(engine)
-
     override val orderedVariables: List<Variable>
     override val variables: Set<Variable>
 
@@ -51,15 +49,9 @@ class OrPattern(
         require(introduces.toSet() == missing.toSet()) {
             "OR pattern can only propose all of its missing variables"
         }
-        val request = StageRequest(
-            seedVariables = input.variables,
-            introduces = introduces,
-            targetVariables = targetVariables,
-            mode = StageRequestMode.PROPOSE,
-        )
         var result = BindingSet(targetVariables, emptyList())
-        branches.forEachIndexed { branchIndex, branch ->
-            val branchResult = branchExecutor.execute(branchIndex, branch, request, input)
+        branches.forEach { branch ->
+            val branchResult = engine.execute(branch.proposalStages, input)
                 .project(targetVariables)
                 .distinctRows()
             result = result.unionDistinct(branchResult)
@@ -72,15 +64,9 @@ class OrPattern(
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        val request = StageRequest(
-            seedVariables = input.variables,
-            introduces = introduces,
-            targetVariables = input.variables,
-            mode = StageRequestMode.VALIDATE,
-        )
         var supported = BindingSet(input.variables, emptyList())
-        branches.forEachIndexed { branchIndex, branch ->
-            val branchResult = branchExecutor.execute(branchIndex, branch, request, input)
+        branches.forEach { branch ->
+            val branchResult = engine.execute(branch.validationStages, input)
                 .project(input.variables)
                 .distinctRows()
             supported = supported.unionDistinct(branchResult)
