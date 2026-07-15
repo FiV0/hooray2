@@ -51,18 +51,20 @@ class RelationPattern(
         }
     }
 
-    private fun introductions(
-        node: Trie.Node<Any>?,
+    private fun MutableList<RowExtension>.addIntroductionExtensions(
+        inputRowIndex: Int,
+        node: Trie.Node<Any>,
         depth: Int,
-    ): List<BindingRow> {
-        if (node == null) return emptyList()
-        if (depth == 0) return listOf(emptyList())
-        return buildList {
-            node.children.forEach { (value, child) ->
-                introductions(child, depth - 1).forEach { suffix ->
-                    add(listOf(value) + suffix)
-                }
-            }
+        values: MutableList<Any>,
+    ) {
+        if (depth == 0) {
+            add(RowExtension(inputRowIndex, values.toList()))
+            return
+        }
+        node.children.forEach { (value, child) ->
+            values.add(value)
+            addIntroductionExtensions(inputRowIndex, child, depth - 1, values)
+            values.removeAt(values.lastIndex)
         }
     }
 
@@ -104,10 +106,10 @@ class RelationPattern(
         }
         val prefixIndexes = prefixIndexes(input, introduces)
         val extensions = buildList {
+            val values = ArrayList<Any>(introduces.size)
             input.rows.forEachIndexed { rowIndex, row ->
-                introductions(trieNodeFor(row, prefixIndexes), introduces.size).forEach { values ->
-                    add(RowExtension(rowIndex, values))
-                }
+                val node = trieNodeFor(row, prefixIndexes) ?: return@forEachIndexed
+                addIntroductionExtensions(rowIndex, node, introduces.size, values)
             }
         }
         return input.extend(introduces, extensions).reorder(targetVariables).distinctRows()
@@ -126,5 +128,4 @@ class RelationPattern(
             rows = input.rows.filter { row -> trieNodeFor(row, prefixIndexes) != null },
         )
     }
-
 }
