@@ -24,11 +24,22 @@ class FunctionPattern(
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun evaluate(layout: List<Variable>, row: BindingRow): Any {
-        val values = arguments.map { it.resolve(layout, row) }
-        return when (values.size) {
-            1 -> (function as (Any) -> Any)(values[0])
-            2 -> (function as (Any, Any) -> Any)(values[0], values[1])
+    private fun evaluator(columnIndexes: Map<Variable, Int>): (BindingRow) -> Any {
+        val readers = arguments.map { argument -> argument.rowReader(columnIndexes) }
+        return when (readers.size) {
+            1 -> {
+                val f = function as (Any) -> Any
+                val r0 = readers[0]
+                val evaluate: (BindingRow) -> Any = { row -> f(r0(row)) }
+                evaluate
+            }
+            2 -> {
+                val f = function as (Any, Any) -> Any
+                val r0 = readers[0]
+                val r1 = readers[1]
+                val evaluate: (BindingRow) -> Any = { row -> f(r0(row), r1(row)) }
+                evaluate
+            }
             else -> error("Unreachable")
         }
     }
@@ -50,8 +61,9 @@ class FunctionPattern(
         require(introduces == listOf(output) && input.variables.containsAll(argumentVariables)) {
             "Function can only introduce its output after its arguments are bound"
         }
+        val evaluate = evaluator(input.columnIndexes)
         val extensions = input.rows.mapIndexed { rowIndex, row ->
-            RowExtension(rowIndex, listOf(evaluate(input.variables, row)))
+            RowExtension(rowIndex, listOf(evaluate(row)))
         }
         return input.extend(introduces, extensions).reorder(targetVariables).distinctRows()
     }
@@ -63,9 +75,10 @@ class FunctionPattern(
     ): BindingSet {
         require(input.variables.containsAll(variables)) { "Function arguments and output must be bound before validation" }
         val outputIndex = input.columnIndex(output)
+        val evaluate = evaluator(input.columnIndexes)
         return BindingSet(
             input.variables,
-            input.rows.filter { row -> row[outputIndex] == evaluate(input.variables, row) },
+            input.rows.filter { row -> row[outputIndex] == evaluate(row) },
         )
     }
 }

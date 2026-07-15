@@ -23,3 +23,19 @@ internal fun PatternValue.resolve(layout: List<Variable>, row: BindingRow): Any 
         }
     }
 }
+
+internal fun PatternValue.rowReader(columnIndexes: Map<Variable, Int>): (BindingRow) -> Any {
+    return when (this) {
+        is PatternValue.Constant -> {
+            val constant = value
+            val reader: (BindingRow) -> Any = { constant }
+            reader
+        }
+        is PatternValue.Variable -> {
+            val column = columnIndexes[name]
+                ?: throw IllegalArgumentException("Variable $name is not bound")
+            val reader: (BindingRow) -> Any = { row -> row[column] }
+            reader
+        }
+    }
+}

@@ -14,22 +14,35 @@ class PredicatePattern(
 
     override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
 
+    @Suppress("UNCHECKED_CAST")
+    private fun evaluator(columnIndexes: Map<Variable, Int>): (BindingRow) -> Boolean {
+        val readers = arguments.map { argument -> argument.rowReader(columnIndexes) }
+        return when (readers.size) {
+            1 -> {
+                val f = predicate as (Any) -> Boolean
+                val r0 = readers[0]
+                val evaluate: (BindingRow) -> Boolean = { row -> f(r0(row)) }
+                evaluate
+            }
+            2 -> {
+                val f = predicate as (Any, Any) -> Boolean
+                val r0 = readers[0]
+                val r1 = readers[1]
+                val evaluate: (BindingRow) -> Boolean = { row -> f(r0(row), r1(row)) }
+                evaluate
+            }
+            else -> error("Unreachable")
+        }
+    }
+
     override fun validate(
         input: BindingSet,
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
         require(input.variables.containsAll(variables)) { "Predicate arguments must be bound before validation" }
-        return BindingSet(input.variables, input.rows.filter { row -> evaluate(input.variables, row) })
+        val evaluate = evaluator(input.columnIndexes)
+        return BindingSet(input.variables, input.rows.filter(evaluate))
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun evaluate(layout: List<Variable>, row: BindingRow): Boolean {
-        val values = arguments.map { it.resolve(layout, row) }
-        return when (values.size) {
-            1 -> (predicate as (Any) -> Boolean)(values[0])
-            2 -> (predicate as (Any, Any) -> Boolean)(values[0], values[1])
-            else -> error("Unreachable")
-        }
-    }
 }
