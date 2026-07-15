@@ -214,6 +214,9 @@ class TriplePattern(
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
+        require(input.variables.contains<Any>(introduces)) {
+            "BindingSet must contain all variables introduced"
+        }
         when {
             variables.isEmpty() -> {
                 val matches = ev[entityConstant]?.contains(valueConstant) == true
