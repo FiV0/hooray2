@@ -215,7 +215,7 @@ class TriplePattern(
         targetVariables: List<Variable>,
     ): BindingSet {
         require(input.variables.containsAll(introduces)) {
-            "BindingSet must contain all variables introduced"
+            "BindingSet must contain all introduced variables for validation"
         }
         when {
             variables.isEmpty() -> {

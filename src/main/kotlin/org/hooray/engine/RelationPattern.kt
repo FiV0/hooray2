@@ -112,7 +112,7 @@ class RelationPattern(
                 addIntroductionExtensions(rowIndex, node, introduces.size, values)
             }
         }
-        return input.extend(introduces, extensions).reorder(targetVariables).distinctRows()
+        return input.extend(introduces, extensions).reorder(targetVariables)
     }
 
     override fun validate(
@@ -120,6 +120,9 @@ class RelationPattern(
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
+        require(input.variables.containsAll(introduces)) {
+            "BindingSet must contain all introduced variables for validation"
+        }
         if (!hasRows) return BindingSet(input.variables, emptyList())
 
         val prefixIndexes = prefixIndexes(input, emptyList())
