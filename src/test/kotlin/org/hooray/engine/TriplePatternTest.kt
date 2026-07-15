@@ -290,9 +290,7 @@ class TriplePatternTest {
             aev.getOrPut(attribute, ::linkedMapOf).getOrPut(entity, ::linkedSetOf).add(value)
             ave.getOrPut(attribute, ::linkedMapOf).getOrPut(value, ::linkedSetOf).add(entity)
         }
-        fun freeze(index: Map<Any, MutableMap<Any, MutableSet<Any>>>) =
-            index.mapValues { (_, inner) -> inner.mapValues { (_, values) -> values.toSet() } }
-        return TestIndexes(freeze(aev), freeze(ave))
+        return TestIndexes(aev, ave)
     }
 
     private data class TestTriple(val entity: Any, val attribute: Any, val value: Any)
