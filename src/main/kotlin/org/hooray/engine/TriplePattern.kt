@@ -283,9 +283,62 @@ class TriplePattern(
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        return BindingSet(
-            input.variables,
-            input.rows.filter { row -> matchingIntroductions(input.variables, row, emptyList()).isNotEmpty() },
-        )
+        when {
+            variables.isEmpty() -> {
+                val matches = ev[entityConstant]?.contains(valueConstant) == true
+                val rows = if (matches) input.rows else emptyList()
+                return BindingSet(input.variables, rows)
+            }
+            variables.size == 1 -> {
+                when {
+                    entityVariable != null -> {
+                        val value = valueConstant!!
+                        val es = ve[value]
+                        val entityIndex = input.columnIndexes[entityVariable]
+                        val rows = if (entityIndex != null) {
+                            input.rows.filter { row -> es?.contains(row[entityIndex]) == true }
+                        } else if (es.isNullOrEmpty()) {
+                            emptyList()
+                        } else {
+                            input.rows
+                        }
+                        return BindingSet(input.variables, rows)
+                    }
+                    valueVariable != null -> {
+                        val entityValue = entityConstant!!
+                        val vs = ev[entityValue]
+                        val valueIndex = input.columnIndexes[valueVariable]
+                        val rows = if (valueIndex != null) {
+                            input.rows.filter { row -> vs?.contains(row[valueIndex]) == true }
+                        } else if (vs.isNullOrEmpty()) {
+                            emptyList()
+                        } else {
+                            input.rows
+                        }
+                        return BindingSet(input.variables, rows)
+                    }
+                    else -> throw IllegalStateException("Triple pattern with one variable must have that variable in the entity or value position")
+                }
+            }
+            variables.size == 2 -> {
+                val entityIndex = input.columnIndexes[entityVariable]
+                val valueIndex = input.columnIndexes[valueVariable]
+                val rows = when {
+                    entityIndex != null && valueIndex != null -> {
+                        input.rows.filter { row -> ev[row[entityIndex]]?.contains(row[valueIndex]) == true }
+                    }
+                    entityIndex != null -> {
+                        input.rows.filter { row -> ev[row[entityIndex]].orEmpty().isNotEmpty() }
+                    }
+                    valueIndex != null -> {
+                        input.rows.filter { row -> ve[row[valueIndex]].orEmpty().isNotEmpty() }
+                    }
+                    ev.values.any { values -> values.isNotEmpty() } -> input.rows
+                    else -> emptyList()
+                }
+                return BindingSet(input.variables, rows)
+            }
+            else -> throw IllegalStateException("Triple pattern must have 0, 1 or 2 variables, found ${variables.size}")
+        }
     }
 }

@@ -186,6 +186,56 @@ class TriplePatternTest {
     }
 
     @Test
+    fun `validates constant and one-variable triple patterns`() {
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+        val constantMatch = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Constant(35),
+        )
+        val constantMiss = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Constant(40),
+        )
+        val variableEntity = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Constant(35),
+        )
+        val variableValue = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+
+        assertEquals(input, constantMatch.validate(input, emptyList(), listOf(seed)))
+        assertEquals(emptyList<BindingRow>(), constantMiss.validate(input, emptyList(), listOf(seed)).rows)
+        assertEquals(
+            listOf(listOf("a")),
+            variableEntity.validate(
+                BindingSet(listOf(e), listOf(listOf("a"), listOf("b"))),
+                emptyList(),
+                listOf(e),
+            ).rows,
+        )
+        assertEquals(input, variableEntity.validate(input, emptyList(), listOf(seed)))
+        assertEquals(
+            listOf(listOf(35)),
+            variableValue.validate(
+                BindingSet(listOf(age), listOf(listOf(35), listOf(40))),
+                emptyList(),
+                listOf(age),
+            ).rows,
+        )
+        assertEquals(input, variableValue.validate(input, emptyList(), listOf(seed)))
+    }
+
+    @Test
     fun `performs full and partial existential validation`() {
         val pattern = triplePattern(
             TestTriple("a", "age", 35),
@@ -204,6 +254,14 @@ class TriplePatternTest {
             ).rows,
         )
         assertEquals(
+            listOf(listOf(35)),
+            pattern.validate(
+                BindingSet(listOf(age), listOf(listOf(35), listOf(40))),
+                emptyList(),
+                listOf(age),
+            ).rows,
+        )
+        assertEquals(
             listOf(listOf("a", 35)),
             pattern.validate(
                 BindingSet(listOf(e, age), listOf(listOf("a", 35), listOf("a", 40))),
@@ -211,6 +269,8 @@ class TriplePatternTest {
                 listOf(e, age),
             ).rows,
         )
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+        assertEquals(input, pattern.validate(input, emptyList(), listOf(seed)))
     }
 
     private fun triplePattern(
