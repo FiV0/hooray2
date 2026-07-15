@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 class TriplePatternTest {
     private val e = Symbol.intern("?e")
     private val age = Symbol.intern("?age")
+    private val seed = Symbol.intern("?seed")
 
     @Test
     fun `grounds either triple variable and proposes both together`() {
@@ -44,20 +45,55 @@ class TriplePatternTest {
         )
 
         assertEquals(
-            listOf(listOf("a", 35)),
+            listOf(listOf("a", 35), listOf("b", 40)),
             byEntity.propose(
-                BindingSet(listOf(e), listOf(listOf("a"))),
+                BindingSet(listOf(e), listOf(listOf("b"), listOf("a"))),
                 listOf(age),
                 listOf(e, age),
             ).rows,
         )
         assertEquals(
-            listOf(listOf(40, "b")),
+            listOf(listOf(35, "a"), listOf(40, "b")),
             byEntity.propose(
-                BindingSet(listOf(age), listOf(listOf(40))),
+                BindingSet(listOf(age), listOf(listOf(40), listOf(35))),
                 listOf(e),
                 listOf(age, e),
             ).rows,
+        )
+    }
+
+    @Test
+    fun `proposes one variable when the other variable is unbound`() {
+        val pattern = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+
+        assertEquals(
+            BindingSet(
+                listOf(seed, e),
+                listOf(listOf(1, "a"), listOf(2, "a"), listOf(1, "b"), listOf(2, "b")),
+            ),
+            pattern.propose(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2))),
+                listOf(e),
+                listOf(seed, e),
+            ),
+        )
+        assertEquals(
+            BindingSet(
+                listOf(seed, age),
+                listOf(listOf(1, 35), listOf(2, 35), listOf(1, 40), listOf(2, 40)),
+            ),
+            pattern.propose(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2))),
+                listOf(age),
+                listOf(seed, age),
+            ),
         )
     }
 

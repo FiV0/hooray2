@@ -154,20 +154,85 @@ class TriplePattern(
 
             }
             variables.size == 2 && introduces.size == 1 -> {
-                TODO()
+                val introduced = introduces.single()
+                when (introduced) {
+                    entityVariable -> {
+                        val valueIndex = input.columnIndexes[valueVariable]
+                        val extensions = if (valueIndex != null) {
+                            buildList {
+                                ve.forEach { (value, entityValues) ->
+                                    entityValues.forEach { entityValue ->
+                                        input.rows.forEachIndexed { rowIndex, row ->
+                                            if (row[valueIndex] == value) {
+                                                add(RowExtension(rowIndex, listOf(entityValue)))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            buildList {
+                                ev.keys.forEach { entityValue ->
+                                    input.rows.forEachIndexed { rowIndex, _ ->
+                                        add(RowExtension(rowIndex, listOf(entityValue)))
+                                    }
+                                }
+                            }
+                        }
+                        return input.extend(introduces, extensions).reorder(targetVariables)
+                    }
+                    valueVariable -> {
+                        val entityIndex = input.columnIndexes[entityVariable]
+                        val extensions = if (entityIndex != null) {
+                            buildList {
+                                ev.forEach { (entityValue, values) ->
+                                    values.forEach { value ->
+                                        input.rows.forEachIndexed { rowIndex, row ->
+                                            if (row[entityIndex] == entityValue) {
+                                                add(RowExtension(rowIndex, listOf(value)))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            buildList {
+                                ve.keys.forEach { value ->
+                                    input.rows.forEachIndexed { rowIndex, _ ->
+                                        add(RowExtension(rowIndex, listOf(value)))
+                                    }
+                                }
+                            }
+                        }
+                        return input.extend(introduces, extensions).reorder(targetVariables)
+                    }
+                    else -> throw IllegalStateException("Triple pattern with two variables must introduce one of those variables")
+                }
             }
             variables.size == 2 && introduces.size == 2 -> {
                 require (input.variables.intersect(introduces.toSet()).isEmpty()) {
                     "Triple pattern with two variables cannot introduce a variable that is already bound"
                 }
-                val newRows =
-
-
-
+                val extensions = buildList {
+                    input.rows.forEachIndexed { rowIndex, _ ->
+                        ev.forEach { (entityValue, values) ->
+                            values.forEach { value ->
+                                val introducedValues = introduces.map { variable ->
+                                    when (variable) {
+                                        entityVariable -> entityValue
+                                        valueVariable -> value
+                                        else -> throw IllegalStateException("Triple pattern can only introduce its entity and value variables")
+                                    }
+                                }
+                                add(RowExtension(rowIndex, introducedValues))
+                            }
+                        }
+                    }
+                }
+                return input.extend(introduces, extensions).reorder(targetVariables)
             }
             else -> throw IllegalStateException("Triple pattern must have 1 or 2 variables, found ${variables.size}")
         }
-        throw IllegalStateException("Unreachable")
     }
 
     override fun validate(
