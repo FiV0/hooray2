@@ -214,7 +214,7 @@ class TriplePattern(
         introduces: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        require(input.variables.contains<Any>(introduces)) {
+        require(input.variables.containsAll(introduces)) {
             "BindingSet must contain all variables introduced"
         }
         when {
