@@ -18,19 +18,26 @@ class TriplePatternTest {
             attribute = "age",
             value = PatternValue.Variable(age),
         )
-        val input = BindingSet(emptyList(), listOf(emptyList()))
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
 
         assertEquals(
             listOf(e, age),
             pattern.groundable(emptySet()),
         )
         assertEquals(
-            listOf(Proposal(0, 2)),
-            pattern.count(input, listOf(e, age), listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE))),
+            listOf(Proposal(0, 2), Proposal(0, 2)),
+            pattern.count(
+                input,
+                listOf(e, age),
+                listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            ),
         )
         assertEquals(
-            BindingSet(listOf(e, age), listOf(listOf("a", 35), listOf("b", 40))),
-            pattern.propose(input, listOf(e, age), listOf(e, age)),
+            BindingSet(
+                listOf(seed, e, age),
+                listOf(listOf(1, "a", 35), listOf(2, "a", 35), listOf(1, "b", 40), listOf(2, "b", 40)),
+            ),
+            pattern.propose(input, listOf(e, age), listOf(seed, e, age)),
         )
     }
 
@@ -45,7 +52,7 @@ class TriplePatternTest {
         )
 
         assertEquals(
-            listOf(listOf("a", 35), listOf("b", 40)),
+            listOf(listOf("b", 40), listOf("a", 35)),
             byEntity.propose(
                 BindingSet(listOf(e), listOf(listOf("b"), listOf("a"))),
                 listOf(age),
@@ -53,7 +60,7 @@ class TriplePatternTest {
             ).rows,
         )
         assertEquals(
-            listOf(listOf(35, "a"), listOf(40, "b")),
+            listOf(listOf(40, "b"), listOf(35, "a")),
             byEntity.propose(
                 BindingSet(listOf(age), listOf(listOf(40), listOf(35))),
                 listOf(e),

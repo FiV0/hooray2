@@ -161,13 +161,9 @@ class TriplePattern(
                         val valueIndex = input.columnIndexes[valueVariable]
                         val extensions = if (valueIndex != null) {
                             buildList {
-                                ve.forEach { (value, entityValues) ->
-                                    entityValues.forEach { entityValue ->
-                                        input.rows.forEachIndexed { rowIndex, row ->
-                                            if (row[valueIndex] == value) {
-                                                add(RowExtension(rowIndex, listOf(entityValue)))
-                                            }
-                                        }
+                                input.rows.forEachIndexed { rowIndex, row ->
+                                    ve[row[valueIndex]].orEmpty().forEach { entityValue ->
+                                        add(RowExtension(rowIndex, listOf(entityValue)))
                                     }
                                 }
                             }
@@ -186,13 +182,9 @@ class TriplePattern(
                         val entityIndex = input.columnIndexes[entityVariable]
                         val extensions = if (entityIndex != null) {
                             buildList {
-                                ev.forEach { (entityValue, values) ->
-                                    values.forEach { value ->
-                                        input.rows.forEachIndexed { rowIndex, row ->
-                                            if (row[entityIndex] == entityValue) {
-                                                add(RowExtension(rowIndex, listOf(value)))
-                                            }
-                                        }
+                                input.rows.forEachIndexed { rowIndex, row ->
+                                    ev[row[entityIndex]].orEmpty().forEach { value ->
+                                        add(RowExtension(rowIndex, listOf(value)))
                                     }
                                 }
                             }
@@ -215,16 +207,16 @@ class TriplePattern(
                     "Triple pattern with two variables cannot introduce a variable that is already bound"
                 }
                 val extensions = buildList {
-                    input.rows.forEachIndexed { rowIndex, _ ->
-                        ev.forEach { (entityValue, values) ->
-                            values.forEach { value ->
-                                val introducedValues = introduces.map { variable ->
-                                    when (variable) {
-                                        entityVariable -> entityValue
-                                        valueVariable -> value
-                                        else -> throw IllegalStateException("Triple pattern can only introduce its entity and value variables")
-                                    }
+                    ev.forEach { (entityValue, values) ->
+                        values.forEach { value ->
+                            val introducedValues = introduces.map { variable ->
+                                when (variable) {
+                                    entityVariable -> entityValue
+                                    valueVariable -> value
+                                    else -> throw IllegalStateException("Triple pattern can only introduce its entity and value variables")
                                 }
+                            }
+                            input.rows.forEachIndexed { rowIndex, _ ->
                                 add(RowExtension(rowIndex, introducedValues))
                             }
                         }
