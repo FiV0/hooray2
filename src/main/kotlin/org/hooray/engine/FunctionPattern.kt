@@ -46,33 +46,44 @@ class FunctionPattern(
 
     override fun count(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        if (introduces != listOf(output) || !input.variables.containsAll(argumentVariables)) return proposals
+        if (added != listOf(output) || !input.variables.containsAll(argumentVariables)) return proposals
         return updateProposals(idx, proposals, List(input.rowCount) { 1 })
     }
 
-    override fun propose(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
+    }
+
+    private fun propose(
+        input: BindingSet,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        require(introduces == listOf(output) && input.variables.containsAll(argumentVariables)) {
+        require(added == listOf(output) && input.variables.containsAll(argumentVariables)) {
             "Function can only introduce its output after its arguments are bound"
         }
         val evaluate = evaluator(input.columnIndexes)
         val extensions = input.rows.mapIndexed { rowIndex, row ->
             RowExtension(rowIndex, listOf(evaluate(row)))
         }
-        return input.extend(introduces, extensions).reorder(targetVariables).distinctRows()
+        return input.extend(added, extensions).reorder(targetVariables).distinctRows()
     }
 
-    override fun validate(
+    private fun validate(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
+        require(added.isEmpty()) { "Function validation cannot add variables" }
         require(input.variables.containsAll(variables)) { "Function arguments and output must be bound before validation" }
         val outputIndex = input.columnIndex(output)
         val evaluate = evaluator(input.columnIndexes)

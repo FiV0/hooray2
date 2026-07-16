@@ -14,23 +14,14 @@ interface ExecPattern {
     /** Updates per-row proposals only when this pattern has a strictly cheaper positive count. */
     fun count(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> = proposals
 
-    /** Extends the input and returns exactly [targetVariables] in that order. */
-    fun propose(
+    /** Extends the input when [added] is non-empty; otherwise filters it without changing its layout. */
+    fun join(
         input: BindingSet,
-        introduces: List<Variable>,
-        targetVariables: List<Variable>,
-    ): BindingSet {
-        throw UnsupportedOperationException("Pattern cannot propose for this stage")
-    }
-
-    /** Filters rows without changing the input layout. */
-    fun validate(
-        input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet
 }

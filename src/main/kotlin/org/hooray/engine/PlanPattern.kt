@@ -9,8 +9,7 @@ interface PlanPattern {
 
 data class PatternBranch(
     val patterns: List<PlanPattern>,
-    val proposalStages: List<Stage>,
-    val validationStages: List<Stage>,
+    val stages: List<Stage>,
 ) {
     init {
         require(patterns.isNotEmpty()) { "Pattern branches must not be empty" }

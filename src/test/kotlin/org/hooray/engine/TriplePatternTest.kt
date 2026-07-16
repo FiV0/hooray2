@@ -37,7 +37,7 @@ class TriplePatternTest {
                 listOf(seed, e, age),
                 listOf(listOf(1, "a", 35), listOf(2, "a", 35), listOf(1, "b", 40), listOf(2, "b", 40)),
             ),
-            pattern.propose(input, listOf(e, age), listOf(seed, e, age)),
+            pattern.join(input, listOf(e, age), listOf(seed, e, age)),
         )
     }
 
@@ -53,7 +53,7 @@ class TriplePatternTest {
 
         assertEquals(
             listOf(listOf("b", 40), listOf("a", 35)),
-            byEntity.propose(
+            byEntity.join(
                 BindingSet(listOf(e), listOf(listOf("b"), listOf("a"))),
                 listOf(age),
                 listOf(e, age),
@@ -61,7 +61,7 @@ class TriplePatternTest {
         )
         assertEquals(
             listOf(listOf(40, "b"), listOf(35, "a")),
-            byEntity.propose(
+            byEntity.join(
                 BindingSet(listOf(age), listOf(listOf(40), listOf(35))),
                 listOf(e),
                 listOf(age, e),
@@ -85,7 +85,7 @@ class TriplePatternTest {
                 listOf(seed, e),
                 listOf(listOf(1, "a"), listOf(2, "a"), listOf(1, "b"), listOf(2, "b")),
             ),
-            pattern.propose(
+            pattern.join(
                 BindingSet(listOf(seed), listOf(listOf(1), listOf(2))),
                 listOf(e),
                 listOf(seed, e),
@@ -96,7 +96,7 @@ class TriplePatternTest {
                 listOf(seed, age),
                 listOf(listOf(1, 35), listOf(2, 35), listOf(1, 40), listOf(2, 40)),
             ),
-            pattern.propose(
+            pattern.join(
                 BindingSet(listOf(seed), listOf(listOf(1), listOf(2))),
                 listOf(age),
                 listOf(seed, age),
@@ -213,26 +213,26 @@ class TriplePatternTest {
             value = PatternValue.Variable(age),
         )
 
-        assertEquals(input, constantMatch.validate(input, emptyList(), listOf(seed)))
-        assertEquals(emptyList<BindingRow>(), constantMiss.validate(input, emptyList(), listOf(seed)).rows)
+        assertEquals(input, constantMatch.join(input, emptyList(), listOf(seed)))
+        assertEquals(emptyList<BindingRow>(), constantMiss.join(input, emptyList(), listOf(seed)).rows)
         assertEquals(
             listOf(listOf("a")),
-            variableEntity.validate(
+            variableEntity.join(
                 BindingSet(listOf(e), listOf(listOf("a"), listOf("b"))),
                 emptyList(),
                 listOf(e),
             ).rows,
         )
-        assertEquals(input, variableEntity.validate(input, emptyList(), listOf(seed)))
+        assertEquals(input, variableEntity.join(input, emptyList(), listOf(seed)))
         assertEquals(
             listOf(listOf(35)),
-            variableValue.validate(
+            variableValue.join(
                 BindingSet(listOf(age), listOf(listOf(35), listOf(40))),
                 emptyList(),
                 listOf(age),
             ).rows,
         )
-        assertEquals(input, variableValue.validate(input, emptyList(), listOf(seed)))
+        assertEquals(input, variableValue.join(input, emptyList(), listOf(seed)))
     }
 
     @Test
@@ -247,7 +247,7 @@ class TriplePatternTest {
 
         assertEquals(
             listOf(listOf("a")),
-            pattern.validate(
+            pattern.join(
                 BindingSet(listOf(e), listOf(listOf("a"), listOf("b"))),
                 emptyList(),
                 listOf(e),
@@ -255,7 +255,7 @@ class TriplePatternTest {
         )
         assertEquals(
             listOf(listOf(35)),
-            pattern.validate(
+            pattern.join(
                 BindingSet(listOf(age), listOf(listOf(35), listOf(40))),
                 emptyList(),
                 listOf(age),
@@ -263,14 +263,14 @@ class TriplePatternTest {
         )
         assertEquals(
             listOf(listOf("a", 35)),
-            pattern.validate(
+            pattern.join(
                 BindingSet(listOf(e, age), listOf(listOf("a", 35), listOf("a", 40))),
                 emptyList(),
                 listOf(e, age),
             ).rows,
         )
         val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
-        assertEquals(input, pattern.validate(input, emptyList(), listOf(seed)))
+        assertEquals(input, pattern.join(input, emptyList(), listOf(seed)))
     }
 
     private fun triplePattern(

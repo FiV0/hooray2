@@ -8,9 +8,9 @@ class GenericJoinEngine {
         validators: List<ExecPattern>,
     ): BindingSet {
         return validators.fold(input) { bindings, validator ->
-            val validated = validator.validate(
+            val validated = validator.join(
                 input = bindings,
-                introduces = stage.introduces,
+                added = emptyList(),
                 targetVariables = stage.targetVariables,
             )
             assert(validated.variables == bindings.variables) {
@@ -24,9 +24,9 @@ class GenericJoinEngine {
         // If the stage has a single participant, we can skip the count, propose and validation.
         if (stage.participants.size == 1) {
             val proposer = stage.participants.first()
-            val proposed = proposer.propose(
+            val proposed = proposer.join(
                 input = input,
-                introduces = stage.introduces,
+                added = stage.added,
                 targetVariables = stage.targetVariables,
             )
             assert(proposed.variables == stage.targetVariables) {
@@ -40,7 +40,7 @@ class GenericJoinEngine {
 
         // Count the number of proposals for each row from each participant
         val proposals = stage.participants.fold(initial) { current, participant ->
-            val updated = participant.count(input, stage.introduces, current)
+            val updated = participant.count(input, stage.added, current)
             assert(updated.size == input.rowCount) {
                 "Pattern ${participant.idx} returned ${updated.size} proposals, expected ${input.rowCount}"
             }
@@ -65,9 +65,9 @@ class GenericJoinEngine {
         var result = BindingSet(stage.targetVariables, emptyList())
         for ((proposerId, rowIndexes) in shards) {
             val proposer = participantsById.getValue(proposerId)
-            val proposed = proposer.propose(
+            val proposed = proposer.join(
                 input = input.selectRows(rowIndexes),
-                introduces = stage.introduces,
+                added = stage.added,
                 targetVariables = stage.targetVariables,
             )
             assert(proposed.variables == stage.targetVariables) {
@@ -82,14 +82,14 @@ class GenericJoinEngine {
     }
 
     private fun executeStage(stage: Stage, input: BindingSet): BindingSet {
-        require(input.variables.intersect(stage.introduces.toSet()).isEmpty()) {
-            "Stage introduced variables must not already be bound"
+        require(input.variables.intersect(stage.added.toSet()).isEmpty()) {
+            "Stage added variables must not already be bound"
         }
-        require(stage.targetVariables.toSet() == (input.variables + stage.introduces).toSet()) {
-            "Stage target variables must equal input variables plus introduced variables"
+        require(stage.targetVariables.toSet() == (input.variables + stage.added).toSet()) {
+            "Stage target variables must equal input variables plus added variables"
         }
 
-        return if (stage.introduces.isEmpty()) {
+        return if (stage.added.isEmpty()) {
             validateAll(input, stage, stage.participants).reorder(stage.targetVariables)
         } else {
             executeProposingStage(stage, input)

@@ -74,10 +74,10 @@ class RelationPattern(
 
     private fun prefixIndexes(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
     ): List<Int> {
         val inputPrefix = input.variables.filter { variable -> variable in variables }
-        require(isPrefix(inputPrefix + introduces)) {
+        require(isPrefix(inputPrefix + added)) {
             "Relation variables in the input followed by introduced variables must form a relation prefix"
         }
         return inputPrefix.map(input::columnIndex)
@@ -85,42 +85,52 @@ class RelationPattern(
 
     override fun count(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        if (introduces.isEmpty()) return proposals
-        val prefixIndexes = prefixIndexes(input, introduces)
+        if (added.isEmpty()) return proposals
+        val prefixIndexes = prefixIndexes(input, added)
         val counts = input.rows.map { row ->
-            countIntroductions(trieNodeFor(row, prefixIndexes), introduces.size)
+            countIntroductions(trieNodeFor(row, prefixIndexes), added.size)
         }
         return updateProposals(idx, proposals, counts)
     }
 
-    override fun propose(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
-    ): BindingSet {
-        require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
-            "Relation pattern cannot introduce variables it does not contain"
-        }
-        val prefixIndexes = prefixIndexes(input, introduces)
-        val extensions = buildList {
-            val values = ArrayList<Any>(introduces.size)
-            input.rows.forEachIndexed { rowIndex, row ->
-                val node = trieNodeFor(row, prefixIndexes) ?: return@forEachIndexed
-                addIntroductionExtensions(rowIndex, node, introduces.size, values)
-            }
-        }
-        return input.extend(introduces, extensions).reorder(targetVariables)
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
     }
 
-    override fun validate(
+    private fun propose(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        require(input.variables.containsAll(introduces)) {
+        require(added.isNotEmpty() && variables.containsAll(added)) {
+            "Relation pattern cannot introduce variables it does not contain"
+        }
+        val prefixIndexes = prefixIndexes(input, added)
+        val extensions = buildList {
+            val values = ArrayList<Any>(added.size)
+            input.rows.forEachIndexed { rowIndex, row ->
+                val node = trieNodeFor(row, prefixIndexes) ?: return@forEachIndexed
+                addIntroductionExtensions(rowIndex, node, added.size, values)
+            }
+        }
+        return input.extend(added, extensions).reorder(targetVariables)
+    }
+
+    private fun validate(
+        input: BindingSet,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet {
+        require(input.variables.containsAll(added)) {
             "BindingSet must contain all introduced variables for validation"
         }
         if (!hasRows) return BindingSet(input.variables, emptyList())

@@ -30,28 +30,38 @@ class OrPattern(
 
     override fun count(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
         val missing = orderedVariables.filterNot { it in input.variables }
-        if (introduces.toSet() != missing.toSet()) return proposals
+        if (added.toSet() != missing.toSet()) return proposals
         return proposals.map { proposal ->
             if (proposal.proposer == NO_PROPOSER) Proposal(idx, Int.MAX_VALUE) else proposal
         }
     }
 
-    override fun propose(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
+    }
+
+    private fun propose(
+        input: BindingSet,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
         val missing = orderedVariables.filterNot { it in input.variables }
-        require(introduces.toSet() == missing.toSet()) {
+        require(added.toSet() == missing.toSet()) {
             "OR pattern can only propose all of its missing variables"
         }
         var result = BindingSet(targetVariables, emptyList())
         branches.forEach { branch ->
-            val branchResult = engine.execute(branch.proposalStages, input)
+            val branchResult = engine.execute(branch.stages, input)
                 .project(targetVariables)
                 .distinctRows()
             result = result.unionDistinct(branchResult)
@@ -59,14 +69,15 @@ class OrPattern(
         return result
     }
 
-    override fun validate(
+    private fun validate(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
+        require(added.isEmpty()) { "OR validation cannot add variables" }
         var supported = BindingSet(input.variables, emptyList())
         branches.forEach { branch ->
-            val branchResult = engine.execute(branch.validationStages, input)
+            val branchResult = engine.execute(branch.stages, input)
                 .project(input.variables)
                 .distinctRows()
             supported = supported.unionDistinct(branchResult)

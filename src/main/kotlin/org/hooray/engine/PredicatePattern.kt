@@ -35,11 +35,30 @@ class PredicatePattern(
         }
     }
 
-    override fun validate(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
+    }
+
+    private fun propose(
+        input: BindingSet,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
+        throw UnsupportedOperationException("Pattern cannot propose for this stage")
+    }
+
+    private fun validate(
+        input: BindingSet,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet {
+        require(added.isEmpty()) { "Predicate validation cannot add variables" }
         require(input.variables.containsAll(variables)) { "Predicate arguments must be bound before validation" }
         val evaluate = evaluator(input.columnIndexes)
         return BindingSet(input.variables, input.rows.filter(evaluate))

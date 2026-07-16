@@ -10,12 +10,31 @@ class NotPattern(
 
     override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
 
-    override fun validate(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
+    }
+
+    private fun propose(
+        input: BindingSet,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        val matches = engine.execute(branch.validationStages, input)
+        throw UnsupportedOperationException("Pattern cannot propose for this stage")
+    }
+
+    private fun validate(
+        input: BindingSet,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet {
+        require(added.isEmpty()) { "NOT validation cannot add variables" }
+        val matches = engine.execute(branch.stages, input)
             .project(input.variables)
             .distinctRows()
         return input.antijoin(matches)

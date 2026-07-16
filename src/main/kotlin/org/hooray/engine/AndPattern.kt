@@ -14,39 +14,50 @@ class AndPattern(
 
     override fun count(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        if (introduces.isEmpty() || !variables.containsAll(introduces)) return proposals
+        if (added.isEmpty() || !variables.containsAll(added)) return proposals
         val counts = input.rows.map { row ->
             val completed = engine.execute(
-                branch.proposalStages,
+                branch.stages,
                 BindingSet(input.variables, listOf(row)),
             )
-            completed.project(introduces).distinctRows().rowCount
+            completed.project(added).distinctRows().rowCount
         }
         return updateProposals(idx, proposals, counts)
     }
 
-    override fun propose(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
+    }
+
+    private fun propose(
+        input: BindingSet,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
+        require(added.isNotEmpty() && variables.containsAll(added)) {
             "AND pattern cannot introduce variables it does not contain"
         }
-        return engine.execute(branch.proposalStages, input)
+        return engine.execute(branch.stages, input)
             .project(targetVariables)
             .distinctRows()
     }
 
-    override fun validate(
+    private fun validate(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        val completed = engine.execute(branch.validationStages, input)
+        require(added.isEmpty()) { "AND validation cannot add variables" }
+        val completed = engine.execute(branch.stages, input)
         return input.semijoin(completed.project(input.variables).distinctRows())
     }
 }

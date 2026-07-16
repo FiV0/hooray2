@@ -20,7 +20,7 @@ class PredicateFunctionPatternTest {
         assertEquals(emptyList<Variable>(), pattern.groundable(emptySet()))
         assertEquals(
             listOf(listOf(5)),
-            pattern.validate(
+            pattern.join(
                 BindingSet(listOf(x), listOf(listOf(5), listOf(15))),
                 emptyList(),
                 listOf(x),
@@ -49,11 +49,11 @@ class PredicateFunctionPatternTest {
         )
         assertEquals(
             BindingSet(listOf(x, y), listOf(listOf(5, 7), listOf(8, 10))),
-            pattern.propose(input, listOf(y), listOf(x, y)),
+            pattern.join(input, listOf(y), listOf(x, y)),
         )
         assertEquals(
             listOf(listOf(5, 7)),
-            pattern.validate(
+            pattern.join(
                 BindingSet(listOf(x, y), listOf(listOf(5, 7), listOf(5, 8))),
                 emptyList(),
                 listOf(x, y),
@@ -77,7 +77,7 @@ class PredicateFunctionPatternTest {
 
         assertEquals(
             listOf(listOf(10, 5)),
-            predicate.validate(
+            predicate.join(
                 BindingSet(listOf(y, x), listOf(listOf(10, 5), listOf(10, 15))),
                 emptyList(),
                 listOf(y, x),
@@ -85,7 +85,7 @@ class PredicateFunctionPatternTest {
         )
         assertEquals(
             BindingSet(listOf(y, x, z), listOf(listOf(2, 5, 3))),
-            function.propose(
+            function.join(
                 BindingSet(listOf(y, x), listOf(listOf(2, 5))),
                 listOf(z),
                 listOf(y, x, z),
@@ -93,7 +93,7 @@ class PredicateFunctionPatternTest {
         )
         assertEquals(
             listOf(listOf(3, 2, 5)),
-            function.validate(
+            function.join(
                 BindingSet(listOf(z, y, x), listOf(listOf(3, 2, 5), listOf(7, 2, 5))),
                 emptyList(),
                 listOf(z, y, x),

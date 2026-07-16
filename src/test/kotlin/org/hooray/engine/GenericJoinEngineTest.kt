@@ -64,14 +64,44 @@ class GenericJoinEngineTest {
     }
 
     @Test
+    fun `validators receive no added variables after another pattern proposes`() {
+        val proposer = MapPattern(
+            idx = 0,
+            patternVariables = setOf(e, x),
+            values = mapOf(listOf("a") to listOf(listOf(1))),
+        )
+        var validationAdded: List<Variable>? = null
+        val validator = object : ExecPattern {
+            override val idx = 1
+            override val variables = setOf(e, x)
+
+            override fun join(
+                input: BindingSet,
+                added: List<Variable>,
+                targetVariables: List<Variable>,
+            ): BindingSet {
+                validationAdded = added
+                return input
+            }
+        }
+
+        GenericJoinEngine().execute(
+            listOf(Stage(listOf(x), listOf(proposer, validator), listOf(e, x))),
+            BindingSet(listOf(e), listOf(listOf("a"))),
+        )
+
+        assertEquals(emptyList<Variable>(), validationAdded)
+    }
+
+    @Test
     fun `runs validation-only stages and preserves their input layout`() {
         val validator = object : ExecPattern {
             override val idx = 0
             override val variables = setOf(e)
 
-            override fun validate(
+            override fun join(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 targetVariables: List<Variable>,
             ) = BindingSet(input.variables, input.rows.filter { it[0] == "a" })
         }
@@ -95,7 +125,7 @@ class GenericJoinEngineTest {
             )
         }
 
-        assertEquals("Stage target variables must equal input variables plus introduced variables", error.message)
+        assertEquals("Stage target variables must equal input variables plus added variables", error.message)
     }
 
     @Test
@@ -122,13 +152,13 @@ class GenericJoinEngineTest {
 
             override fun count(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 proposals: List<Proposal>,
             ) = List(input.rowCount) { Proposal(99, 1) }
 
-            override fun validate(
+            override fun join(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 targetVariables: List<Variable>,
             ) = input
         }
@@ -150,13 +180,13 @@ class GenericJoinEngineTest {
 
             override fun count(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 proposals: List<Proposal>,
             ) = emptyList<Proposal>()
 
-            override fun validate(
+            override fun join(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 targetVariables: List<Variable>,
             ) = input
         }
@@ -178,21 +208,15 @@ class GenericJoinEngineTest {
 
             override fun count(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 proposals: List<Proposal>,
             ) = List(input.rowCount) { Proposal(idx, 1) }
 
-            override fun propose(
+            override fun join(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 targetVariables: List<Variable>,
             ) = BindingSet(listOf(x, e), listOf(listOf(1, "a")))
-
-            override fun validate(
-                input: BindingSet,
-                introduces: List<Variable>,
-                targetVariables: List<Variable>,
-            ) = input
         }
         val proposalError = assertThrows(IllegalArgumentException::class.java) {
             GenericJoinEngine().execute(
@@ -206,9 +230,9 @@ class GenericJoinEngineTest {
             override val idx = 1
             override val variables = setOf(e)
 
-            override fun validate(
+            override fun join(
                 input: BindingSet,
-                introduces: List<Variable>,
+                added: List<Variable>,
                 targetVariables: List<Variable>,
             ) = BindingSet(emptyList(), listOf(emptyList()))
         }
@@ -232,7 +256,7 @@ class GenericJoinEngineTest {
 
         override fun count(
             input: BindingSet,
-            introduces: List<Variable>,
+            added: List<Variable>,
             proposals: List<Proposal>,
         ): List<Proposal> = updateProposals(
             idx,
@@ -240,24 +264,19 @@ class GenericJoinEngineTest {
             input.rows.map { counts[it] ?: values[it].orEmpty().size },
         )
 
-        override fun propose(
+        override fun join(
             input: BindingSet,
-            introduces: List<Variable>,
+            added: List<Variable>,
             targetVariables: List<Variable>,
         ): BindingSet {
+            if (added.isEmpty()) return input
             val extensions = buildList {
                 input.rows.forEachIndexed { rowIndex, row ->
                     proposedInputs += row
                     values[row].orEmpty().forEach { add(RowExtension(rowIndex, it)) }
                 }
             }
-            return input.extend(introduces, extensions).reorder(targetVariables)
+            return input.extend(added, extensions).reorder(targetVariables)
         }
-
-        override fun validate(
-            input: BindingSet,
-            introduces: List<Variable>,
-            targetVariables: List<Variable>,
-        ) = input
     }
 }

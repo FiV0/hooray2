@@ -37,7 +37,7 @@ class RelationPatternTest {
             listOf(Proposal(4, 2), Proposal(4, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
             pattern.count(input, listOf(age), proposals),
         )
-        val proposed = pattern.propose(input, listOf(age), listOf(age, e))
+        val proposed = pattern.join(input, listOf(age), listOf(age, e))
         assertEquals(listOf(age, e), proposed.variables)
         assertEquals(3, proposed.rowCount)
         assertEquals(
@@ -52,7 +52,7 @@ class RelationPatternTest {
 
         assertEquals(
             BindingSet(listOf(e), listOf(listOf("a"))),
-            pattern.validate(input, emptyList(), listOf(e)),
+            pattern.join(input, emptyList(), listOf(e)),
         )
     }
 
@@ -82,9 +82,9 @@ class RelationPatternTest {
             blockPattern.count(input, listOf(age, name), proposals),
         )
 
-        val proposed = blockPattern.propose(
+        val proposed = blockPattern.join(
             input,
-            introduces = listOf(age, name),
+            added = listOf(age, name),
             targetVariables = listOf(name, source, e, age),
         )
         assertEquals(listOf(name, source, e, age), proposed.variables)
@@ -119,14 +119,14 @@ class RelationPatternTest {
             listOf(Proposal(8, 3)),
             rootPattern.count(
                 input,
-                introduces = listOf(e, age),
+                added = listOf(e, age),
                 proposals = listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE)),
             ),
         )
 
-        val proposed = rootPattern.propose(
+        val proposed = rootPattern.join(
             input,
-            introduces = listOf(e, age),
+            added = listOf(e, age),
             targetVariables = listOf(source, age, e),
         )
         assertEquals(listOf(source, age, e), proposed.variables)
@@ -161,9 +161,9 @@ class RelationPatternTest {
             interleavedPattern.count(input, listOf(name), proposals),
         )
 
-        val proposed = interleavedPattern.propose(
+        val proposed = interleavedPattern.join(
             input,
-            introduces = listOf(name),
+            added = listOf(name),
             targetVariables = listOf(source, name, e, age),
         )
         assertEquals(
@@ -199,11 +199,11 @@ class RelationPatternTest {
 
         assertEquals(
             BindingSet(listOf(e, source, age), listOf(listOf("a", "first", 35))),
-            prefixPattern.validate(partialInput, listOf(age), partialInput.variables),
+            prefixPattern.join(partialInput, emptyList(), partialInput.variables),
         )
         assertEquals(
             BindingSet(listOf(e, age, name), listOf(listOf("a", 36, "Ada"))),
-            prefixPattern.validate(completeInput, listOf(name), completeInput.variables),
+            prefixPattern.join(completeInput, emptyList(), completeInput.variables),
         )
     }
 
@@ -219,10 +219,10 @@ class RelationPatternTest {
             relation = BindingSet(emptyList(), emptyList()),
         )
 
-        assertEquals(input, nonEmptyPattern.validate(input, emptyList(), input.variables))
+        assertEquals(input, nonEmptyPattern.join(input, emptyList(), input.variables))
         assertEquals(
             BindingSet(listOf(source), emptyList()),
-            emptyPattern.validate(input, emptyList(), input.variables),
+            emptyPattern.join(input, emptyList(), input.variables),
         )
     }
 }

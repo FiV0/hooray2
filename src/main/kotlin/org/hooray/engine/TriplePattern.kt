@@ -29,15 +29,15 @@ class TriplePattern(
 
     override fun count(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
+        require(added.isNotEmpty() && variables.containsAll(added)) {
             "Triple pattern cannot introduce variables it does not contain"
         }
         when  {
-            variables.size == 1 && introduces.size == 1 -> {
-                require (introduces[0] == entityVariable || introduces[0] == valueVariable) {
+            variables.size == 1 && added.size == 1 -> {
+                require (added[0] == entityVariable || added[0] == valueVariable) {
                     "Triple pattern with one variable must introduce that variable"
                 }
                 when  {
@@ -56,8 +56,8 @@ class TriplePattern(
                     else -> throw IllegalStateException("Triple pattern with one variable must have that variable in the entity or value position")
                 }
             }
-            variables.size == 2 && introduces.size == 1 -> {
-                val introduced = introduces.single()
+            variables.size == 2 && added.size == 1 -> {
+                val introduced = added.single()
                 when (introduced) {
                     entityVariable -> {
                         val valueIndex = input.columnIndexes[valueVariable]
@@ -80,8 +80,8 @@ class TriplePattern(
                     else -> throw IllegalStateException("Triple pattern with two variables must introduce one of those variables")
                 }
             }
-            variables.size == 2 && introduces.size == 2 -> {
-                require (input.variables.intersect(introduces.toSet()).isEmpty()) {
+            variables.size == 2 && added.size == 2 -> {
+                require (input.variables.intersect(added.toSet()).isEmpty()) {
                     "Triple pattern with two variables cannot introduce a variable that is already bound"
                 }
                 val count = ev.values.sumOf { values -> values.size }
@@ -92,18 +92,28 @@ class TriplePattern(
         }
     }
 
-    // TODO the intermediate row extension lists seem wasted work
-    override fun propose(
+    override fun join(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
+        targetVariables: List<Variable>,
+    ): BindingSet = if (added.isEmpty()) {
+        validate(input, added, targetVariables)
+    } else {
+        propose(input, added, targetVariables)
+    }
+
+    // TODO the intermediate row extension lists seem wasted work
+    private fun propose(
+        input: BindingSet,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        require(introduces.isNotEmpty() && variables.containsAll(introduces)) {
+        require(added.isNotEmpty() && variables.containsAll(added)) {
             "Triple pattern cannot introduce variables it does not contain"
         }
         when  {
-            variables.size == 1 && introduces.size == 1 -> {
-                require (introduces[0] == entityVariable || introduces[0] == valueVariable) {
+            variables.size == 1 && added.size == 1 -> {
+                require (added[0] == entityVariable || added[0] == valueVariable) {
                     "Triple pattern with one variable must introduce that variable"
                 }
                 when  {
@@ -117,7 +127,7 @@ class TriplePattern(
                                 }
                             }
                         }
-                        return input.extend(introduces, extensions).reorder(targetVariables)
+                        return input.extend(added, extensions).reorder(targetVariables)
                     }
                     valueVariable != null -> {
                         val entityValue = entityConstant!!
@@ -129,14 +139,14 @@ class TriplePattern(
                                 }
                             }
                         }
-                        return input.extend(introduces, extensions).reorder(targetVariables)
+                        return input.extend(added, extensions).reorder(targetVariables)
                     }
                     else -> throw IllegalStateException("Triple pattern with one variable must have that variable in the entity or value position")
                 }
 
             }
-            variables.size == 2 && introduces.size == 1 -> {
-                val introduced = introduces.single()
+            variables.size == 2 && added.size == 1 -> {
+                val introduced = added.single()
                 when (introduced) {
                     entityVariable -> {
                         val valueIndex = input.columnIndexes[valueVariable]
@@ -157,7 +167,7 @@ class TriplePattern(
                                 }
                             }
                         }
-                        return input.extend(introduces, extensions).reorder(targetVariables)
+                        return input.extend(added, extensions).reorder(targetVariables)
                     }
                     valueVariable -> {
                         val entityIndex = input.columnIndexes[entityVariable]
@@ -178,19 +188,19 @@ class TriplePattern(
                                 }
                             }
                         }
-                        return input.extend(introduces, extensions).reorder(targetVariables)
+                        return input.extend(added, extensions).reorder(targetVariables)
                     }
                     else -> throw IllegalStateException("Triple pattern with two variables must introduce one of those variables")
                 }
             }
-            variables.size == 2 && introduces.size == 2 -> {
-                require (input.variables.intersect(introduces.toSet()).isEmpty()) {
+            variables.size == 2 && added.size == 2 -> {
+                require (input.variables.intersect(added.toSet()).isEmpty()) {
                     "Triple pattern with two variables cannot introduce a variable that is already bound"
                 }
                 val extensions = buildList {
                     ev.forEach { (entityValue, values) ->
                         values.forEach { value ->
-                            val introducedValues = introduces.map { variable ->
+                            val introducedValues = added.map { variable ->
                                 when (variable) {
                                     entityVariable -> entityValue
                                     valueVariable -> value
@@ -203,18 +213,18 @@ class TriplePattern(
                         }
                     }
                 }
-                return input.extend(introduces, extensions).reorder(targetVariables)
+                return input.extend(added, extensions).reorder(targetVariables)
             }
             else -> throw IllegalStateException("Triple pattern must have 1 or 2 variables, found ${variables.size}")
         }
     }
 
-    override fun validate(
+    private fun validate(
         input: BindingSet,
-        introduces: List<Variable>,
+        added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        require(input.variables.containsAll(introduces)) {
+        require(input.variables.containsAll(added)) {
             "BindingSet must contain all introduced variables for validation"
         }
         when {
