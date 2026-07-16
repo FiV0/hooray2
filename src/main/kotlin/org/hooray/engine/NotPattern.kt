@@ -42,7 +42,7 @@ class NotPattern(
         val inputRelation = RelationPattern(idx, input)
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         val matches = engine.execute(stages.map {
-            Stage(it.targetVariables, it.participants.toMutableList() + inputRelation, it.targetVariables)
+            Stage(it.targetVariables, it.participants + inputRelation, it.targetVariables)
         }, unit)
             .project(input.variables)
             .distinctRows() // can likely get rid of it
