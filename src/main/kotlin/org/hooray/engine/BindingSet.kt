@@ -136,6 +136,23 @@ data class BindingSet(
         return BindingSet(variables + rightOnlyVariables, joinedRows)
     }
 
+    private fun filterByExistence(
+        other: BindingSet,
+        keepMatches: Boolean,
+    ): BindingSet {
+        val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
+        val leftKeyIndexes = sharedVariables.map(::columnIndex)
+        val rightKeyIndexes = sharedVariables.map(other::columnIndex)
+        val rightKeys = other.rows.mapTo(hashSetOf()) { row ->
+            rightKeyIndexes.map { index -> row[index] }
+        }
+        val filteredRows = rows.filter { row ->
+            val key = leftKeyIndexes.map { index -> row[index] }
+            (key in rightKeys) == keepMatches
+        }
+        return BindingSet(variables, filteredRows)
+    }
+
     fun semijoin(other: BindingSet): BindingSet {
         return filterByExistence(other, keepMatches = true)
     }
@@ -173,20 +190,4 @@ data class BindingSet(
         return project(targetVariables)
     }
 
-    private fun filterByExistence(
-        other: BindingSet,
-        keepMatches: Boolean,
-    ): BindingSet {
-        val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
-        val leftKeyIndexes = sharedVariables.map(::columnIndex)
-        val rightKeyIndexes = sharedVariables.map(other::columnIndex)
-        val rightKeys = other.rows.mapTo(hashSetOf()) { row ->
-            rightKeyIndexes.map { index -> row[index] }
-        }
-        val filteredRows = rows.filter { row ->
-            val key = leftKeyIndexes.map { index -> row[index] }
-            (key in rightKeys) == keepMatches
-        }
-        return BindingSet(variables, filteredRows)
-    }
 }
