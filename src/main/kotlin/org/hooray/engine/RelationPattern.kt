@@ -88,7 +88,7 @@ class RelationPattern(
         added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        if (added.isEmpty()) return proposals
+        if (added.isEmpty() || !variables.containsAll(added)) return proposals
         val prefixIndexes = prefixIndexes(input, added)
         val counts = input.rows.map { row ->
             countIntroductions(trieNodeFor(row, prefixIndexes), added.size)
