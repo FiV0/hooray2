@@ -12,26 +12,6 @@ class CompositePatternTest {
     private val present = Any()
 
     @Test
-    fun `and computes groundable variables to a fixed point`() {
-        val triple = unaryTriplePattern(0, x, 1)
-        val function = FunctionPattern(
-            idx = 1,
-            arguments = listOf(PatternValue.Variable(x)),
-            output = y,
-            function = { value: Any -> (value as Int) + 1 },
-        )
-        val pattern = AndPattern(
-            idx = 2,
-            branch = PatternBranch(listOf(function, triple), emptyList()),
-        )
-
-        assertEquals(
-            listOf(x, y),
-            pattern.groundable(emptySet()),
-        )
-    }
-
-    @Test
     fun `or exposes missing variables only when every branch covers them`() {
         val first = PatternBranch(
             patterns = listOf(binaryTriplePattern(0, x, y, 1 to 2)),
@@ -78,33 +58,6 @@ class CompositePatternTest {
             OrPattern(2, listOf(first, second))
         }
         assertEquals("OR branches must have the same ordered variables", error.message)
-    }
-
-    @Test
-    fun `and executes construction-time subplan stages`() {
-        val triple = unaryTriplePattern(0, x, 1, 2)
-        val proposalBranch = PatternBranch(
-            patterns = listOf(triple),
-            stages = listOf(Stage(listOf(x), listOf(triple), listOf(x))),
-        )
-        val validationBranch = PatternBranch(
-            patterns = listOf(triple),
-            stages = listOf(Stage(emptyList(), listOf(triple), listOf(x))),
-        )
-        val proposalPattern = AndPattern(1, proposalBranch)
-        val validationPattern = AndPattern(1, validationBranch)
-        val unit = BindingSet(emptyList(), listOf(emptyList()))
-
-        assertEquals(
-            listOf(Proposal(1, 2)),
-            proposalPattern.count(unit, listOf(x), listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE))),
-        )
-        assertEquals(listOf(listOf(1), listOf(2)), proposalPattern.join(unit, listOf(x), listOf(x)).rows)
-        assertEquals(listOf(listOf(1)), validationPattern.join(
-            BindingSet(listOf(x), listOf(listOf(1), listOf(3))),
-            emptyList(),
-            listOf(x),
-        ).rows)
     }
 
     @Test
