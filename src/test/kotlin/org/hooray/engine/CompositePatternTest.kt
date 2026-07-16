@@ -141,7 +141,10 @@ class CompositePatternTest {
         val subStages = listOf(Stage(listOf(y), listOf(triple), listOf(x, y)))
         val branch = PatternBranch(listOf(triple), subStages)
         val or = OrPattern(1, listOf(branch))
-        val not = NotPattern(2, branch)
+        val not = NotPattern(
+            idx = 2,
+            stages = subStages,
+        )
         val input = BindingSet(listOf(x), listOf(listOf(1), listOf(3)))
 
         assertEquals(listOf(listOf(1)), or.join(input, emptyList(), listOf(x)).rows)
