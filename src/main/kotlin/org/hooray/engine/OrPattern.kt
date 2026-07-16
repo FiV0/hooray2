@@ -3,7 +3,7 @@ package org.hooray.engine
 class OrPattern(
     override val idx: Int,
     private val branches: List<List<Stage>>,
-) : PlanPattern, ExecPattern {
+) : Pattern {
     private val engine = GenericJoinEngine()
 
     override val orderedVariables: List<Variable>
@@ -21,8 +21,41 @@ class OrPattern(
         variables = orderedVariables.toSet()
     }
 
-    override fun groundable(bound: Set<Variable>): List<Variable> =
-        orderedVariables.filterNot { variable -> variable in bound }
+    private fun branchGroundable(
+        stages: List<Stage>,
+        bound: Set<Variable>,
+    ): Set<Variable> {
+        val patterns = stages
+            .flatMap { stage -> stage.participants }
+            .distinct()
+        val covered = bound.toMutableSet()
+        val groundable = linkedSetOf<Variable>()
+
+        var changed: Boolean
+        do {
+            changed = false
+            patterns.forEach { pattern ->
+                pattern.groundable(covered).forEach { variable ->
+                    require(variable in pattern.orderedVariables) {
+                        "Pattern returned a groundable variable it does not contain"
+                    }
+                    if (covered.add(variable)) {
+                        groundable += variable
+                        changed = true
+                    }
+                }
+            }
+        } while (changed)
+
+        return groundable
+    }
+
+    override fun groundable(bound: Set<Variable>): List<Variable> {
+        val common = branches
+            .map { stages -> branchGroundable(stages, bound) }
+            .reduce { intersection, branch -> intersection.intersect(branch) }
+        return orderedVariables.filter { variable -> variable in common }
+    }
 
     override fun count(
         input: BindingSet,

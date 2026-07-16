@@ -5,7 +5,7 @@ class GenericJoinEngine {
     private fun validateAll(
         input: BindingSet,
         stage: Stage,
-        validators: List<ExecPattern>,
+        validators: List<Pattern>,
     ): BindingSet {
         return validators.fold(input) { bindings, validator ->
             val validated = validator.join(

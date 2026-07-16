@@ -15,7 +15,7 @@ import org.hooray.util.Trie
 class RelationPattern(
     override val idx: Int,
     val relation: BindingSet,
-) : PlanPattern, ExecPattern {
+) : Pattern {
     override val orderedVariables: List<Variable> = relation.variables
     override val variables: Set<Variable> = orderedVariables.toSet()
     private val hasRows = relation.rows.isNotEmpty()

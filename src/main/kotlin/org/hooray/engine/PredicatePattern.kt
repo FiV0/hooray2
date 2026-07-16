@@ -4,7 +4,7 @@ class PredicatePattern(
     override val idx: Int,
     private val arguments: List<PatternValue>,
     private val predicate: Any,
-) : PlanPattern, ExecPattern {
+) : Pattern {
     init {
         require(arguments.size in 1..2) { "Hooray only supports unary and binary predicates for now." }
     }

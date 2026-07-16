@@ -5,7 +5,7 @@ class FunctionPattern(
     private val arguments: List<PatternValue>,
     private val output: Variable,
     private val function: Any,
-) : PlanPattern, ExecPattern {
+) : Pattern {
     init {
         require(arguments.size in 1..2) { "Hooray only supports unary and binary functions for now." }
         require(output !in arguments.orderedVariables()) { "Function output must differ from its arguments" }

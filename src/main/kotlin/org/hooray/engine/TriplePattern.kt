@@ -7,7 +7,7 @@ class TriplePattern(
     private val entity: PatternValue,
     attribute: Any,
     private val value: PatternValue,
-) : PlanPattern, ExecPattern {
+) : Pattern {
     override val orderedVariables: List<Variable> = listOf(entity, value).orderedVariables()
     override val variables: Set<Variable> = orderedVariables.toSet()
     private val ev = aev[attribute] ?: emptyMap()

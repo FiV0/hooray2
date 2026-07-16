@@ -11,6 +11,18 @@ class GenericJoinEngineTest {
     private val y = Symbol.intern("?y")
 
     @Test
+    fun `stage participants expose planning and execution contracts`() {
+        val pattern: Pattern = RelationPattern(
+            idx = 0,
+            relation = BindingSet(listOf(x), listOf(listOf(1))),
+        )
+
+        val stage = Stage(listOf(x), listOf(pattern), listOf(x))
+
+        assertEquals(listOf(x), stage.participants.single().groundable(emptySet()))
+    }
+
+    @Test
     fun `executes stages sequentially`() {
         val first = MapPattern(
             idx = 0,
@@ -71,10 +83,7 @@ class GenericJoinEngineTest {
             values = mapOf(listOf("a") to listOf(listOf(1))),
         )
         var validationAdded: List<Variable>? = null
-        val validator = object : ExecPattern {
-            override val idx = 1
-            override val variables = setOf(e, x)
-
+        val validator = object : TestPattern(1, listOf(e, x)) {
             override fun join(
                 input: BindingSet,
                 added: List<Variable>,
@@ -95,10 +104,7 @@ class GenericJoinEngineTest {
 
     @Test
     fun `runs validation-only stages and preserves their input layout`() {
-        val validator = object : ExecPattern {
-            override val idx = 0
-            override val variables = setOf(e)
-
+        val validator = object : TestPattern(0, listOf(e)) {
             override fun join(
                 input: BindingSet,
                 added: List<Variable>,
@@ -146,10 +152,7 @@ class GenericJoinEngineTest {
 
     @Test
     fun `rejects unknown proposer indexes`() {
-        val pattern = object : ExecPattern {
-            override val idx = 0
-            override val variables = setOf(x)
-
+        val pattern = object : TestPattern(0, listOf(x)) {
             override fun count(
                 input: BindingSet,
                 added: List<Variable>,
@@ -174,10 +177,7 @@ class GenericJoinEngineTest {
 
     @Test
     fun `rejects proposal tables with the wrong row count`() {
-        val pattern = object : ExecPattern {
-            override val idx = 0
-            override val variables = setOf(x)
-
+        val pattern = object : TestPattern(0, listOf(x)) {
             override fun count(
                 input: BindingSet,
                 added: List<Variable>,
@@ -202,10 +202,7 @@ class GenericJoinEngineTest {
 
     @Test
     fun `rejects proposal and validation layout changes`() {
-        val wrongProposal = object : ExecPattern {
-            override val idx = 0
-            override val variables = setOf(x)
-
+        val wrongProposal = object : TestPattern(0, listOf(x)) {
             override fun count(
                 input: BindingSet,
                 added: List<Variable>,
@@ -226,10 +223,7 @@ class GenericJoinEngineTest {
         }
         assertEquals("Pattern 0 proposed layout [?x, ?e], expected [?e, ?x]", proposalError.message)
 
-        val wrongValidator = object : ExecPattern {
-            override val idx = 1
-            override val variables = setOf(e)
-
+        val wrongValidator = object : TestPattern(1, listOf(e)) {
             override fun join(
                 input: BindingSet,
                 added: List<Variable>,
@@ -246,12 +240,11 @@ class GenericJoinEngineTest {
     }
 
     private class MapPattern(
-        override val idx: Int,
-        private val patternVariables: Set<Variable>,
+        idx: Int,
+        patternVariables: Set<Variable>,
         private val counts: Map<BindingRow, Int> = emptyMap(),
         private val values: Map<BindingRow, List<BindingRow>>,
-    ) : ExecPattern {
-        override val variables = patternVariables
+    ) : TestPattern(idx, patternVariables.toList()) {
         val proposedInputs = mutableListOf<BindingRow>()
 
         override fun count(
@@ -278,5 +271,14 @@ class GenericJoinEngineTest {
             }
             return input.extend(added, extensions).reorder(targetVariables)
         }
+    }
+
+    private abstract class TestPattern(
+        final override val idx: Int,
+        final override val orderedVariables: List<Variable>,
+    ) : Pattern {
+        final override val variables: Set<Variable> = orderedVariables.toSet()
+
+        override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
     }
 }

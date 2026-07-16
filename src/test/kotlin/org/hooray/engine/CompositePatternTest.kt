@@ -29,6 +29,33 @@ class CompositePatternTest {
     }
 
     @Test
+    fun `or grounds only variables groundable by every branch`() {
+        val firstTriple = unaryTriplePattern(0, x, 1)
+        val function = FunctionPattern(
+            idx = 1,
+            arguments = listOf(PatternValue.Variable(x)),
+            output = y,
+            function = { value: Any -> value },
+        )
+        val secondTriple = unaryTriplePattern(2, x, 2)
+        val predicate = PredicatePattern(
+            idx = 3,
+            arguments = listOf(PatternValue.Variable(y)),
+            predicate = { _: Any -> true },
+        )
+        val first = listOf(
+            Stage(listOf(x, y), listOf(function, firstTriple), listOf(x, y)),
+        )
+        val second = listOf(
+            Stage(listOf(x, y), listOf(secondTriple, predicate), listOf(x, y)),
+        )
+        val pattern = OrPattern(4, listOf(first, second))
+
+        assertEquals(listOf(x), pattern.groundable(emptySet()))
+        assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x)))
+    }
+
+    @Test
     fun `or accepts branches with different variable order`() {
         val firstTriple = binaryTriplePattern(0, x, y, 1 to "a")
         val secondTriple = binaryTriplePattern(1, y, x, "b" to 2)

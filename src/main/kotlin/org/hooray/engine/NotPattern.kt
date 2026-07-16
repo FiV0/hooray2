@@ -3,7 +3,7 @@ package org.hooray.engine
 class NotPattern(
     override val idx: Int,
     private val stages: List<Stage>,
-) : PlanPattern, ExecPattern {
+) : Pattern {
     private val engine: GenericJoinEngine = GenericJoinEngine()
 
     override val orderedVariables: List<Variable> = stages

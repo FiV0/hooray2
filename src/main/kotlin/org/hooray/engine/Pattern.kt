@@ -1,5 +1,12 @@
 package org.hooray.engine
 
+interface PlanPattern {
+    val orderedVariables: List<Variable>
+
+    /** Returns variables this pattern can ground from the supplied bound variables. */
+    fun groundable(bound: Set<Variable>): List<Variable>
+}
+
 data class Proposal(
     val proposer: Int,
     val count: Int,
@@ -25,6 +32,8 @@ interface ExecPattern {
         targetVariables: List<Variable>,
     ): BindingSet
 }
+
+interface Pattern : PlanPattern, ExecPattern
 
 internal fun updateProposals(
     idx: Int,
