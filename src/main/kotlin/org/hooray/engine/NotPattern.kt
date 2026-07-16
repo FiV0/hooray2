@@ -37,13 +37,15 @@ class NotPattern(
         targetVariables: List<Variable>,
     ): BindingSet {
         require(added.isEmpty()) { "NOT validation cannot add variables" }
-        require (input.variables.toSet() == variables) { "Input variables must all be bound for a NotPattern" }
-        val inputRelation = RelationPattern(idx, input)
+        require(input.variables.containsAll(variables)) {
+            "Input must bind all NotPattern variables"
+        }
+        val inputRelation = RelationPattern(idx, input.project(orderedVariables))
         val unit = BindingSet(emptyList(), listOf(emptyList()))
-        val matches = engine.execute(stages.map {
-            Stage(it.added, it.participants + inputRelation, it.targetVariables)
+        val matches = engine.execute(stages.map { stage ->
+            stage.copy(participants = stage.participants + inputRelation)
         }, unit)
-            .project(input.variables)
+            .project(orderedVariables)
         return input.antijoin(matches)
     }
 }

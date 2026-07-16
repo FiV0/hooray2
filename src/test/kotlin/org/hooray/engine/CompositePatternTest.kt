@@ -136,19 +136,40 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `or validates existential branch completions and not antijoins them`() {
+    fun `or validates existential branch completions`() {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
         val subStages = listOf(Stage(listOf(y), listOf(triple), listOf(x, y)))
         val branch = PatternBranch(listOf(triple), subStages)
         val or = OrPattern(1, listOf(branch))
-        val not = NotPattern(
-            idx = 2,
-            stages = subStages,
-        )
         val input = BindingSet(listOf(x), listOf(listOf(1), listOf(3)))
 
         assertEquals(listOf(listOf(1)), or.join(input, emptyList(), listOf(x)).rows)
-        assertEquals(listOf(listOf(3)), not.join(input, emptyList(), listOf(x)).rows)
+    }
+
+    @Test
+    fun `not projects wider input to subplan variables before matching`() {
+        val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
+        val not = NotPattern(
+            idx = 2,
+            stages = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y))),
+        )
+        val outer = Symbol.intern("?outer")
+        val input = BindingSet(
+            listOf(outer, x, y),
+            listOf(
+                listOf("first", 1, "a"),
+                listOf("second", 1, "missing"),
+                listOf("third", 3, "missing"),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                listOf("second", 1, "missing"),
+                listOf("third", 3, "missing"),
+            ),
+            not.join(input, emptyList(), input.variables).rows,
+        )
     }
 
     private fun unaryTriplePattern(
