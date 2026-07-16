@@ -2,31 +2,27 @@ package org.hooray.engine
 
 class OrPattern(
     override val idx: Int,
-    private val branches: List<PatternBranch>,
-    private val engine: GenericJoinEngine = GenericJoinEngine(),
+    private val branches: List<List<Stage>>,
 ) : PlanPattern, ExecPattern {
+    private val engine = GenericJoinEngine()
+
     override val orderedVariables: List<Variable>
     override val variables: Set<Variable>
 
     init {
         require(branches.isNotEmpty()) { "OR patterns must have at least one branch" }
-        val branchVariables = branches.map(::branchOrderedVariables)
-        require(branchVariables.all { it == branchVariables.first() }) {
-            "OR branches must have the same ordered variables"
+        val branchVariables = branches.map { stages ->
+            stages.flatMap { stage -> stage.added }
+        }
+        require(branchVariables.all { it.toSet() == branchVariables.first().toSet() }) {
+            "OR branches must have the same variables"
         }
         orderedVariables = branchVariables.first()
         variables = orderedVariables.toSet()
     }
 
-    override fun groundable(bound: Set<Variable>): List<Variable> {
-        val missing = orderedVariables.filterNot { it in bound }
-        if (missing.isEmpty()) return emptyList()
-
-        val everyBranchCoversMissing = branches.all { branch ->
-            groundingClosure(branch.patterns, bound).covered.containsAll(missing)
-        }
-        return if (everyBranchCoversMissing) missing else emptyList()
-    }
+    override fun groundable(bound: Set<Variable>): List<Variable> =
+        orderedVariables.filterNot { variable -> variable in bound }
 
     override fun count(
         input: BindingSet,
@@ -59,14 +55,9 @@ class OrPattern(
         require(added.toSet() == missing.toSet()) {
             "OR pattern can only propose all of its missing variables"
         }
-        var result = BindingSet(targetVariables, emptyList())
-        branches.forEach { branch ->
-            val branchResult = engine.execute(branch.stages, input)
-                .project(targetVariables)
-                .distinctRows()
-            result = result.unionDistinct(branchResult)
-        }
-        return result
+        return input.join(executeBranches(input))
+            .project(targetVariables)
+            .distinctRows()
     }
 
     private fun validate(
@@ -75,13 +66,25 @@ class OrPattern(
         targetVariables: List<Variable>,
     ): BindingSet {
         require(added.isEmpty()) { "OR validation cannot add variables" }
-        var supported = BindingSet(input.variables, emptyList())
-        branches.forEach { branch ->
-            val branchResult = engine.execute(branch.stages, input)
-                .project(input.variables)
-                .distinctRows()
-            supported = supported.unionDistinct(branchResult)
+        return input.semijoin(executeBranches(input))
+    }
+
+    private fun executeBranches(input: BindingSet): BindingSet {
+        val unit = BindingSet(emptyList(), listOf(emptyList()))
+        var result = BindingSet(orderedVariables, emptyList())
+        branches.forEach { stages ->
+            val branchVariables = stages.flatMap { stage -> stage.added }
+            val inputVariables = branchVariables.filter { variable -> variable in input.variables }
+            val inputRelation = RelationPattern(idx, input.project(inputVariables))
+            val branchResult = engine.execute(stages.map { stage ->
+                if (stage.added.any { variable -> variable in inputRelation.variables }) {
+                    stage.copy(participants = stage.participants + inputRelation)
+                } else {
+                    stage
+                }
+            }, unit).project(orderedVariables)
+            result = result.unionDistinct(branchResult)
         }
-        return input.semijoin(supported)
+        return result
     }
 }

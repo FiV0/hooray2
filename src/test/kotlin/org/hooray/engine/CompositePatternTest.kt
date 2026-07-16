@@ -12,62 +12,68 @@ class CompositePatternTest {
     private val present = Any()
 
     @Test
-    fun `or exposes missing variables only when every branch covers them`() {
-        val first = PatternBranch(
-            patterns = listOf(binaryTriplePattern(0, x, y, 1 to 2)),
-            stages = emptyList(),
+    fun `or exposes missing variables from its branch stages`() {
+        val firstTriple = binaryTriplePattern(0, x, y, 1 to 2)
+        val secondTriple = binaryTriplePattern(1, x, y, 3 to 4)
+        val first = listOf(
+            Stage(listOf(x, y), listOf(firstTriple), listOf(x, y)),
         )
-        val second = PatternBranch(
-            patterns = listOf(binaryTriplePattern(1, x, y, 3 to 4)),
-            stages = emptyList(),
+        val second = listOf(
+            Stage(listOf(x, y), listOf(secondTriple), listOf(x, y)),
         )
         val pattern = OrPattern(2, listOf(first, second))
 
         assertEquals(listOf(x, y), pattern.groundable(emptySet()))
         assertEquals(listOf(y), pattern.groundable(setOf(x)))
         assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x, y)))
+    }
 
-        val incompleteBranch = PatternBranch(
-            patterns = listOf(
-                PredicatePattern(
-                    3,
-                    listOf(PatternValue.Variable(x), PatternValue.Variable(y)),
-                    { _: Any, _: Any -> true },
-                ),
-            ),
-            stages = emptyList(),
+    @Test
+    fun `or accepts branches with different variable order`() {
+        val firstTriple = binaryTriplePattern(0, x, y, 1 to "a")
+        val secondTriple = binaryTriplePattern(1, y, x, "b" to 2)
+        val first = listOf(
+            Stage(listOf(x, y), listOf(firstTriple), listOf(x, y)),
         )
+        val second = listOf(
+            Stage(listOf(y, x), listOf(secondTriple), listOf(y, x)),
+        )
+        val pattern = OrPattern(2, listOf(first, second))
+
+        assertEquals(listOf(x, y), pattern.orderedVariables)
         assertEquals(
-            emptyList<Variable>(),
-            OrPattern(4, listOf(first, incompleteBranch)).groundable(emptySet()),
+            listOf(listOf(1, "a"), listOf(2, "b")),
+            pattern.join(
+                BindingSet(listOf(x), listOf(listOf(1), listOf(2))),
+                listOf(y),
+                listOf(x, y),
+            ).rows,
         )
     }
 
     @Test
-    fun `or rejects branches with different variable order`() {
-        val first = PatternBranch(
-            listOf(binaryTriplePattern(0, x, y)),
-            emptyList(),
+    fun `or rejects branches with different variables`() {
+        val binaryTriple = binaryTriplePattern(0, x, y)
+        val unaryTriple = unaryTriplePattern(1, x)
+        val first = listOf(
+            Stage(listOf(x, y), listOf(binaryTriple), listOf(x, y)),
         )
-        val second = PatternBranch(
-            listOf(binaryTriplePattern(1, y, x)),
-            emptyList(),
+        val second = listOf(
+            Stage(listOf(x), listOf(unaryTriple), listOf(x)),
         )
 
         val error = assertThrows(IllegalArgumentException::class.java) {
             OrPattern(2, listOf(first, second))
         }
-        assertEquals("OR branches must have the same ordered variables", error.message)
+        assertEquals("OR branches must have the same variables", error.message)
     }
 
     @Test
     fun `or is a fallback proposer and unions branch results distinctly`() {
         val firstTriple = unaryTriplePattern(0, x, 1, 2)
         val secondTriple = unaryTriplePattern(1, x, 2, 3)
-        fun branch(pattern: TriplePattern) = PatternBranch(
-            patterns = listOf(pattern),
-            stages = listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
-        )
+        fun branch(pattern: TriplePattern) =
+            listOf(Stage(listOf(x), listOf(pattern), listOf(x)))
         val pattern = OrPattern(
             idx = 5,
             branches = listOf(branch(firstTriple), branch(secondTriple)),
@@ -89,14 +95,45 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `or validates existential branch completions`() {
+    fun `or joins wider input through its projected branch relation`() {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
-        val subStages = listOf(Stage(listOf(y), listOf(triple), listOf(x, y)))
-        val branch = PatternBranch(listOf(triple), subStages)
-        val or = OrPattern(1, listOf(branch))
-        val input = BindingSet(listOf(x), listOf(listOf(1), listOf(3)))
+        val branch = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y)))
+        val pattern = OrPattern(1, listOf(branch))
+        val outer = Symbol.intern("?outer")
+        val proposalInput = BindingSet(
+            listOf(outer, x),
+            listOf(
+                listOf("first", 1),
+                listOf("second", 3),
+            ),
+        )
 
-        assertEquals(listOf(listOf(1)), or.join(input, emptyList(), listOf(x)).rows)
+        assertEquals(
+            listOf(listOf("first", 1, "a")),
+            pattern.join(
+                proposalInput,
+                listOf(y),
+                listOf(outer, x, y),
+            ).rows,
+        )
+
+        val validationInput = BindingSet(
+            listOf(outer, x, y),
+            listOf(
+                listOf("first", 1, "a"),
+                listOf("second", 1, "missing"),
+                listOf("third", 3, "missing"),
+            ),
+        )
+
+        assertEquals(
+            listOf(listOf("first", 1, "a")),
+            pattern.join(
+                validationInput,
+                emptyList(),
+                validationInput.variables,
+            ).rows,
+        )
     }
 
     @Test
