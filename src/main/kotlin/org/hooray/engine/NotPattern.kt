@@ -3,8 +3,8 @@ package org.hooray.engine
 class NotPattern(
     override val idx: Int,
     private val stages: List<Stage>,
-    private val engine: GenericJoinEngine = GenericJoinEngine(),
 ) : PlanPattern, ExecPattern {
+    private val engine: GenericJoinEngine = GenericJoinEngine()
 
     override val orderedVariables: List<Variable> = stages
         .flatMap { stage -> stage.added }
@@ -44,7 +44,6 @@ class NotPattern(
             Stage(it.added, it.participants + inputRelation, it.targetVariables)
         }, unit)
             .project(input.variables)
-            .distinctRows() // can likely get rid of it
         return input.antijoin(matches)
     }
 }
