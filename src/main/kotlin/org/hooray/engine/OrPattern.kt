@@ -63,11 +63,9 @@ class OrPattern(
         added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        val missing = orderedVariables.filterNot { it in input.variables }
-        if (added.toSet() != missing.toSet()) return proposals
-        return proposals.map { proposal ->
-            if (proposal.proposer == NO_PROPOSER) Proposal(idx, Int.MAX_VALUE) else proposal
-        }
+        // TODO: OrPatter count is currently a no-op. It should only ever propose if it's the only
+        // proposer of a set of variables.
+        return proposals
     }
 
     override fun join(
@@ -85,13 +83,15 @@ class OrPattern(
         added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
+        val groundable = groundable(input.variables.toSet())
+        require(groundable.containsAll(added)) {
+            "OrPattern can only propose variables it can ground"
+        }
         val missing = orderedVariables.filterNot { it in input.variables }
         require(added.toSet() == missing.toSet()) {
             "OR pattern can only propose all of its missing variables"
         }
-        return input.join(executeBranches(input))
-            .project(targetVariables)
-            .distinctRows()
+        return executeBranches(input).project(targetVariables)
     }
 
     private fun validate(
@@ -106,10 +106,10 @@ class OrPattern(
     private fun executeBranches(input: BindingSet): BindingSet {
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         var result = BindingSet(orderedVariables, emptyList())
-        branches.forEach { stages ->
+        branches.forEachIndexed { index, stages ->
             val branchVariables = stages.flatMap { stage -> stage.added }
             val inputVariables = branchVariables.filter { variable -> variable in input.variables }
-            val inputRelation = RelationPattern(idx, input.project(inputVariables))
+            val inputRelation = RelationPattern(index, input.project(inputVariables))
             val branchResult = engine.execute(stages.map { stage ->
                 if (stage.added.any { variable -> variable in inputRelation.variables }) {
                     stage.copy(participants = stage.participants + inputRelation)
