@@ -21,6 +21,7 @@ class OrPattern(
         variables = orderedVariables.toSet()
     }
 
+    // TODO: If the children had a topological order, a simple fold might suffice.
     private fun branchGroundable(
         stages: List<Stage>,
         bound: Set<Variable>,
