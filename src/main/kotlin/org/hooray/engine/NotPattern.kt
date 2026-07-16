@@ -7,8 +7,7 @@ class NotPattern(
 ) : PlanPattern, ExecPattern {
 
     override val orderedVariables: List<Variable> = stages
-        .flatMap { stage -> stage.targetVariables }
-        .distinct()
+        .flatMap { stage -> stage.added }
 
     override val variables: Set<Variable> = orderedVariables.toSet()
 
