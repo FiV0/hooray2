@@ -1,18 +1,16 @@
 package org.hooray.engine
 
 /**
- * A pattern that executes a set of branches, each of which is a list of stages. The result is the union of the results of each branch.
+ * Executes a disjunction as a set of independently planned branches.
  *
  * @property idx The index of this pattern in the plan.
  * @property branches The branches to execute. Each branch is a list of stages.
  *
- * The contract with the outer caller is that the incoming input [BindingSet] must contain all variables that the
- * branches can not ground. Each branch contains the same variables. The incoming [BindingSet] is projected/reordered
- * to match the execution of the branches. Each branch is executed independently and the results are unioned together.
- * Finally, the unioned result is semijoined again against the full incoming [BindingSet].
- * We also guarantee that the input.variables restricted to variables appearing in the branches will be added in that
- * order in the inner stages execution. This is required so that the RelationPattern can work correctly when joining
- * against the inner patterns.
+ * Every branch must contain the same variable set, although branches may introduce those variables in different
+ * orders. The incoming [BindingSet] must bind every branch variable that is not groundable by every branch. Before
+ * nested execution, the branch-relevant input columns are projected into a [RelationPattern] that constrains each
+ * branch. The branch results are unioned distinctly and correlated with the complete input so that unrelated outer
+ * columns are preserved.
  */
 class OrPattern(
     override val idx: Int,
@@ -77,11 +75,17 @@ class OrPattern(
         added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        // TODO: OrPatter count is currently a no-op. It should only ever propose if it's the only
-        // proposer of a set of variables.
+        // TODO: OrPattern.count is currently a no-op. It should register this pattern as a fallback only when no
+        // other participant can propose the requested variables.
         return proposals
     }
 
+    // Both proposal and validation execute the nested branches. Datatoad handles the analogous seeded-plan case
+    // specially: stage 0 semijoins the seed with fully covered atoms without introducing columns.
+    // TODO: Move per-stage sequestration into GenericJoinEngine. As in Datatoad, temporarily remove input columns not
+    // referenced by any participant in the current stage, execute the stage, and then reattach those columns.
+    // Once nested execution can retain or efficiently reattach unrelated columns, the outer correlation may be
+    // avoidable.
     override fun join(
         input: BindingSet,
         added: List<Variable>,
@@ -92,14 +96,6 @@ class OrPattern(
         propose(input, added, targetVariables)
     }
 
-    // TODO: both propose and validate are kind of the same thing in this case
-    // Datatoad does a special casing here, by doing the first stage as pure validation stage against the input.
-    // TODO: Once we have a columnar trie implementation, the semi-join can likely go.
-    // We could also check if the variables of executeBranches match the input variables, and if so,
-    // we can skip the semi-join as well.
-    // TODO The removal of non used variables could also be moved to the general engine. In Datatoad this is
-    // called sequestration. The idea would be that the engine strips away all columns that are not used by any stage
-    // and introduces them again afterwards.
     private fun propose(
         input: BindingSet,
         added: List<Variable>,
