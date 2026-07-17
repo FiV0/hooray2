@@ -129,7 +129,7 @@ class OrPattern(
     private fun executeBranches(input: BindingSet): BindingSet {
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         var result = BindingSet(orderedVariables, emptyList())
-        val inputRelation = RelationPattern(0, input.project(orderedVariables.filter {variable -> variable in input.variables}))
+        val inputRelation = RelationPattern(Int.MAX_VALUE, input.project(orderedVariables.filter {variable -> variable in input.variables}))
         branches.forEach { stages ->
             val branchResult = engine.execute(stages.map { stage ->
                 if (stage.added.any { variable -> variable in inputRelation.variables }) {
