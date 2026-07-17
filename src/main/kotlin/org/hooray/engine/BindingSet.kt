@@ -108,6 +108,9 @@ data class BindingSet(
         require(targetVariables.toSet().size == targetVariables.size) {
             "Projection variables must be distinct"
         }
+        require(variables.containsAll(targetVariables)) {
+            "Projection variables must be a subset of the current variables"
+        }
 
         val projection = targetVariables.map(::columnIndex)
         return BindingSet(
