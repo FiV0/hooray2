@@ -10,7 +10,8 @@ package org.hooray.engine
  * orders. The incoming [BindingSet] must bind every branch variable that is not groundable by every branch. Before
  * nested execution, the branch-relevant input columns are projected into a [RelationPattern] that constrains each
  * branch. The branch results are unioned distinctly and correlated with the complete input so that unrelated outer
- * columns are preserved.
+ * columns are preserved. An OrPattern only ever is called to propose if it's the only proposer for a given set of
+ * variables.
  */
 class OrPattern(
     override val idx: Int,
