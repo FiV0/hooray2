@@ -110,7 +110,7 @@ class OrPattern(
         require(added.toSet() == missing.toSet()) {
             "Or pattern can only propose all of its missing variables"
         }
-        return input.semijoin(executeBranches(input)).project(targetVariables)
+        return input.join(executeBranches(input)).project(targetVariables)
     }
 
     private fun validate(
