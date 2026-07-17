@@ -97,6 +97,9 @@ class OrPattern(
     // TODO: Once we have a columnar trie implementation, the semi-join can likely go.
     // We could also check if the variables of executeBranches match the input variables, and if so,
     // we can skip the semi-join as well.
+    // TODO The removal of non used variables could also be moved to the general engine. In Datatoad this is
+    // called sequestration. The idea would be that the engine strips away all columns that are not used by any stage
+    // and introduces them again afterwards.
     private fun propose(
         input: BindingSet,
         added: List<Variable>,
