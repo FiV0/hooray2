@@ -10,6 +10,9 @@ package org.hooray.engine
  * branches can not ground. Each branch contains the same variables. The incoming [BindingSet] is projected/reordered
  * to match the execution of the branches. Each branch is executed independently and the results are unioned together.
  * Finally, the unioned result is semijoined again against the full incoming [BindingSet].
+ * We also guarantee that the input.variables restricted to variables appearing in the branches will be added in that
+ * order in the inner stages execution. This is required so that the RelationPattern can work correctly when joining
+ * against the inner patterns.
  */
 class OrPattern(
     override val idx: Int,
