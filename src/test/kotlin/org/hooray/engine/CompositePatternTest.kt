@@ -56,7 +56,7 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `or accepts branches with different variable order`() {
+    fun `or rejects branches with different variable order`() {
         val firstTriple = binaryTriplePattern(0, x, y, 1 to "a")
         val secondTriple = binaryTriplePattern(1, y, x, "b" to 2)
         val first = listOf(
@@ -65,17 +65,11 @@ class CompositePatternTest {
         val second = listOf(
             Stage(listOf(y, x), listOf(secondTriple), listOf(y, x)),
         )
-        val pattern = OrPattern(2, listOf(first, second))
 
-        assertEquals(listOf(x, y), pattern.orderedVariables)
-        assertEquals(
-            listOf(listOf(1, "a"), listOf(2, "b")),
-            pattern.join(
-                BindingSet(listOf(x), listOf(listOf(1), listOf(2))),
-                listOf(y),
-                listOf(x, y),
-            ).rows,
-        )
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            OrPattern(2, listOf(first, second))
+        }
+        assertEquals("OR branches must introduce variables in the same order", error.message)
     }
 
     @Test
@@ -96,7 +90,7 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `or is a fallback proposer and unions branch results distinctly`() {
+    fun `or count is a no-op and single-participant stages propose`() {
         val firstTriple = unaryTriplePattern(0, x, 1, 2)
         val secondTriple = unaryTriplePattern(1, x, 2, 3)
         fun branch(pattern: TriplePattern) =
@@ -105,19 +99,39 @@ class CompositePatternTest {
             idx = 5,
             branches = listOf(branch(firstTriple), branch(secondTriple)),
         )
-        val unit = BindingSet(emptyList(), listOf(emptyList(), emptyList()))
+        val countInput = BindingSet(emptyList(), listOf(emptyList(), emptyList()))
+        val proposals = listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE), Proposal(9, 4))
 
         assertEquals(
-            listOf(Proposal(5, Int.MAX_VALUE), Proposal(9, 4)),
+            proposals,
             pattern.count(
-                unit,
+                countInput,
                 listOf(x),
-                listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE), Proposal(9, 4)),
+                proposals,
             ),
         )
         assertEquals(
             listOf(listOf(1), listOf(2), listOf(3)),
-            pattern.join(unit, listOf(x), listOf(x)).rows,
+            GenericJoinEngine().execute(
+                listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
+                BindingSet(emptyList(), listOf(emptyList())),
+            ).rows,
+        )
+    }
+
+    @Test
+    fun `or injected relation does not collide with branch participants`() {
+        val triple = binaryTriplePattern(Int.MAX_VALUE, x, y, 1 to "a")
+        val branch = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y)))
+        val pattern = OrPattern(1, listOf(branch))
+
+        assertEquals(
+            listOf(listOf(1, "a")),
+            pattern.join(
+                BindingSet(listOf(x), listOf(listOf(1))),
+                listOf(y),
+                listOf(x, y),
+            ).rows,
         )
     }
 
@@ -160,6 +174,16 @@ class CompositePatternTest {
                 emptyList(),
                 validationInput.variables,
             ).rows,
+        )
+        assertEquals(
+            BindingSet(
+                listOf(y, outer, x),
+                listOf(listOf("a", "first", 1)),
+            ),
+            GenericJoinEngine().execute(
+                listOf(Stage(emptyList(), listOf(pattern), listOf(y, outer, x))),
+                validationInput,
+            ),
         )
     }
 

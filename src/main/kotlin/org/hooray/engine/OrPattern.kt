@@ -6,12 +6,11 @@ package org.hooray.engine
  * @property idx The index of this pattern in the plan.
  * @property branches The branches to execute. Each branch is a list of stages.
  *
- * Every branch must contain the same variable set, although branches may introduce those variables in different
- * orders. The incoming [BindingSet] must bind every branch variable that is not groundable by every branch. Before
- * nested execution, the branch-relevant input columns are projected into a [RelationPattern] that constrains each
- * branch. The branch results are unioned distinctly and correlated with the complete input so that unrelated outer
- * columns are preserved. An OrPattern only ever is called to propose if it's the only proposer for a given set of
- * variables.
+ * Every branch must introduce the same variables in the same order. The incoming [BindingSet] must bind every branch
+ * variable that is not groundable by every branch. Before nested execution, the branch-relevant input columns are
+ * projected into a [RelationPattern] that constrains each branch. The branch results are unioned distinctly and
+ * correlated with the complete input so that unrelated outer columns are preserved. [GenericJoinEngine] calls an
+ * OrPattern to propose only when it is the sole participant in a stage.
  */
 class OrPattern(
     override val idx: Int,
@@ -29,6 +28,9 @@ class OrPattern(
         }
         require(branchVariables.all { it.toSet() == branchVariables.first().toSet() }) {
             "OR branches must have the same variables"
+        }
+        require(branchVariables.all { it == branchVariables.first() }) {
+            "OR branches must introduce variables in the same order"
         }
         orderedVariables = branchVariables.first()
         variables = orderedVariables.toSet()
@@ -76,8 +78,8 @@ class OrPattern(
         added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        // TODO: OrPattern.count is currently a no-op. It should register this pattern as a fallback only when no
-        // other participant can propose the requested variables.
+        // GenericJoinEngine bypasses counting when this is the stage's sole participant.
+        // TODO: propose for disjunctions. Upper bound is at least sumOf(count(branch))
         return proposals
     }
 
@@ -85,8 +87,8 @@ class OrPattern(
     // specially: stage 0 semijoins the seed with fully covered atoms without introducing columns.
     // TODO: Move per-stage sequestration into GenericJoinEngine. As in Datatoad, temporarily remove input columns not
     // referenced by any participant in the current stage, execute the stage, and then reattach those columns.
-    // Once nested execution can retain or efficiently reattach unrelated columns, the outer correlation may be
-    // avoidable.
+    // If GenericJoinEngine handled sequestration itself, OrPattern would not need to project away unrelated input
+    // columns before branch execution and then join or semijoin the branch results with the full input.
     override fun join(
         input: BindingSet,
         added: List<Variable>,
@@ -119,17 +121,21 @@ class OrPattern(
         targetVariables: List<Variable>,
     ): BindingSet {
         require(added.isEmpty()) { "OR validation cannot add variables" }
+        val missing = orderedVariables.filterNot { it in input.variables }
         val groundable = groundable(input.variables.toSet())
-        require(input.variables.toSet() + groundable.toSet() == orderedVariables.toSet()) {
-            "OR pattern can only validate if all of it's non-groundable variables are already bound in the input"
+        require(groundable.containsAll(missing)) {
+            "OR pattern can only validate if all its non-groundable variables are already bound in the input"
         }
-        return input.semijoin(executeBranches(input)).project(targetVariables)
+        return input.semijoin(executeBranches(input))
     }
 
     private fun executeBranches(input: BindingSet): BindingSet {
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         var result = BindingSet(orderedVariables, emptyList())
-        val inputRelation = RelationPattern(Int.MAX_VALUE, input.project(orderedVariables.filter {variable -> variable in input.variables}))
+        val inputRelation = RelationPattern(
+            idx,
+            input.project(orderedVariables.filter { variable -> variable in input.variables }),
+        )
         branches.forEach { stages ->
             val branchResult = engine.execute(stages.map { stage ->
                 if (stage.added.any { variable -> variable in inputRelation.variables }) {
