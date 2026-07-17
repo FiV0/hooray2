@@ -1,5 +1,16 @@
 package org.hooray.engine
 
+/**
+ * A pattern that executes a set of branches, each of which is a list of stages. The result is the union of the results of each branch.
+ *
+ * @property idx The index of this pattern in the plan.
+ * @property branches The branches to execute. Each branch is a list of stages.
+ *
+ * The contract with the outer caller is that the incoming input [BindingSet] must contain all variables that the
+ * branches can not ground. Each branch contains the same variables. The incoming [BindingSet] is projected/reordered
+ * to match the execution of the branches. Each branch is executed independently and the results are unioned together.
+ * Finally, the unioned result is semijoined again against the full incoming [BindingSet].
+ */
 class OrPattern(
     override val idx: Int,
     private val branches: List<List<Stage>>,
@@ -78,6 +89,11 @@ class OrPattern(
         propose(input, added, targetVariables)
     }
 
+    // TODO: both propose and validate are kind of the same thing in this case
+    // Datatoad does a special casing here, by doing the first stage as pure validation stage against the input.
+    // TODO: Once we have a columnar trie implementation, the semi-join can likely go.
+    // We could also check if the variables of executeBranches match the input variables, and if so,
+    // we can skip the semi-join as well.
     private fun propose(
         input: BindingSet,
         added: List<Variable>,
@@ -85,13 +101,13 @@ class OrPattern(
     ): BindingSet {
         val groundable = groundable(input.variables.toSet())
         require(groundable.containsAll(added)) {
-            "OrPattern can only propose variables it can ground"
+            "Or pattern can only propose variables it can ground"
         }
         val missing = orderedVariables.filterNot { it in input.variables }
         require(added.toSet() == missing.toSet()) {
-            "OR pattern can only propose all of its missing variables"
+            "Or pattern can only propose all of its missing variables"
         }
-        return executeBranches(input).project(targetVariables)
+        return input.semijoin(executeBranches(input)).project(targetVariables)
     }
 
     private fun validate(
@@ -100,16 +116,18 @@ class OrPattern(
         targetVariables: List<Variable>,
     ): BindingSet {
         require(added.isEmpty()) { "OR validation cannot add variables" }
-        return input.semijoin(executeBranches(input))
+        val groundable = groundable(input.variables.toSet())
+        require(input.variables.toSet() + groundable.toSet() == orderedVariables.toSet()) {
+            "OR pattern can only validate if all of it's non-groundable variables are already bound in the input"
+        }
+        return input.semijoin(executeBranches(input)).project(targetVariables)
     }
 
     private fun executeBranches(input: BindingSet): BindingSet {
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         var result = BindingSet(orderedVariables, emptyList())
-        branches.forEachIndexed { index, stages ->
-            val branchVariables = stages.flatMap { stage -> stage.added }
-            val inputVariables = branchVariables.filter { variable -> variable in input.variables }
-            val inputRelation = RelationPattern(index, input.project(inputVariables))
+        val inputRelation = RelationPattern(0, input.project(orderedVariables.filter {variable -> variable in input.variables}))
+        branches.forEach { stages ->
             val branchResult = engine.execute(stages.map { stage ->
                 if (stage.added.any { variable -> variable in inputRelation.variables }) {
                     stage.copy(participants = stage.participants + inputRelation)
