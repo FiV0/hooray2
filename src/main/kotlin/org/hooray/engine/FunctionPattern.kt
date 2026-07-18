@@ -16,7 +16,7 @@ class FunctionPattern(
     override val variables: Set<Variable> = orderedVariables.toSet()
 
     override fun groundable(bound: Set<Variable>): List<Variable> {
-        return if (bound.containsAll(argumentVariables)) {
+        return if (bound.containsAll(argumentVariables) && output !in bound) {
             listOf(output)
         } else {
             emptyList()

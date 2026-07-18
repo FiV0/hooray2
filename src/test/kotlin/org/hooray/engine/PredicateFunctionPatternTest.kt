@@ -39,6 +39,7 @@ class PredicateFunctionPatternTest {
         val input = BindingSet(listOf(x), listOf(listOf(5), listOf(8)))
 
         assertEquals(listOf(y), pattern.groundable(setOf(x)))
+        assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x, y)))
         assertEquals(
             listOf(Proposal(3, 1), Proposal(3, 1)),
             pattern.count(
