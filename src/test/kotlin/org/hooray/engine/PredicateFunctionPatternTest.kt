@@ -29,7 +29,7 @@ class PredicateFunctionPatternTest {
     }
 
     @Test
-    fun `function grounds computes and validates its output`() {
+    fun `function grounds proposes and validates its output`() {
         val pattern = FunctionPattern(
             idx = 3,
             arguments = listOf(PatternValue.Variable(x), PatternValue.Constant(2)),
@@ -49,7 +49,10 @@ class PredicateFunctionPatternTest {
         )
         assertEquals(
             BindingSet(listOf(x, y), listOf(listOf(5, 7), listOf(8, 10))),
-            pattern.join(input, listOf(y), listOf(x, y)),
+            GenericJoinEngine().execute(
+                listOf(Stage(listOf(y), listOf(pattern), listOf(x, y))),
+                input,
+            ),
         )
         assertEquals(
             listOf(listOf(5, 7)),

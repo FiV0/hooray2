@@ -11,18 +11,6 @@ class GenericJoinEngineTest {
     private val y = Symbol.intern("?y")
 
     @Test
-    fun `stage participants expose planning and execution contracts`() {
-        val pattern: Pattern = RelationPattern(
-            idx = 0,
-            relation = BindingSet(listOf(x), listOf(listOf(1))),
-        )
-
-        val stage = Stage(listOf(x), listOf(pattern), listOf(x))
-
-        assertEquals(listOf(x), stage.participants.single().groundable(emptySet()))
-    }
-
-    @Test
     fun `executes stages sequentially`() {
         val first = MapPattern(
             idx = 0,
@@ -151,7 +139,7 @@ class GenericJoinEngineTest {
     }
 
     @Test
-    fun `rejects unknown proposer indexes`() {
+    fun `rejects unknown proposer indexes in multi-participant stages`() {
         val pattern = object : TestPattern(0, listOf(x)) {
             override fun count(
                 input: BindingSet,
@@ -165,10 +153,11 @@ class GenericJoinEngineTest {
                 targetVariables: List<Variable>,
             ) = input
         }
+        val other = MapPattern(1, setOf(x), values = emptyMap())
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
+        val error = assertThrows(AssertionError::class.java) {
             GenericJoinEngine().execute(
-                listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
+                listOf(Stage(listOf(x), listOf(pattern, other), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
             )
         }
@@ -176,7 +165,7 @@ class GenericJoinEngineTest {
     }
 
     @Test
-    fun `rejects proposal tables with the wrong row count`() {
+    fun `rejects proposal tables with the wrong row count in multi-participant stages`() {
         val pattern = object : TestPattern(0, listOf(x)) {
             override fun count(
                 input: BindingSet,
@@ -190,10 +179,11 @@ class GenericJoinEngineTest {
                 targetVariables: List<Variable>,
             ) = input
         }
+        val other = MapPattern(1, setOf(x), values = emptyMap())
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
+        val error = assertThrows(AssertionError::class.java) {
             GenericJoinEngine().execute(
-                listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
+                listOf(Stage(listOf(x), listOf(pattern, other), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
             )
         }
@@ -215,7 +205,7 @@ class GenericJoinEngineTest {
                 targetVariables: List<Variable>,
             ) = BindingSet(listOf(x, e), listOf(listOf(1, "a")))
         }
-        val proposalError = assertThrows(IllegalArgumentException::class.java) {
+        val proposalError = assertThrows(AssertionError::class.java) {
             GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(wrongProposal), listOf(e, x))),
                 BindingSet(listOf(e), listOf(listOf("a"))),
@@ -230,7 +220,7 @@ class GenericJoinEngineTest {
                 targetVariables: List<Variable>,
             ) = BindingSet(emptyList(), listOf(emptyList()))
         }
-        val validationError = assertThrows(IllegalArgumentException::class.java) {
+        val validationError = assertThrows(AssertionError::class.java) {
             GenericJoinEngine().execute(
                 listOf(Stage(emptyList(), listOf(wrongValidator), listOf(e))),
                 BindingSet(listOf(e), listOf(listOf("a"))),

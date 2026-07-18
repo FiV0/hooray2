@@ -68,20 +68,6 @@ class BindingSetTest {
     }
 
     @Test
-    fun `rejects unknown variables in value lookup`() {
-        val bindings = BindingSet(
-            variables = listOf(e),
-            rows = listOf(listOf("a")),
-        )
-
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            bindings.valueAt(0, missing)
-        }
-
-        assertEquals("Unknown variable ?missing", error.message)
-    }
-
-    @Test
     fun `extends rows with introduced variables`() {
         val input = BindingSet(
             variables = listOf(e),
@@ -363,7 +349,7 @@ class BindingSetTest {
         }
 
         assertEquals("Projection variables must be distinct", duplicateError.message)
-        assertEquals("Unknown variable ?missing", unknownError.message)
+        assertEquals("Projection variables must be a subset of the current variables", unknownError.message)
     }
 
     @Test

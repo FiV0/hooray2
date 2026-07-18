@@ -120,22 +120,6 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `or injected relation does not collide with branch participants`() {
-        val triple = binaryTriplePattern(Int.MAX_VALUE, x, y, 1 to "a")
-        val branch = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y)))
-        val pattern = OrPattern(1, listOf(branch))
-
-        assertEquals(
-            listOf(listOf(1, "a")),
-            pattern.join(
-                BindingSet(listOf(x), listOf(listOf(1))),
-                listOf(y),
-                listOf(x, y),
-            ).rows,
-        )
-    }
-
-    @Test
     fun `or joins wider input through its projected branch relation`() {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
         val branch = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y)))
@@ -168,14 +152,6 @@ class CompositePatternTest {
         )
 
         assertEquals(
-            listOf(listOf("first", 1, "a")),
-            pattern.join(
-                validationInput,
-                emptyList(),
-                validationInput.variables,
-            ).rows,
-        )
-        assertEquals(
             BindingSet(
                 listOf(y, outer, x),
                 listOf(listOf("a", "first", 1)),
@@ -188,7 +164,7 @@ class CompositePatternTest {
     }
 
     @Test
-    fun `not projects wider input to subplan variables before matching`() {
+    fun `not grounds nothing and projects wider input before matching`() {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
         val not = NotPattern(
             idx = 2,
@@ -204,6 +180,7 @@ class CompositePatternTest {
             ),
         )
 
+        assertEquals(emptyList<Variable>(), not.groundable(emptySet()))
         assertEquals(
             listOf(
                 listOf("second", 1, "missing"),

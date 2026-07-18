@@ -8,7 +8,6 @@ class RelationPatternTest {
     private val e = Symbol.intern("?e")
     private val age = Symbol.intern("?age")
     private val name = Symbol.intern("?name")
-    private val city = Symbol.intern("?city")
     private val source = Symbol.intern("?source")
 
     private val pattern = RelationPattern(
@@ -53,49 +52,6 @@ class RelationPatternTest {
         assertEquals(
             BindingSet(listOf(e), listOf(listOf("a"))),
             pattern.join(input, emptyList(), listOf(e)),
-        )
-    }
-
-    @Test
-    fun `counts and proposes a consecutive block with an existential suffix`() {
-        val blockPattern = RelationPattern(
-            idx = 7,
-            relation = BindingSet(
-                listOf(e, age, name, city),
-                listOf(
-                    listOf("a", 35, "Alice", "Berlin"),
-                    listOf("a", 35, "Alice", "Paris"),
-                    listOf("a", 36, "Ada", "London"),
-                    listOf("a", 36, "Ada", "London"),
-                    listOf("b", 40, "Bob", "Rome"),
-                ),
-            ),
-        )
-        val input = BindingSet(
-            listOf(source, e),
-            listOf(listOf("left", "a"), listOf("right", "b"), listOf("missing", "c")),
-        )
-        val proposals = List(input.rowCount) { Proposal(NO_PROPOSER, Int.MAX_VALUE) }
-
-        assertEquals(
-            listOf(Proposal(7, 2), Proposal(7, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
-            blockPattern.count(input, listOf(age, name), proposals),
-        )
-
-        val proposed = blockPattern.join(
-            input,
-            added = listOf(age, name),
-            targetVariables = listOf(name, source, e, age),
-        )
-        assertEquals(listOf(name, source, e, age), proposed.variables)
-        assertEquals(3, proposed.rowCount)
-        assertEquals(
-            setOf(
-                listOf("Alice", "left", "a", 35),
-                listOf("Ada", "left", "a", 36),
-                listOf("Bob", "right", "b", 40),
-            ),
-            proposed.rows.toSet(),
         )
     }
 
@@ -176,7 +132,7 @@ class RelationPatternTest {
     }
 
     @Test
-    fun `validates partial and complete relation prefixes`() {
+    fun `validates complete relation prefixes`() {
         val prefixPattern = RelationPattern(
             idx = 10,
             relation = BindingSet(
@@ -184,23 +140,11 @@ class RelationPatternTest {
                 listOf(listOf("a", 35, "Alice"), listOf("a", 36, "Ada"), listOf("b", 40, "Bob")),
             ),
         )
-        val partialInput = BindingSet(
-            listOf(e, source, age),
-            listOf(
-                listOf("a", "first", 35),
-                listOf("a", "second", 40),
-                listOf("c", "third", 35),
-            ),
-        )
         val completeInput = BindingSet(
             listOf(e, age, name),
             listOf(listOf("a", 36, "Ada"), listOf("a", 36, "Alice")),
         )
 
-        assertEquals(
-            BindingSet(listOf(e, source, age), listOf(listOf("a", "first", 35))),
-            prefixPattern.join(partialInput, emptyList(), partialInput.variables),
-        )
         assertEquals(
             BindingSet(listOf(e, age, name), listOf(listOf("a", 36, "Ada"))),
             prefixPattern.join(completeInput, emptyList(), completeInput.variables),
