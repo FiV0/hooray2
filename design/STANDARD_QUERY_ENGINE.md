@@ -48,7 +48,9 @@ another pattern groundable. It does not authorize an arbitrary `join` call;
 each pattern still has a specific legal proposal shape.
 
 `ExecPattern.count` updates one proposal per input row when the pattern has a
-strictly cheaper positive candidate count. `ExecPattern.join` has two modes:
+strictly cheaper positive candidate count. A participant that cannot propose
+the stage's `added` list leaves the proposals unchanged. `ExecPattern.join`
+has two modes:
 
 - A non-empty `added` list asks the pattern to extend the input and return
   exactly `targetVariables`.
@@ -75,6 +77,10 @@ An `or` planning node derives groundability directly from its child
 terminates because each call descends into a child clause.
 
 Every `or` branch is planned with the same variable set and introduction order.
+The `or`'s incoming layout is known when its branches are planned, so a branch
+stage never introduces an outer-bound variable together with a branch-only
+one. The injected input relation therefore only joins nested stages whose
+`added` list it can propose or whose layout it can validate.
 A `not` body is planned with all of its variables supplied by its outer input.
 The nested stages start from the unit binding set. At execution time a projected
 `RelationPattern` supplies the applicable outer bindings and constrains the
@@ -87,12 +93,18 @@ closure across the scope. It selects the next legal introduction in query
 variable order while respecting function and composite dependencies. A stage
 may add several variables when a pattern requires them as one proposal.
 
-A pattern participates when it can either propose the complete `added` list or
-validate the layout produced by the stage. Predicates and negation participate
-only as validators and are never the sole participant of a proposing stage. A
-function proposes its output once its arguments are bound, or validates once
-its output is also bound. Remaining filters over an already complete layout
-form a validation-only stage.
+Participation in a proposing stage depends on the pattern kind. A triple or
+relation participates only when it can propose the complete `added` list,
+which requires `added` to be a non-empty subset of its variables. A stage
+that introduces one of their variables together with variables outside the
+pattern excludes them; the pattern participates in a later stage instead.
+Predicates, negation, and disjunction participate only as validators of the
+stage layout, except that a disjunction proposes all of its missing variables
+as the sole participant of a stage. Predicates and negation are never the
+sole participant of a proposing stage. A function proposes its output once
+its arguments are bound, or validates once its output is also bound.
+Remaining filters over an already complete layout form a validation-only
+stage.
 
 Every top-level variable must be present in the initial input or groundable by
 a pattern in the scope. An `or` requires variables not groundable by every
@@ -129,7 +141,7 @@ they receive.
 
 | Pattern | Planning and execution rules |
 |---------|------------------------------|
-| `TriplePattern` | Uses a fixed attribute and constant or variable entity/value positions. Every unbound pattern variable is groundable. It proposes through AEV or AVE according to the bound side and validates exact or partial bindings existentially. A constant-only triple is a validation filter. Entity and value variables must differ. |
+| `TriplePattern` | Uses a fixed attribute and constant or variable entity/value positions. Every unbound pattern variable is groundable. It proposes through AEV or AVE according to the bound side and validates exact or partial bindings existentially. A constant-only triple is a validation filter. It rejects `count` and proposing `join` calls whose `added` list is not a non-empty subset of its variables. Entity and value variables must differ. |
 | `RelationPattern` | Represents a materialized relation, including external and nested-plan inputs. Its trie proposes the next prefix segment and validates a bound prefix. Bound relation variables followed by `added` must form a prefix of the relation's variable order; unrelated input columns may interleave without changing that order. |
 | `PredicatePattern` | Grounds nothing. Once all variable arguments are bound, it evaluates its unary or binary predicate and filters rows without changing their layout. |
 | `FunctionPattern` | Grounds only its output, and only after all variable arguments are bound. It evaluates a unary or binary function to propose the output, or compares the computed value with an already bound output. The output differs from every argument variable. |
