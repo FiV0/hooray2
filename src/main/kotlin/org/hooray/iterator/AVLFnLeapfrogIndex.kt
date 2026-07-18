@@ -4,6 +4,9 @@ import org.hooray.UniversalComparator
 import org.hooray.algo.FnLeapfrogIndex
 import org.hooray.algo.Prefix
 
+typealias Fn1<A, R> = (A) -> R
+typealias Fn2<A, B, R> = (A, B) -> R
+
 class AVLFnLeapfrogIndex(
     val inputLevels: List<Int>,
     val outputLevel: Int,

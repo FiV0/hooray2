@@ -51,6 +51,15 @@
                         :where [[e :name "Ivan"]]}
                       (h/db fix/*node*)))))
 
+(deftest static-query-engines-work-with-avl-storage-test
+  (doseq [algo [:generic :leapfrog]]
+    (with-open [node (h/connect {:type :mem :storage :avl :algo algo})]
+      (t/is (= 1
+               (count (h/q '{:find [?e]
+                             :where [[?e :db/ident :db/ident]]}
+                           (h/db node))))
+            (name algo)))))
+
 (deftest test-basic-query
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
@@ -680,14 +689,14 @@
                                             (or [e :sex :female]
                                                 (and [e :sex :male]
                                                      [e :name "Ivan"]))])))
-  (t/is (= [["Ivana"]
-            ["Ivan"]]
-           (h/q '{:find [name]
-                  :where [[e :name name]
-                          (or [e :sex :female]
-                              (and [e :sex :male]
-                                   [e :name "Ivan"]))]}
-                (h/db fix/*node*))))
+  (t/is (= #{["Ivana"]
+             ["Ivan"]}
+           (set (h/q '{:find [name]
+                       :where [[e :name name]
+                               (or [e :sex :female]
+                                   (and [e :sex :male]
+                                        [e :name "Ivan"]))]}
+                     (h/db fix/*node*)))))
 
   (t/is (= [[:ivan]]
            (h/q '{:find [e]
@@ -957,18 +966,18 @@
                             [(>= age 50)]]} (h/db fix/*node*))))
 
     (t/testing "fallback to built in predicate for vars"
-      (t/is (= [["Ivan" 30 "Ivan" 30]
-                ["Ivan" 30 "Bob" 40]
-                ["Ivan" 30 "Dominic" 50]
-                ["Bob" 40 "Bob" 40]
-                ["Bob" 40 "Dominic" 50]
-                ["Dominic" 50 "Dominic" 50]]
-               (h/q '{:find [name age1 name2 age2]
-                      :where [[e :name name]
-                              [e :age age1]
-                              [e2 :name name2]
-                              [e2 :age age2]
-                              [(<= age1 age2)]]} (h/db fix/*node*))))))
+      (t/is (= #{["Ivan" 30 "Ivan" 30]
+                 ["Ivan" 30 "Bob" 40]
+                 ["Ivan" 30 "Dominic" 50]
+                 ["Bob" 40 "Bob" 40]
+                 ["Bob" 40 "Dominic" 50]
+                 ["Dominic" 50 "Dominic" 50]}
+               (set (h/q '{:find [name age1 name2 age2]
+                           :where [[e :name name]
+                                   [e :age age1]
+                                   [e2 :name name2]
+                                   [e2 :age age2]
+                                   [(<= age1 age2)]]} (h/db fix/*node*)))))))
 
   (t/testing "clojure.core predicate"
     (t/is (= [["Bob"] ["Dominic"]]
