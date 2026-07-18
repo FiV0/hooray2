@@ -13,7 +13,7 @@ class GenericJoinEngine {
                 added = emptyList(),
                 targetVariables = stage.targetVariables,
             )
-            assert(validated.variables == bindings.variables) {
+            check(validated.variables == bindings.variables) {
                 "Pattern ${validator.idx} changed the layout during validation"
             }
             validated
@@ -29,7 +29,7 @@ class GenericJoinEngine {
                 added = stage.added,
                 targetVariables = stage.targetVariables,
             )
-            assert(proposed.variables == stage.targetVariables) {
+            check(proposed.variables == stage.targetVariables) {
                 "Pattern ${proposer.idx} proposed layout ${proposed.variables}, expected ${stage.targetVariables}"
             }
             return proposed
@@ -41,14 +41,14 @@ class GenericJoinEngine {
         // Count the number of proposals for each row from each participant
         val proposals = stage.participants.fold(initial) { current, participant ->
             val updated = participant.count(input, stage.added, current)
-            assert(updated.size == input.rowCount) {
+            check(updated.size == input.rowCount) {
                 "Pattern ${participant.idx} returned ${updated.size} proposals, expected ${input.rowCount}"
             }
             updated
         }
 
         proposals.forEach { proposal ->
-            assert(proposal.proposer == NO_PROPOSER || proposal.proposer in participantIds) {
+            check(proposal.proposer == NO_PROPOSER || proposal.proposer in participantIds) {
                 "Unknown proposer index ${proposal.proposer}"
             }
         }
@@ -70,7 +70,7 @@ class GenericJoinEngine {
                 added = stage.added,
                 targetVariables = stage.targetVariables,
             )
-            assert(proposed.variables == stage.targetVariables) {
+            check(proposed.variables == stage.targetVariables) {
                 "Pattern $proposerId proposed layout ${proposed.variables}, expected ${stage.targetVariables}"
             }
 

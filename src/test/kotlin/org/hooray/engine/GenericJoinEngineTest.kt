@@ -155,7 +155,7 @@ class GenericJoinEngineTest {
         }
         val other = MapPattern(1, setOf(x), values = emptyMap())
 
-        val error = assertThrows(AssertionError::class.java) {
+        val error = assertThrows(IllegalStateException::class.java) {
             GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(pattern, other), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
@@ -181,7 +181,7 @@ class GenericJoinEngineTest {
         }
         val other = MapPattern(1, setOf(x), values = emptyMap())
 
-        val error = assertThrows(AssertionError::class.java) {
+        val error = assertThrows(IllegalStateException::class.java) {
             GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(pattern, other), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
@@ -205,7 +205,7 @@ class GenericJoinEngineTest {
                 targetVariables: List<Variable>,
             ) = BindingSet(listOf(x, e), listOf(listOf(1, "a")))
         }
-        val proposalError = assertThrows(AssertionError::class.java) {
+        val proposalError = assertThrows(IllegalStateException::class.java) {
             GenericJoinEngine().execute(
                 listOf(Stage(listOf(x), listOf(wrongProposal), listOf(e, x))),
                 BindingSet(listOf(e), listOf(listOf("a"))),
@@ -220,7 +220,7 @@ class GenericJoinEngineTest {
                 targetVariables: List<Variable>,
             ) = BindingSet(emptyList(), listOf(emptyList()))
         }
-        val validationError = assertThrows(AssertionError::class.java) {
+        val validationError = assertThrows(IllegalStateException::class.java) {
             GenericJoinEngine().execute(
                 listOf(Stage(emptyList(), listOf(wrongValidator), listOf(e))),
                 BindingSet(listOf(e), listOf(listOf("a"))),
