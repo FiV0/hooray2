@@ -75,7 +75,7 @@ class FunctionPattern(
         val extensions = input.rows.mapIndexed { rowIndex, row ->
             RowExtension(rowIndex, listOf(evaluate(row)))
         }
-        return input.extend(added, extensions).reorder(targetVariables).distinctRows()
+        return input.extend(added, extensions).reorder(targetVariables)
     }
 
     private fun validate(
