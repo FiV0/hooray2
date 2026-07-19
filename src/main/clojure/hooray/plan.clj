@@ -18,9 +18,6 @@
     Stage
     TriplePattern)))
 
-(defn- distinctv [values]
-  (vec (distinct values)))
-
 (defonce ^:private next-pattern-index (atom 0))
 
 (defn- next-index! []
@@ -35,20 +32,11 @@
        (keep (fn [[value-type value]]
                (when (= :variable value-type)
                  value)))
-       distinctv))
-
-(defn- node-index [{{:keys [idx]} :pattern :as _node}]
-  idx)
-
-(defn- node-variables [{{:keys [variables]} :pattern :as _node}]
-  variables)
-
-(defn- node-exec-pattern [{{:keys [exec-pattern]} :pattern :as _node}]
-  exec-pattern)
+       distinct))
 
 (defn- groundable-variables
-  [{{groundable-fn :groundable} :pattern :as _node} bound]
-  (vec (groundable-fn (set bound))))
+  [{{:keys [groundable]} :pattern :as _node} bound]
+  (vec (groundable (set bound))))
 
 (defn- pattern-value [[value-type value]]
   (case value-type
@@ -120,7 +108,10 @@
 (defn- compile-scope [db clauses]
   (let [nodes (mapv #(compile-node db %) clauses)]
     {:nodes nodes
-     :ordered-vars (distinctv (mapcat node-variables nodes))}))
+     :ordered-vars (->> nodes
+                        (mapcat (fn [{{:keys [variables]} :pattern}]
+                                  variables))
+                        distinct)}))
 
 (defn- compile-triple [idx {:keys [e a v] :as _triple} {:keys [aev ave] :as _db}]
   (let [[attribute-type attribute] a]
@@ -230,19 +221,23 @@
   (and (not= :or kind)
        (some #{variable} (groundable-variables node bound))))
 
-(defn- or-can-propose? [{:keys [kind] :as node} bound]
+(defn- or-can-propose? [{:keys [kind]
+                         {:keys [variables]} :pattern
+                         :as node}
+                        bound]
   (when (= :or kind)
-    (let [missing (vec (remove (set bound) (node-variables node)))
+    (let [missing (vec (remove (set bound) variables))
           groundable (set (groundable-variables node bound))]
       (when (and (seq missing) (set/subset? (set missing) groundable))
         missing))))
 
-(defn- fully-validatable? [node bound]
-  (set/subset? (set (node-variables node)) (set bound)))
+(defn- fully-validatable? [{{:keys [variables]} :pattern} bound]
+  (set/subset? (set variables) (set bound)))
 
 (defn- pending-validation-nodes [nodes completed bound]
   (->> nodes
-       (remove #(contains? completed (node-index %)))
+       (remove (fn [{{:keys [idx]} :pattern}]
+                 (contains? completed idx)))
        (filter #(fully-validatable? % bound))
        vec))
 
@@ -250,7 +245,9 @@
   [nodes completed bound variable variable-order external-pattern]
   (let [added [variable]
         target (bound-target variable-order bound added)
-        eligible-nodes (remove #(contains? completed (node-index %)) nodes)
+        eligible-nodes (remove (fn [{{:keys [idx]} :pattern}]
+                                 (contains? completed idx))
+                               nodes)
         proposers (filterv #(ordinary-can-propose? % bound variable) eligible-nodes)]
     (cond
       (seq proposers)
@@ -258,15 +255,18 @@
                               (filter (fn [node]
                                         (or (ordinary-can-propose? node bound variable)
                                             (fully-validatable? node target))))
-                              (mapv node-exec-pattern))
+                              (mapv (fn [{{:keys [exec-pattern]} :pattern}]
+                                      exec-pattern)))
             participant-ids (set (map (fn [^ExecPattern pattern]
                                         (.getIdx pattern))
                                       participants))]
         {:stage (Stage. added participants target)
          :completed (->> eligible-nodes
-                         (filter #(and (contains? participant-ids (node-index %))
-                                       (fully-validatable? % target)))
-                         (map node-index)
+                         (filter (fn [{{:keys [idx]} :pattern :as node}]
+                                   (and (contains? participant-ids idx)
+                                        (fully-validatable? node target))))
+                         (map (fn [{{:keys [idx]} :pattern}]
+                                idx))
                          set)})
 
       :else
@@ -274,9 +274,10 @@
                                          (and missing (some #{variable} missing)))
                                       eligible-nodes))]
         (let [or-added (or-can-propose? or-node bound)
-              or-target (bound-target variable-order bound or-added)]
-          {:stage (Stage. or-added [(node-exec-pattern or-node)] or-target)
-           :completed #{(node-index or-node)}})
+              or-target (bound-target variable-order bound or-added)
+              {{:keys [idx exec-pattern]} :pattern} or-node]
+          {:stage (Stage. or-added [exec-pattern] or-target)
+           :completed #{idx}})
         (when external-pattern
           {:stage (Stage. added [external-pattern] target)
            :completed #{}})))))
@@ -285,10 +286,14 @@
   (let [validation-nodes (pending-validation-nodes nodes completed bound)]
     (if (empty? validation-nodes)
       [completed stages]
-      [(into completed (map node-index validation-nodes))
+      [(into completed (map (fn [{{:keys [idx]} :pattern}]
+                              idx)
+                            validation-nodes))
        (conj stages
              (Stage. []
-                     (mapv node-exec-pattern validation-nodes)
+                     (mapv (fn [{{:keys [exec-pattern]} :pattern}]
+                             exec-pattern)
+                           validation-nodes)
                      (vec bound)))])))
 
 (defn- plan-scope [nodes variable-order external-pattern]
@@ -299,7 +304,10 @@
           remaining-vars (vec (remove (set bound) variable-order))]
       (if (empty? remaining-vars)
         (do
-          (when-not (= (set completed) (set (map node-index nodes)))
+          (when-not (= (set completed)
+                       (set (map (fn [{{:keys [idx]} :pattern}]
+                                   idx)
+                                 nodes)))
             (throw (IllegalStateException. "Not every pattern was lowered into a stage")))
           stages)
         (if-let [{:keys [stage] proposal-completed :completed :as _proposal}
