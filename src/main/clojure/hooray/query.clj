@@ -248,11 +248,6 @@
     [[:variable _]] (util/->function (fn [a] (f a)))
     :else (throw (ex-info "Unknown function pattern" {:fn f :args args}))))
 
-(defn resolve-fn [f-symbol]
-  (if (= f-symbol 're-find)
-    (fn [a b] (boolean (re-find a b)))
-    (resolve f-symbol)))
-
 (defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-in-join-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
@@ -286,7 +281,7 @@
                                           (map second))]
                    (AVLPredicateLeapfrogIndex.
                     (sort (mapv var->idx variable-args))
-                    (fn+args->function (resolve-fn predicate) args var->idx)))
+                    (fn+args->function (util/resolve-fn predicate) args var->idx)))
 
       :fn (let [[{:keys [fun args]} ret-var] pattern
                 variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
@@ -294,7 +289,7 @@
             (AVLFnLeapfrogIndex.
              (sort (mapv var->idx variable-args))
              (get var->idx ret-var)
-             (fn+args->function (resolve-fn fun) args var->idx))))))
+             (fn+args->function (util/resolve-fn fun) args var->idx))))))
 
 (defn- in->iterators [in var->idx args]
   (when (not= (count in) (count args))

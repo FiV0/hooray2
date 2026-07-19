@@ -34,16 +34,8 @@
     :constant (PatternValue$Constant. value)
     :variable (PatternValue$Variable. value)))
 
-(defn- resolve-query-fn [fn-symbol]
-  (if (= fn-symbol 're-find)
-    (fn [pattern value]
-      (boolean (re-find pattern value)))
-    (or (resolve fn-symbol)
-        (throw (IllegalArgumentException.
-                (format "Unable to resolve query function `%s`" fn-symbol))))))
-
 (defn- kotlin-function [fn-symbol arity]
-  (let [f (resolve-query-fn fn-symbol)]
+  (let [f (util/resolve-fn fn-symbol)]
     (case arity
       1 (util/->function (fn [arg] (f arg)))
       2 (util/->bifunction (fn [left right] (f left right)))

@@ -23,6 +23,14 @@
   (def m2 (sorted-update-in m [1 2] disj 3))
   (sorted? m2))
 
+(defn resolve-fn [fn-symbol]
+  (if (= fn-symbol 're-find)
+    (fn [pattern value]
+      (boolean (re-find pattern value)))
+    (or (resolve fn-symbol)
+        (throw (IllegalArgumentException.
+                (format "Unable to resolve query function `%s`" fn-symbol))))))
+
 (defn ->closure[f]
   (reify Function0
     (invoke [_this]
