@@ -18,6 +18,9 @@
     Stage
     TriplePattern)))
 
+(defn- distinctv [values]
+  (vec (distinct values)))
+
 (defonce ^:private next-pattern-index (atom 0))
 
 (defn- next-index! []
@@ -32,7 +35,7 @@
        (keep (fn [[value-type value]]
                (when (= :variable value-type)
                  value)))
-       distinct))
+       distinctv))
 
 (defn- groundable-variables
   [{{:keys [groundable]} :pattern :as _node} bound]
@@ -111,7 +114,7 @@
      :ordered-vars (->> nodes
                         (mapcat (fn [{{:keys [variables]} :pattern}]
                                   variables))
-                        distinct)}))
+                        distinctv)}))
 
 (defn- compile-triple [idx {:keys [e a v] :as _triple} {:keys [aev ave] :as _db}]
   (let [[attribute-type attribute] a]
