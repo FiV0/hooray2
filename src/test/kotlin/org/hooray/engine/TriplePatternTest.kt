@@ -10,7 +10,7 @@ class TriplePatternTest {
     private val seed = Symbol.intern("?seed")
 
     @Test
-    fun `grounds either triple variable and proposes both together`() {
+    fun `proposes both triple variables together`() {
         val pattern = triplePattern(
             TestTriple("a", "age", 35),
             TestTriple("b", "age", 40),
@@ -20,10 +20,6 @@ class TriplePatternTest {
         )
         val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
 
-        assertEquals(
-            listOf(e, age),
-            pattern.groundable(emptySet()),
-        )
         assertEquals(
             listOf(Proposal(0, 2), Proposal(0, 2)),
             pattern.count(

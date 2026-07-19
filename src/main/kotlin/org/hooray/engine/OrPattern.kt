@@ -6,19 +6,18 @@ package org.hooray.engine
  * @property idx The index of this pattern in the plan.
  * @property branches The branches to execute. Each branch is a list of stages.
  *
- * Every branch must introduce the same variables in the same order. The incoming [BindingSet] must bind every branch
- * variable that is not groundable by every branch. Before nested execution, the branch-relevant input columns are
- * projected into a [RelationPattern] that constrains each branch. The branch results are unioned distinctly and
- * correlated with the complete input so that unrelated outer columns are preserved. [GenericJoinEngine] calls an
- * OrPattern to propose only when it is the sole participant in a stage.
+ * Every branch must introduce the same variables in the same order. Before nested execution, the branch-relevant
+ * input columns are projected into a [RelationPattern] that constrains each branch. The branch results are unioned
+ * distinctly and correlated with the complete input so that unrelated outer columns are preserved.
+ * [GenericJoinEngine] calls an OrPattern to propose only when it is the sole participant in a stage.
  */
 class OrPattern(
     override val idx: Int,
     private val branches: List<List<Stage>>,
-) : Pattern {
+) : ExecPattern {
     private val engine = GenericJoinEngine()
 
-    override val orderedVariables: List<Variable>
+    private val orderedVariables: List<Variable>
     override val variables: Set<Variable>
 
     init {
@@ -34,43 +33,6 @@ class OrPattern(
         }
         orderedVariables = branchVariables.first()
         variables = orderedVariables.toSet()
-    }
-
-    // TODO: If the children had a topological order, a simple fold might suffice.
-    private fun branchGroundable(
-        stages: List<Stage>,
-        bound: Set<Variable>,
-    ): Set<Variable> {
-        val patterns = stages
-            .flatMap { stage -> stage.participants }
-            .distinct()
-        val covered = bound.toMutableSet()
-        val groundable = linkedSetOf<Variable>()
-
-        var changed: Boolean
-        do {
-            changed = false
-            patterns.forEach { pattern ->
-                pattern.groundable(covered).forEach { variable ->
-                    require(variable in pattern.orderedVariables) {
-                        "Pattern returned a groundable variable it does not contain"
-                    }
-                    if (covered.add(variable)) {
-                        groundable += variable
-                        changed = true
-                    }
-                }
-            }
-        } while (changed)
-
-        return groundable
-    }
-
-    override fun groundable(bound: Set<Variable>): List<Variable> {
-        val common = branches
-            .map { stages -> branchGroundable(stages, bound) }
-            .reduce { intersection, branch -> intersection.intersect(branch) }
-        return orderedVariables.filter { variable -> variable in common }
     }
 
     override fun count(
@@ -104,10 +66,6 @@ class OrPattern(
         added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        val groundable = groundable(input.variables.toSet())
-        require(groundable.containsAll(added)) {
-            "Or pattern can only propose variables it can ground"
-        }
         val missing = orderedVariables.filterNot { it in input.variables }
         require(added.toSet() == missing.toSet()) {
             "Or pattern can only propose all of its missing variables"
@@ -121,10 +79,8 @@ class OrPattern(
         targetVariables: List<Variable>,
     ): BindingSet {
         require(added.isEmpty()) { "OR validation cannot add variables" }
-        val missing = orderedVariables.filterNot { it in input.variables }
-        val groundable = groundable(input.variables.toSet())
-        require(groundable.containsAll(missing)) {
-            "OR pattern can only validate if all its non-groundable variables are already bound in the input"
+        require(input.variables.containsAll(variables)) {
+            "OR validation requires all pattern variables to be bound"
         }
         return input.semijoin(executeBranches(input))
     }

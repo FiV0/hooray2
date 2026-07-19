@@ -265,10 +265,8 @@ class GenericJoinEngineTest {
 
     private abstract class TestPattern(
         final override val idx: Int,
-        final override val orderedVariables: List<Variable>,
-    ) : Pattern {
-        final override val variables: Set<Variable> = orderedVariables.toSet()
-
-        override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
+        patternVariables: List<Variable>,
+    ) : ExecPattern {
+        final override val variables: Set<Variable> = patternVariables.toSet()
     }
 }

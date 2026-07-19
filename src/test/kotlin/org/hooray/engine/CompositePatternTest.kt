@@ -12,50 +12,6 @@ class CompositePatternTest {
     private val present = Any()
 
     @Test
-    fun `or exposes missing variables from its branch stages`() {
-        val firstTriple = binaryTriplePattern(0, x, y, 1 to 2)
-        val secondTriple = binaryTriplePattern(1, x, y, 3 to 4)
-        val first = listOf(
-            Stage(listOf(x, y), listOf(firstTriple), listOf(x, y)),
-        )
-        val second = listOf(
-            Stage(listOf(x, y), listOf(secondTriple), listOf(x, y)),
-        )
-        val pattern = OrPattern(2, listOf(first, second))
-
-        assertEquals(listOf(x, y), pattern.groundable(emptySet()))
-        assertEquals(listOf(y), pattern.groundable(setOf(x)))
-        assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x, y)))
-    }
-
-    @Test
-    fun `or grounds only variables groundable by every branch`() {
-        val firstTriple = unaryTriplePattern(0, x, 1)
-        val function = FunctionPattern(
-            idx = 1,
-            arguments = listOf(PatternValue.Variable(x)),
-            output = y,
-            function = { value: Any -> value },
-        )
-        val secondTriple = unaryTriplePattern(2, x, 2)
-        val predicate = PredicatePattern(
-            idx = 3,
-            arguments = listOf(PatternValue.Variable(y)),
-            predicate = { _: Any -> true },
-        )
-        val first = listOf(
-            Stage(listOf(x, y), listOf(function, firstTriple), listOf(x, y)),
-        )
-        val second = listOf(
-            Stage(listOf(x, y), listOf(secondTriple, predicate), listOf(x, y)),
-        )
-        val pattern = OrPattern(4, listOf(first, second))
-
-        assertEquals(listOf(x), pattern.groundable(emptySet()))
-        assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x)))
-    }
-
-    @Test
     fun `or rejects branches with different variable order`() {
         val firstTriple = binaryTriplePattern(0, x, y, 1 to "a")
         val secondTriple = binaryTriplePattern(1, y, x, "b" to 2)
@@ -161,6 +117,15 @@ class CompositePatternTest {
                 validationInput,
             ),
         )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            pattern.join(
+                BindingSet(listOf(x), listOf(listOf(1))),
+                emptyList(),
+                listOf(x),
+            )
+        }
+        assertEquals("OR validation requires all pattern variables to be bound", error.message)
     }
 
     @Test
@@ -180,7 +145,6 @@ class CompositePatternTest {
             ),
         )
 
-        assertEquals(emptyList<Variable>(), not.groundable(emptySet()))
         assertEquals(
             listOf(
                 listOf("second", 1, "missing"),

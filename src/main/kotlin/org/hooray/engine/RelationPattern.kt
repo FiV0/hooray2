@@ -15,8 +15,8 @@ import org.hooray.util.Trie
 class RelationPattern(
     override val idx: Int,
     val relation: BindingSet,
-) : Pattern {
-    override val orderedVariables: List<Variable> = relation.variables
+) : ExecPattern {
+    private val orderedVariables: List<Variable> = relation.variables
     override val variables: Set<Variable> = orderedVariables.toSet()
     private val hasRows = relation.rows.isNotEmpty()
     private val trie = Trie<Any>().apply {
@@ -25,9 +25,6 @@ class RelationPattern(
     private val root = requireNotNull(trie.trieNodeFor(emptyList())) {
         "Trie root must exist"
     }
-
-    override fun groundable(bound: Set<Variable>): List<Variable> =
-        orderedVariables.filterNot { it in bound }
 
     private fun trieNodeFor(
         row: BindingRow,

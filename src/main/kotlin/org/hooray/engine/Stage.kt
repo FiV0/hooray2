@@ -2,7 +2,7 @@ package org.hooray.engine
 
 data class Stage(
     val added: List<Variable>,
-    val participants: List<Pattern>,
+    val participants: List<ExecPattern>,
     val targetVariables: List<Variable>
 )
 {

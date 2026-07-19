@@ -7,7 +7,7 @@
    [hooray.plan :as plan]
    [hooray.query :as query])
   (:import
-   (org.hooray.engine BindingSet NotPattern OrPattern RelationPattern Stage)))
+   (org.hooray.engine BindingSet FunctionPattern NotPattern OrPattern RelationPattern Stage)))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -47,11 +47,29 @@
                              :where [[?e :name ?name]]}
                            [[:alice "Alice"]
                             [:bob "Not Bob"]])
+        ^Stage entity-stage (first stages)
+        ^Stage name-stage (second stages)
         participants (mapcat #(.getParticipants ^Stage %) stages)
         ^BindingSet result (query/execute stages)]
+    (is (= '[?e] (.getAdded entity-stage)))
+    (is (= '[?name] (.getAdded name-stage)))
     (is (some #(instance? RelationPattern %) participants))
     (is (= #{[:alice "Alice"]}
            (set (map vec (.getRows result)))))))
+
+(deftest function-output-becomes-groundable-after-its-arguments-test
+  (let [stages (plan-query '{:find [?x ?y]
+                             :in [?x]
+                             :where [[(+ ?x 2) ?y]]}
+                           5)
+        ^Stage argument-stage (first stages)
+        ^Stage output-stage (second stages)
+        ^BindingSet result (query/execute stages)]
+    (is (= '[?x] (.getAdded argument-stage)))
+    (is (not-any? #(instance? FunctionPattern %) (.getParticipants argument-stage)))
+    (is (= '[?y] (.getAdded output-stage)))
+    (is (some #(instance? FunctionPattern %) (.getParticipants output-stage)))
+    (is (= [[5 7]] (mapv vec (.getRows result))))))
 
 (deftest nested-or-inside-not-is-planned-recursively-test
   (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
@@ -95,3 +113,79 @@
     (is (= #{[:alice "Alice" 30]
              [:bob "Bob" 40]}
            (set (map vec (.getRows result)))))))
+
+(deftest or-groundability-follows-each-branches-planned-stage-order-test
+  (h/transact fix/*node* [{:db/id :alice :age 30}
+                          {:db/id :bob :salary 40}])
+
+  (let [stages (plan-query '{:find [?e ?amount ?incremented]
+                             :where [(or (and [?e :age ?amount]
+                                              [(inc ?amount) ?incremented])
+                                         (and [?e :salary ?amount]
+                                              [(inc ?amount) ?incremented]))]})
+        ^Stage stage (first stages)
+        ^BindingSet result (query/execute stages)]
+    (is (= 1 (count stages)))
+    (is (= '[?e ?amount ?incremented] (.getAdded stage)))
+    (is (= #{[:alice 30 31]
+             [:bob 40 41]}
+           (set (map vec (.getRows result)))))))
+
+(deftest or-groundability-requires-every-branch-to-produce-a-variable-test
+  (let [query '{:find [?e ?amount ?incremented]
+                :in [?e ?amount]
+                :where [(or (and [?e :age ?amount]
+                                 [(inc ?amount) ?incremented])
+                            (and [?e :salary ?amount]
+                                 [(> ?incremented 0)]))]}
+        conformed-query (s/conform ::query/query query)
+        variable-order (vec (query/query->variable-order conformed-query))]
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"\?incremented not bound"
+         (plan/plan (h/db fix/*node*) conformed-query [:alice 30] variable-order)))))
+
+(deftest or-pattern-validates-only-after-all-of-its-variables-are-grounded-test
+  (h/transact fix/*node* [{:db/id :alice
+                           :name "Alice"
+                           :sex :male
+                           :age 30
+                           :salary 40}])
+
+  (let [stages (plan-query '{:find [?e ?name ?amount]
+                             :where [[?e :name ?name]
+                                     [?e :salary ?amount]
+                                     (or (and [?e :name ?name]
+                                              [?e :age ?amount])
+                                         (and [?e :sex ?name]
+                                              [?e :salary ?amount]))]})
+        ^Stage name-stage (first (filter #(= '[?name] (.getAdded ^Stage %)) stages))
+        ^Stage amount-stage (first (filter #(= '[?amount] (.getAdded ^Stage %)) stages))
+        ^BindingSet result (query/execute stages)]
+    (testing "the OR does not validate a partial tuple"
+      (is (not-any? #(instance? OrPattern %) (.getParticipants name-stage))))
+
+    (testing "the OR validates the complete tuple without leaking values across branches"
+      (is (some #(instance? OrPattern %) (.getParticipants amount-stage)))
+      (is (empty? (.getRows result))))))
+
+(deftest grouped-or-proposal-runs-other-validators-in-a-following-stage-test
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}])
+
+  (let [stages (plan-query '{:find [?e ?name ?amount]
+                             :where [(or (and [?e :name ?name]
+                                              [?e :age ?amount])
+                                         (and [?e :salary ?amount]
+                                              [?e :name ?name]))
+                                     [(> ?amount 35)]]})
+        ^Stage or-stage (first stages)
+        ^Stage validation-stage (second stages)
+        ^BindingSet result (query/execute stages)]
+    (is (= 2 (count stages)))
+    (is (= '[?e ?name ?amount] (.getAdded or-stage)))
+    (is (= 1 (count (.getParticipants or-stage))))
+    (is (instance? OrPattern (first (.getParticipants or-stage))))
+    (is (empty? (.getAdded validation-stage)))
+    (is (= [[:bob "Bob" 40]]
+           (mapv vec (.getRows result))))))

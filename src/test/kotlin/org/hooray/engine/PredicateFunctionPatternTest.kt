@@ -10,14 +10,13 @@ class PredicateFunctionPatternTest {
     private val z = Symbol.intern("?z")
 
     @Test
-    fun `predicate only validates fully bound arguments`() {
+    fun `predicate validates fully bound arguments`() {
         val pattern = PredicatePattern(
             idx = 0,
             arguments = listOf(PatternValue.Variable(x), PatternValue.Constant(10)),
             predicate = { left: Any, right: Any -> (left as Int) < (right as Int) },
         )
 
-        assertEquals(emptyList<Variable>(), pattern.groundable(emptySet()))
         assertEquals(
             listOf(listOf(5)),
             pattern.join(
@@ -29,7 +28,7 @@ class PredicateFunctionPatternTest {
     }
 
     @Test
-    fun `function grounds proposes and validates its output`() {
+    fun `function proposes and validates its output`() {
         val pattern = FunctionPattern(
             idx = 3,
             arguments = listOf(PatternValue.Variable(x), PatternValue.Constant(2)),
@@ -38,8 +37,6 @@ class PredicateFunctionPatternTest {
         )
         val input = BindingSet(listOf(x), listOf(listOf(5), listOf(8)))
 
-        assertEquals(listOf(y), pattern.groundable(setOf(x)))
-        assertEquals(emptyList<Variable>(), pattern.groundable(setOf(x, y)))
         assertEquals(
             listOf(Proposal(3, 1), Proposal(3, 1)),
             pattern.count(

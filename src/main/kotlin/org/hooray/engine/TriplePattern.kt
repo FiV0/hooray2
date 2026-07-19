@@ -7,8 +7,8 @@ class TriplePattern(
     private val entity: PatternValue,
     attribute: Any,
     private val value: PatternValue,
-) : Pattern {
-    override val orderedVariables: List<Variable> = listOf(entity, value).orderedVariables()
+) : ExecPattern {
+    private val orderedVariables: List<Variable> = listOf(entity, value).orderedVariables()
     override val variables: Set<Variable> = orderedVariables.toSet()
     private val ev = aev[attribute] ?: emptyMap()
     private val ve = ave[attribute] ?: emptyMap()
@@ -23,9 +23,6 @@ class TriplePattern(
             "Triple pattern entity and value variables must be different"
         }
     }
-
-    override fun groundable(bound: Set<Variable>): List<Variable> =
-        orderedVariables.filterNot { it in bound }
 
     override fun count(
         input: BindingSet,

@@ -4,15 +4,13 @@ class PredicatePattern(
     override val idx: Int,
     private val arguments: List<PatternValue>,
     private val predicate: Any,
-) : Pattern {
+) : ExecPattern {
     init {
         require(arguments.size in 1..2) { "Hooray only supports unary and binary predicates for now." }
     }
 
-    override val orderedVariables: List<Variable> = arguments.orderedVariables()
+    private val orderedVariables: List<Variable> = arguments.orderedVariables()
     override val variables: Set<Variable> = orderedVariables.toSet()
-
-    override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
 
     @Suppress("UNCHECKED_CAST")
     private fun evaluator(columnIndexes: Map<Variable, Int>): (BindingRow) -> Boolean {

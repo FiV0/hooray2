@@ -3,15 +3,13 @@ package org.hooray.engine
 class NotPattern(
     override val idx: Int,
     private val stages: List<Stage>,
-) : Pattern {
+) : ExecPattern {
     private val engine: GenericJoinEngine = GenericJoinEngine()
 
-    override val orderedVariables: List<Variable> = stages
+    private val orderedVariables: List<Variable> = stages
         .flatMap { stage -> stage.added }
 
     override val variables: Set<Variable> = orderedVariables.toSet()
-
-    override fun groundable(bound: Set<Variable>): List<Variable> = emptyList()
 
     override fun join(
         input: BindingSet,

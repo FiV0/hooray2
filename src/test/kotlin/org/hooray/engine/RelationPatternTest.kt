@@ -19,15 +19,6 @@ class RelationPatternTest {
     )
 
     @Test
-    fun `exposes unbound relation variables as groundable`() {
-        assertEquals(
-            listOf(e, age),
-            pattern.groundable(emptySet()),
-        )
-        assertEquals(listOf(age), pattern.groundable(setOf(e)))
-    }
-
-    @Test
     fun `counts and proposes distinct correlated introductions`() {
         val input = BindingSet(listOf(e), listOf(listOf("a"), listOf("b"), listOf("c")))
         val proposals = List(input.rowCount) { Proposal(NO_PROPOSER, Int.MAX_VALUE) }
