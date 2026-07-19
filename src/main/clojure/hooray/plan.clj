@@ -21,11 +21,8 @@
 (defn- distinctv [values]
   (vec (distinct values)))
 
-(defn- ordered-variables [^Pattern pattern]
-  (vec (.getOrderedVariables pattern)))
-
 (defn- node-variables [{:keys [pattern] :as _node}]
-  (ordered-variables pattern))
+  (vec (.getOrderedVariables pattern)))
 
 (defonce ^:private next-pattern-index (atom 0))
 
