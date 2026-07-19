@@ -2,7 +2,7 @@ package org.hooray.util
 
 class Trie<T> {
     class Node<T> internal constructor() {
-        private val mutableChildren: MutableMap<T, Node<T>> = linkedMapOf()
+        private val mutableChildren: MutableMap<T, Node<T>> = hashMapOf()
 
         val children: Map<T, Node<T>>
             get() = mutableChildren

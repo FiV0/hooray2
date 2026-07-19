@@ -326,12 +326,12 @@
                      :ivan "Petr"))))
 
   (t/testing "Can query entity by single field with several arguments"
-    (t/is (= [[:ivan] [:petr]]
-             (h/q '{:find [e]
-                    :in [[name ...]]
-                    :where [[e :name name]]}
-                  (h/db fix/*node*)
-                  ["Ivan" "Petr"]))))
+    (t/is (= #{[:ivan] [:petr]}
+             (set (h/q '{:find [e]
+                         :in [[name ...]]
+                         :where [[e :name name]]}
+                       (h/db fix/*node*)
+                       ["Ivan" "Petr"])))))
 
   (t/testing "Can query entity by single field with literals"
     (t/is (= [[:ivan]] (h/q '{:find [e]
@@ -394,12 +394,13 @@
                                :args [{:name "Ivan" :last-name "Ivanov"}
                                       {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
 
-    (t/is (= [["Ivan"]
-              ["Petr"]] (h/q '{:find [name]
-                               :in [[name ...]]
-                               :where [[(string? name)]]}
-                             (h/db fix/*node*)
-                             ["Ivan" "Petr"])))
+    (t/is (= #{["Ivan"]
+               ["Petr"]}
+             (set (h/q '{:find [name]
+                         :in [[name ...]]
+                         :where [[(string? name)]]}
+                       (h/db fix/*node*)
+                       ["Ivan" "Petr"]))))
 
     (t/is (= #{["Ivan" "Ivanov"]
                ["Petr" "Petrov"]}
