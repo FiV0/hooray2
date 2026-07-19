@@ -7,7 +7,7 @@
    [hooray.plan :as plan]
    [hooray.query :as query])
   (:import
-   (org.hooray.engine BindingSet OrPattern RelationPattern Stage)))
+   (org.hooray.engine BindingSet NotPattern OrPattern RelationPattern Stage)))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -51,6 +51,21 @@
         ^BindingSet result (query/execute stages)]
     (is (some #(instance? RelationPattern %) participants))
     (is (= #{[:alice "Alice"]}
+           (set (map vec (.getRows result)))))))
+
+(deftest nested-or-inside-not-is-planned-recursively-test
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}
+                          {:db/id :cara :name "Cara" :sex :female}])
+
+  (let [stages (plan-query '{:find [?e ?name]
+                             :where [[?e :name ?name]
+                                     (not (or [?e :age 30]
+                                              [?e :salary 40]))]})
+        participants (mapcat #(.getParticipants ^Stage %) stages)
+        ^BindingSet result (query/execute stages)]
+    (is (some #(instance? NotPattern %) participants))
+    (is (= #{[:cara "Cara"]}
            (set (map vec (.getRows result)))))))
 
 (deftest or-pattern-grounds-the-remaining-variables-as-the-only-proposer-test

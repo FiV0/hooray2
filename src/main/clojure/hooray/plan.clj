@@ -13,7 +13,6 @@
     Pattern
     PatternValue$Constant
     PatternValue$Variable
-    PlanPattern
     PredicatePattern
     RelationPattern
     Stage
@@ -22,46 +21,11 @@
 (defn- distinctv [values]
   (vec (distinct values)))
 
-(defn- ordered-variables [^PlanPattern pattern]
+(defn- ordered-variables [^Pattern pattern]
   (vec (.getOrderedVariables pattern)))
 
-(defn- grounding-closure [patterns ordered-vars bound]
-  (let [initially-bound (set bound)]
-    (loop [covered initially-bound]
-      (let [newly-grounded (->> patterns
-                                (mapcat #(.groundable ^PlanPattern % covered))
-                                (remove covered)
-                                set)]
-        (if (empty? newly-grounded)
-          (->> ordered-vars
-               (filter covered)
-               (remove initially-bound)
-               vec)
-          (recur (into covered newly-grounded)))))))
-
-(deftype ScopePlanPattern [ordered-vars patterns]
-  PlanPattern
-  (getOrderedVariables [_] ordered-vars)
-  (groundable [_ bound]
-    (grounding-closure patterns ordered-vars bound)))
-
-(deftype OrPlanPattern [ordered-vars branches]
-  PlanPattern
-  (getOrderedVariables [_] ordered-vars)
-  (groundable [_ bound]
-    (let [branch-groundable (map #(set (.groundable ^PlanPattern % bound)) branches)
-          common-groundable (reduce set/intersection branch-groundable)]
-      (vec (filter common-groundable ordered-vars)))))
-
-(deftype NotPlanPattern [ordered-vars]
-  PlanPattern
-  (getOrderedVariables [_] ordered-vars)
-  (groundable [_ _bound] []))
-
-(defn- scope-plan-pattern [nodes]
-  (let [patterns (mapv :plan-pattern nodes)
-        ordered-vars (distinctv (mapcat ordered-variables patterns))]
-    (ScopePlanPattern. ordered-vars patterns)))
+(defn- node-variables [{:keys [pattern] :as _node}]
+  (ordered-variables pattern))
 
 (defonce ^:private next-pattern-index (atom 0))
 
@@ -103,12 +67,12 @@
           input
           (BindingSet. target-variables []))))))
 
-(declare compile-node plan-scope lower-node)
+(declare compile-node plan-scope)
 
 (defn- compile-scope [db clauses]
   (let [nodes (mapv #(compile-node db %) clauses)]
     {:nodes nodes
-     :plan-pattern (scope-plan-pattern nodes)}))
+     :ordered-vars (distinctv (mapcat node-variables nodes))}))
 
 (defn- compile-triple [idx {:keys [e a v] :as _triple} {:keys [aev ave] :as _db}]
   (let [[attribute-type attribute] a]
@@ -117,16 +81,14 @@
     (let [pattern (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v))]
       {:idx idx
        :kind :triple
-       :plan-pattern pattern
-       :exec-pattern pattern})))
+       :pattern pattern})))
 
 (defn- compile-predicate [idx {:keys [predicate args] :as _predicate}]
   (let [arguments (mapv pattern-value args)
         pattern (PredicatePattern. idx arguments (kotlin-function predicate (count arguments)))]
     {:idx idx
      :kind :predicate
-     :plan-pattern pattern
-     :exec-pattern pattern}))
+     :pattern pattern}))
 
 (defn- compile-function [idx [{:keys [fun args] :as _function} output]]
   (let [arguments (mapv pattern-value args)
@@ -138,8 +100,7 @@
                          (keep #(when (instance? PatternValue$Variable %)
                                   (.getName ^PatternValue$Variable %)))
                          vec)
-     :plan-pattern pattern
-     :exec-pattern pattern}))
+     :pattern pattern}))
 
 (defn- compile-or [db idx branches]
   (let [compiled-branches (mapv (fn [[branch-type branch]]
@@ -147,25 +108,23 @@
                                     (compile-scope db branch)
                                     (compile-scope db [[branch-type branch]])))
                                 branches)
-        branch-patterns (mapv :plan-pattern compiled-branches)
-        ordered-vars (ordered-variables (first branch-patterns))
-        plan-pattern (OrPlanPattern. ordered-vars branch-patterns)
-        seed-idx (next-index!)]
+        {:keys [ordered-vars] :as _first-branch} (first compiled-branches)
+        seed-pattern (external-binding-pattern (next-index!) ordered-vars)
+        branch-stages (mapv (fn [{:keys [nodes] :as _branch}]
+                              (plan-scope nodes ordered-vars seed-pattern))
+                            compiled-branches)
+        pattern (OrPattern. idx branch-stages)]
     {:idx idx
      :kind :or
-     :branches compiled-branches
-     :seed-pattern (external-binding-pattern seed-idx ordered-vars)
-     :plan-pattern plan-pattern}))
+     :pattern pattern}))
 
 (defn- compile-not [db idx clauses]
-  (let [{:keys [nodes plan-pattern] :as _scope} (compile-scope db clauses)
-        ordered-vars (ordered-variables plan-pattern)
-        seed-idx (next-index!)]
+  (let [{:keys [nodes ordered-vars] :as _scope} (compile-scope db clauses)
+        seed-pattern (external-binding-pattern (next-index!) ordered-vars)
+        pattern (NotPattern. idx (plan-scope nodes ordered-vars seed-pattern))]
     {:idx idx
      :kind :not
-     :scope {:nodes nodes :plan-pattern plan-pattern}
-     :seed-pattern (external-binding-pattern seed-idx ordered-vars)
-     :plan-pattern (NotPlanPattern. ordered-vars)}))
+     :pattern pattern}))
 
 (defn- compile-node [db [clause-type clause]]
   (let [idx (next-index!)]
@@ -200,12 +159,8 @@
                 pattern (RelationPattern. idx (BindingSet. (vec variables) rows))]
             {:idx idx
              :kind :relation
-             :plan-pattern pattern
-             :exec-pattern pattern}))
+             :pattern pattern}))
         (map vector in args)))
-
-(defn- node-variables [{:keys [plan-pattern] :as _node}]
-  (ordered-variables plan-pattern))
 
 (defn- bound-target [variable-order bound added]
   (let [target-set (into (set bound) added)]
@@ -230,41 +185,27 @@
                      (set/subset? (set argument-vars) bound-set))
       false)))
 
-(defn- or-can-propose? [{:keys [kind plan-pattern] :as node} bound]
+(defn- or-can-propose? [{:keys [kind pattern] :as node} bound]
   (when (= :or kind)
     (let [missing (vec (remove (set bound) (node-variables node)))
-          groundable (set (.groundable ^PlanPattern plan-pattern (set bound)))]
+          groundable (set (.groundable ^Pattern pattern (set bound)))]
       (when (and (seq missing) (set/subset? (set missing) groundable))
         missing))))
 
 (defn- can-validate-proposing-stage?
-  [{:keys [kind plan-pattern] :as node} target]
+  [{:keys [kind pattern] :as node} target]
   (let [target-set (set target)
         variables (node-variables node)
         variable-set (set variables)]
     (case kind
       (:predicate :not :function) (set/subset? variable-set target-set)
       :or (let [missing (set/difference variable-set target-set)
-                groundable (set (.groundable ^PlanPattern plan-pattern target-set))]
+                groundable (set (.groundable ^Pattern pattern target-set))]
             (set/subset? missing groundable))
       false)))
 
 (defn- fully-validatable? [node bound]
   (set/subset? (set (node-variables node)) (set bound)))
-
-(defn- lower-node [{:keys [idx kind exec-pattern branches scope seed-pattern plan-pattern] :as _node}]
-  (or exec-pattern
-      (case kind
-        :or (let [branch-variable-order (ordered-variables plan-pattern)]
-              (OrPattern. idx
-                          (mapv (fn [{:keys [nodes] :as _branch}]
-                                  (plan-scope nodes branch-variable-order seed-pattern))
-                                branches)))
-        :not (let [{:keys [nodes plan-pattern] :as _scope} scope]
-               (NotPattern. idx
-                            (plan-scope nodes
-                                        (ordered-variables plan-pattern)
-                                        seed-pattern))))))
 
 (defn- pending-validation-nodes [nodes completed bound]
   (->> nodes
@@ -285,7 +226,7 @@
                                         (or (can-propose? node bound added)
                                             (and (contains? (set (node-variables node)) variable)
                                                  (can-validate-proposing-stage? node target)))))
-                              (mapv lower-node))
+                              (mapv :pattern))
             participant-ids (set (map (fn [^Pattern pattern] (.getIdx pattern)) participants))]
         {:stage (Stage. added participants target)
          :completed (->> eligible-nodes
@@ -300,7 +241,7 @@
                                       eligible-nodes))]
         (let [or-added (or-can-propose? or-node bound)
               or-target (bound-target variable-order bound or-added)]
-          {:stage (Stage. or-added [(lower-node or-node)] or-target)
+          {:stage (Stage. or-added [(:pattern or-node)] or-target)
            :completed #{(:idx or-node)}})
         (when external-pattern
           {:stage (Stage. added [external-pattern] target)
@@ -313,7 +254,7 @@
       [(into completed (map :idx validation-nodes))
        (conj stages
              (Stage. []
-                     (mapv lower-node validation-nodes)
+                     (mapv :pattern validation-nodes)
                      (vec bound)))])))
 
 (defn- plan-scope [nodes variable-order external-pattern]
