@@ -100,13 +100,13 @@ as one proposal.
 An ordinary pattern can propose the next single variable exactly when its
 `groundable` function returns that variable. Other unfinished patterns join
 the stage as validators only when every one of their variables is present in
-the target layout. In particular, an OR does not validate a partially grounded
+the target layout. In particular, an `or` does not validate a partially grounded
 tuple. Once its complete tuple is bound, it validates the tuple with a semijoin.
 This assures that no branch leaking happens.
 
-When no pattern other than an OR can introduce the next variable, an OR may introduce
+When no pattern other than an `or` can introduce the next variable, an `or` may introduce
 all of its missing variables if its `groundable` function returns all of them.
-That proposing stage contains only the OR because `OrPattern.count` is a no-op.
+That proposing stage contains only the `or` because `OrPattern.count` is a no-op.
 Patterns made fully valid by the grouped proposal run in the following
 validation-only stage.
 
@@ -115,6 +115,10 @@ a pattern in the scope. An `or` requires variables not groundable by every
 branch to be bound by its input. A `not` requires all its variables to be bound
 by its input. Nested execution receives these bindings through a projected
 `RelationPattern`.
+
+For the algorithm to be correct it is important that for every variable part of a pattern,
+the pattern is at least once part of a proposal or validation stage where that variables
+gets introduced or validated respectively.
 
 ## Stage execution
 
