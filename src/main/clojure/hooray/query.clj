@@ -319,10 +319,12 @@
         ^Join join-algo (LeapfrogJoin. indexes levels filters)]
     (.join join-algo)))
 
+(def ^:private empty-binding-set (BindingSet. [] [[]]))
+
 (defn execute
   "Executes planned stages from the unit relation and returns a BindingSet."
   ^BindingSet [stages]
-  (.execute (GenericJoinEngine.) stages (BindingSet. [] [[]])))
+  (.execute (GenericJoinEngine.) stages empty-binding-set))
 
 (defmulti aggregate (fn [name & _args] name))
 
