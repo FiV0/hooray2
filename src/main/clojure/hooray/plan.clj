@@ -329,6 +329,10 @@
                               {:unbound-var unbound :grounded (set bound)}
                               :db.error/insufficient-binding)))))))
 
+;; clauses -> descriptors
+;; descriptors -> stages (recursively)
+;; stages -> runtime patterns
+
 (defn plan
   "Compiles a validated, conformed query into a vector of executable Stage values."
   [db {:keys [in where] :as _conformed-query} args variable-order]
