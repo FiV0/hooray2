@@ -101,10 +101,10 @@ An ordinary pattern can propose the next single variable exactly when its
 `groundable` function returns that variable. Other unfinished patterns join
 the stage as validators only when every one of their variables is present in
 the target layout. In particular, an OR does not validate a partially grounded
-tuple. Once its complete tuple is bound, it validates the tuple with a semijoin
-and cannot combine values from different branches.
+tuple. Once its complete tuple is bound, it validates the tuple with a semijoin.
+This assures that no branch leaking happens.
 
-When no ordinary pattern can introduce the next variable, an OR may introduce
+When no pattern other than an OR can introduce the next variable, an OR may introduce
 all of its missing variables if its `groundable` function returns all of them.
 That proposing stage contains only the OR because `OrPattern.count` is a no-op.
 Patterns made fully valid by the grouped proposal run in the following
