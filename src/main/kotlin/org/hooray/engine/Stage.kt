@@ -1,5 +1,19 @@
 package org.hooray.engine
 
+/**
+ * A stage in a join execution plan.
+ *
+ * @property added The variables added by this stage.
+ * @property participants The patterns that participate in this stage.
+ * @property targetVariables The variables that are bound after this stage. The resulting binding must contain
+ * the variables in that order.
+ *
+ * If [added] is empty the stages is a validation stage, meaning all participants purely validate the input. If [added]
+ * is non-empty, the stages does the usual WCO count, propose and validation work, meaning tuples are sharded by the best
+ * proposer and validated against all other patterns. If added is non-empty and there is only one participant,
+ * the stage simply runs the one proposal immediately.
+ *
+ */
 data class Stage(
     val added: List<Variable>,
     val participants: List<ExecPattern>,
