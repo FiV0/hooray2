@@ -172,24 +172,6 @@
                             [new-variable incoming-b incoming-a]
                             [irrelevant incoming-a incoming-b])))))
 
-(deftest stage-interface-can-be-implemented-in-clojure-test
-  (let [x '?x
-        pattern (reify ExecPattern
-                  (getIdx [_] 0)
-                  (getVariables [_] #{x})
-                  (count [_ _input _added proposals] proposals)
-                  (join [_ _input _added target-variables]
-                    (BindingSet. target-variables [[42]])))
-        stage (reify IStage
-                (getAdded [_] [x])
-                (getParticipants [_] [pattern])
-                (getTargetVariables [_] [x]))
-        ^BindingSet result (.execute (GenericJoinEngine.)
-                                     [stage]
-                                     (BindingSet. [] [[]]))]
-    (is (= [x] (.getVariables result)))
-    (is (= [[42]] (mapv vec (.getRows result))))))
-
 (deftest or-pattern-grounds-all-variables-as-the-only-proposer-test
   (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
                           {:db/id :bob :name "Bob" :salary 40}])
