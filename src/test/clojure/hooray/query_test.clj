@@ -158,21 +158,28 @@
                                  [(< ?limit 0)]))]}
               (h/db fix/*node*)))))
 
+
+
 (deftest test-nested-or-groundability-is-all-or-nothing
-  (h/transact fix/*node* [{:db/id :db/next
-                           :db/ident :next
-                           :db/valueType :db.type/long
-                           :db/cardinality :db.cardinality/one}])
   (h/transact fix/*node* [{:db/id 1 :age 35}
                           {:db/id 2 :age 35}
-                          {:db/id 3 :age 35}
-                          {:db/id 4 :next 3}])
+                          {:db/id 3 :age 35}])
 
-  (is (= [[2 1] [4 3]]
+  ;; nested branches ground a different set of variables
+  (is (= [[2 1]]
          (sort (h/q '{:find [?v ?e]
                       :where [(or (and (or [?v :next ?e]
                                            (and [?e :age 35]
                                                 [(< ?v 3)]))
+                                       [(inc ?e) ?v]))
+                              [?e :age 35]]}
+                    (h/db fix/*node*)))))
+
+  ;; nested branches ground the same set of variables
+  (is (= [[2 1] [3 2] [4 3]]
+         (sort (h/q '{:find [?v ?e]
+                      :where [(or (and (or (and [(< ?v 3)] [?e :age 35])
+                                           (and [(> ?v 1)] [?e :age 35]))
                                        [(inc ?e) ?v]))
                               [?e :age 35]]}
                     (h/db fix/*node*))))))
