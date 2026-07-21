@@ -317,17 +317,6 @@
 ;; descriptors + logical stages -> runtime patterns + stages
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn- descriptor-execution-incoming
-  [{:keys [kind idx]}
-   {:keys [added participants target-variables]}
-   bound]
-  (case kind
-    :or (if (and (seq added) (= [idx] participants))
-          bound
-          target-variables)
-    :not target-variables
-    []))
-
 (declare assemble-scope)
 
 (defn- descriptor->exec-pattern
@@ -356,6 +345,16 @@
 
     :not (NotPattern. idx (assemble-scope db children variables incoming))))
 
+(defn- descriptor-execution-incoming
+  [{:keys [kind idx]}
+   {:keys [added participants target-variables]}
+   bound]
+  (case kind
+    :or (if (and (seq added) (= [idx] participants))
+          bound
+          target-variables)
+    :not target-variables
+    []))
 
 (defn- descriptor-incoming-by-index [descriptors logical-stages]
   (let [descriptors-by-index (into {} (map (juxt :idx identity)) descriptors)]
@@ -406,8 +405,12 @@
         exec-patterns (exec-patterns-by-index db descriptors logical-stages)]
     (mapv (partial logical-stage->stage exec-patterns) logical-stages)))
 
-;; clauses -> descriptors
-;; descriptors -> logical stages (recursively)
+;; The planning pipeline goes through 3 stages.
+;; 1. We first translate the query AST (conformed-query) into a recursive list of descriptors.
+;; The descriptors are essentially the AST with some additional information. A groundable function
+;; that returns a list of variables that can be grounded by the pattern given some set of already
+;; bound variables and the list of variables appearing in the sub-plan (the descriptor).
+;; 2.
 ;; descriptors + logical stages -> runtime patterns + stages
 
 (defn plan
