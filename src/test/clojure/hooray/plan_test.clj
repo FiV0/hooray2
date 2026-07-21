@@ -88,6 +88,17 @@
     (is (= '[?amount ?incremented ?e]
            ((:groundable descriptor) #{})))))
 
+(deftest or-descriptor-groundability-is-all-or-nothing-test
+  (let [conformed-query (s/conform ::query/query
+                                   '{:find [?v ?e]
+                                     :where [(or [?v :next ?e]
+                                                 (and [?e :age 35]
+                                                      [(< ?v 3)]))]})
+        [descriptor] (plan/clauses->descriptors (:where conformed-query))]
+    (is (= [] ((:groundable descriptor) #{})))
+    (is (= [] ((:groundable descriptor) #{'?e})))
+    (is (= '[?e] ((:groundable descriptor) #{'?v})))))
+
 (deftest inputs-compile-to-relation-descriptors-test
   (let [conformed-query (s/conform ::query/query
                                    '{:find [?x ?item ?left ?right ?e ?name]

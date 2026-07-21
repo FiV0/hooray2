@@ -71,13 +71,14 @@
 
 (defn- or-groundable [branches variables bound]
   (let [bound-set (set bound)
-        common (->> branches
-                    (map #(branch-groundable % bound-set))
-                    (reduce set/intersection))]
-    (->> variables
-         (remove bound-set)
-         (filter common)
-         vec)))
+        missing (vec (remove bound-set variables))
+        missing-set (set missing)]
+    (if (and (seq missing)
+             (every? #(set/subset? missing-set
+                                  (branch-groundable % bound-set))
+                     branches))
+      missing
+      [])))
 
 (defn- relation-groundable [variables bound]
   (let [bound-set (set bound)

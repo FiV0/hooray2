@@ -158,7 +158,6 @@
                                  [(< ?limit 0)]))]}
               (h/db fix/*node*)))))
 
-#_
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id :db/next
                            :db/ident :next
