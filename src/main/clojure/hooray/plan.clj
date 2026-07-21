@@ -222,6 +222,9 @@
 (defn- fully-validatable? [{:keys [variables]} bound]
   (set/subset? (set variables) (set bound)))
 
+;; Invariant: `:or`/`:not` descriptors participate in exactly one stage — they never
+;; propose via `can-propose?` and every path that admits them (validator, OR fallback,
+;; validation stage) also marks them completed, keeping their incoming unambiguous.
 (defn- proposing-stage-for
   [descriptors completed bound variable variable-order]
   (let [added [variable]
