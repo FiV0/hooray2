@@ -137,7 +137,7 @@
               [(< ?age 40)])]}
           (h/db fix/*node*)))))
 
-#_
+
 (deftest test-or-and-branch-predicates-stay-bound-to-same-prefix
   (h/transact fix/*node* [{:db/id :db/limit
                            :db/ident :limit
@@ -146,7 +146,7 @@
   (h/transact fix/*node* [{:db/id 1 :name "valid" :age 5 :salary 10 :limit 5}
                           {:db/id 2 :name "leaked" :age 20 :salary 10 :limit 5}])
 
-  (is (= #{["valid"]}
+  (is (= [["valid"]]
          (h/q '{:find [?name]
                 :where [[?e :name ?name]
                         [?e :age ?age]
