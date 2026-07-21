@@ -55,6 +55,10 @@
       (throw (IllegalArgumentException.
               "Hooray only supports unary and binary query functions for now.")))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; clauses -> descriptors
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defn- branch-groundable [descriptors bound]
   (loop [grounded (set bound)]
     (let [next-grounded (reduce (fn [current descriptor]
@@ -194,16 +198,20 @@
              :binding-set (BindingSet. variables rows)}))
         (map vector in args)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; descriptors -> logical stages
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defn- bound-target [variable-order bound added]
   (let [target-set (into (set bound) added)]
     (vec (filter target-set variable-order))))
 
-(defn- ordinary-can-propose? [{:keys [kind] :as descriptor} bound variable]
+(defn- can-propose? [{:keys [kind] :as descriptor} bound variable]
   (and (not= :or kind)
        (some #{variable} (groundable-variables descriptor bound))))
 
-(defn- or-can-propose? [{:keys [kind variables] :as descriptor}
-                        bound]
+(defn- or-proposal [{:keys [kind variables] :as descriptor}
+                    bound]
   (when (= :or kind)
     (let [missing (vec (remove (set bound) variables))
           groundable (set (groundable-variables descriptor bound))]
@@ -218,11 +226,11 @@
   (let [added [variable]
         target (bound-target variable-order bound added)
         eligible-descriptors (remove (comp completed :idx) descriptors)
-        proposers (filter #(ordinary-can-propose? % bound variable) eligible-descriptors)]
+        proposers (filter #(can-propose? % bound variable) eligible-descriptors)]
     (if (seq proposers)
       (let [participants (->> eligible-descriptors
                               (filter (fn [descriptor]
-                                        (or (ordinary-can-propose? descriptor bound variable)
+                                        (or (can-propose? descriptor bound variable)
                                             (fully-validatable? descriptor target))))
                               (mapv :idx))
             participant-ids (set participants)]
@@ -236,11 +244,13 @@
                          (map :idx)
                          set)})
 
+      ;; This finds the first OR Pattern that that introduces the variable and
+      ;; can also propose its remaining not yet grounded variables.
       (when-let [{:keys [idx] :as selected-or}
-                 (first (filter #(let [missing (or-can-propose? % bound)]
-                                   (and missing (some #{variable} missing)))
+                 (first (filter #(->> (or-proposal % bound)
+                                      (some #{variable}))
                                 eligible-descriptors))]
-        (let [or-added (or-can-propose? selected-or bound)]
+        (let [or-added (or-proposal selected-or bound)]
           {:stage {:added or-added
                    :participants [idx]
                    :target-variables (bound-target variable-order bound or-added)}
@@ -302,6 +312,10 @@
               (err/incorrect-ex (format "%s not bound" unbound)
                                 {:unbound-var unbound :grounded (set bound)}
                                 :db.error/insufficient-binding))))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; descriptors + logical stages -> runtime patterns + stages
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn- descriptor-execution-incoming
   [{:keys [kind idx]}
