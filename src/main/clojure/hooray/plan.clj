@@ -411,8 +411,11 @@
 ;; The descriptors are essentially the AST with some additional information. A groundable function
 ;; that returns a list of variables that can be grounded by the pattern given some set of already
 ;; bound variables and the list of variables appearing in the sub-plan (the descriptor).
-;; 2.
-;; descriptors + logical stages -> runtime patterns + stages
+;; 2. We calculate stages as pure data per scope. Scopes are top-level scopes (:in + :where),
+;; `not` scopes and `or` scopes. A stages is a set of `added` variables in that stage
+;; (most of the time a single variable), a set of participants (just descriptor idx identifiers) and
+;; finally a list of target-variables after the result set is returned in.
+;; 3. Finally we descriptors + logical stages into runtime patterns (`ExecPattern`) and stages (`IStage`).
 
 (defn plan
   "Compiles a validated, conformed query into a vector of executable Stage records."
