@@ -50,43 +50,20 @@
       (throw (IllegalArgumentException.
               "Hooray only supports unary and binary query functions for now.")))))
 
-(defn- external-binding-pattern [idx variables]
-  (let [variables (vec variables)
-        variable-set (set variables)]
-    (reify ExecPattern
-      (getIdx [_] idx)
-      (getVariables [_] variable-set)
-      (count [_ _input _added proposals] proposals)
-      (join [_ input added target-variables]
-        (if (empty? added)
-          input
-          (BindingSet. target-variables []))))))
+(defn- branch-groundable [descriptors bound]
+  (loop [grounded (set bound)]
+    (let [next-grounded (reduce (fn [current descriptor]
+                                  (into current (groundable-variables descriptor current)))
+                                grounded
+                                descriptors)]
+      (if (= grounded next-grounded)
+        grounded
+        (recur next-grounded)))))
 
-(defn- external-stage? [^Stage stage external-index]
-  (let [participants (.getParticipants stage)]
-    (and (= 1 (count participants))
-         (= external-index
-            (.getIdx ^ExecPattern (first participants))))))
-
-(defn- branch-groundable [stages external-index bound]
-  (let [bound-set (set bound)]
-    (loop [[stage & remaining] stages
-           grounded #{}]
-      (if stage
-        (let [added (set (.getAdded ^Stage stage))
-              external? (external-stage? stage external-index)]
-          (if (and external? (not (set/subset? added bound-set)))
-            grounded
-            (recur remaining
-                   (if external?
-                     grounded
-                     (into grounded added)))))
-        grounded))))
-
-(defn- or-groundable [branch-stages external-index variables bound]
+(defn- or-groundable [branches variables bound]
   (let [bound-set (set bound)
-        common (->> branch-stages
-                    (map #(branch-groundable % external-index bound-set))
+        common (->> branches
+                    (map #(branch-groundable % bound-set))
                     (reduce set/intersection))]
     (->> variables
          (remove bound-set)
@@ -102,44 +79,37 @@
         [])
       [])))
 
-(declare compile-node plan-scope)
+(declare clause->descriptor)
 
-(defn- compile-scope [db clauses]
-  (let [nodes (mapv #(compile-node db %) clauses)]
-    {:nodes nodes
-     :ordered-vars (->> nodes
-                        (mapcat (fn [{:keys [variables]}]
-                                  variables))
-                        distinctv)}))
+(defn- descriptor-variables [descriptors]
+  (->> descriptors
+       (mapcat (fn [{:keys [variables]}]
+                 variables))
+       distinctv))
 
-(defn- compile-triple [idx {:keys [e a v] :as _triple} {:keys [aev ave] :as _db}]
-  (let [[attribute-type attribute] a]
+(defn- triple-descriptor [idx {:keys [e a v] :as clause}]
+  (let [[attribute-type _attribute] a]
     (when-not (= :constant attribute-type)
       (err/unsupported-ex "Currently variables in attribute position are not supported"))
-    (let [variables (variable-names [e v])
-          exec-pattern (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v))]
+    (let [variables (variable-names [e v])]
       {:kind :triple
        :idx idx
        :variables variables
        :groundable (fn [bound]
                      (vec (remove bound variables)))
-       :exec-pattern exec-pattern})))
+       :clause clause})))
 
-(defn- compile-predicate [idx {:keys [predicate args] :as _predicate}]
-  (let [variables (variable-names args)
-        arguments (mapv pattern-value args)
-        exec-pattern (PredicatePattern. idx arguments (kotlin-function predicate (count arguments)))]
+(defn- predicate-descriptor [idx {:keys [args] :as clause}]
+  (let [variables (variable-names args)]
     {:kind :predicate
      :idx idx
      :variables variables
      :groundable (constantly [])
-     :exec-pattern exec-pattern}))
+     :clause clause}))
 
-(defn- compile-function [idx [{:keys [fun args] :as _function} output]]
+(defn- function-descriptor [idx [{:keys [args]} output :as clause]]
   (let [argument-vars (variable-names args)
-        variables (conj argument-vars output)
-        arguments (mapv pattern-value args)
-        exec-pattern (FunctionPattern. idx arguments output (kotlin-function fun (count arguments)))]
+        variables (conj argument-vars output)]
     {:kind :function
      :idx idx
      :variables variables
@@ -148,45 +118,45 @@
                             (not (contains? bound output)))
                      [output]
                      []))
-     :exec-pattern exec-pattern}))
+     :clause clause}))
 
-(defn- compile-or [db idx branches]
-  (let [compiled-branches (mapv (fn [[branch-type branch]]
-                                  (if (= :and branch-type)
-                                    (compile-scope db branch)
-                                    (compile-scope db [[branch-type branch]])))
-                                branches)
-        {:keys [ordered-vars] :as _first-branch} (first compiled-branches)
-        seed-index (next-index!)
-        seed-pattern (external-binding-pattern seed-index ordered-vars)
-        branch-stages (mapv (fn [{:keys [nodes] :as _branch}]
-                              (plan-scope nodes ordered-vars seed-pattern))
-                            compiled-branches)
-        exec-pattern (OrPattern. idx branch-stages)]
+(defn- branch->descriptors [[branch-type branch :as clause]]
+  (if (= :and branch-type)
+    (mapv clause->descriptor branch)
+    [(clause->descriptor clause)]))
+
+(defn- or-descriptor [idx clause]
+  (let [branches (mapv branch->descriptors clause)
+        variables (descriptor-variables (first branches))]
     {:kind :or
      :idx idx
-     :variables ordered-vars
-     :groundable (partial or-groundable branch-stages seed-index ordered-vars)
-     :exec-pattern exec-pattern}))
+     :variables variables
+     :groundable (partial or-groundable branches variables)
+     :clause clause
+     :branches branches}))
 
-(defn- compile-not [db idx clauses]
-  (let [{:keys [nodes ordered-vars] :as _scope} (compile-scope db clauses)
-        seed-pattern (external-binding-pattern (next-index!) ordered-vars)
-        exec-pattern (NotPattern. idx (plan-scope nodes ordered-vars seed-pattern))]
+(defn- not-descriptor [idx clause]
+  (let [children (mapv clause->descriptor clause)]
     {:kind :not
      :idx idx
-     :variables ordered-vars
+     :variables (descriptor-variables children)
      :groundable (constantly [])
-     :exec-pattern exec-pattern}))
+     :clause clause
+     :children children}))
 
-(defn- compile-node [db [clause-type clause]]
+(defn- clause->descriptor [[clause-type clause]]
   (let [idx (next-index!)]
     (case clause-type
-      :triple (compile-triple idx clause db)
-      :predicate (compile-predicate idx clause)
-      :fn (compile-function idx clause)
-      :or (compile-or db idx clause)
-      :not (compile-not db idx clause))))
+      :triple (triple-descriptor idx clause)
+      :predicate (predicate-descriptor idx clause)
+      :fn (function-descriptor idx clause)
+      :or (or-descriptor idx clause)
+      :not (not-descriptor idx clause))))
+
+(defn clauses->descriptors
+  "Builds runtime-independent descriptors from conformed `:where` clauses."
+  [clauses]
+  (mapv clause->descriptor clauses))
 
 (defn- binding-relation [binding-type binding argument]
   (case binding-type
@@ -203,20 +173,73 @@
                             rows (mapv vec argument)]
                         [variables rows])))
 
-(defn- compile-inputs [in args]
+(defn inputs->descriptors
+  "Builds relation descriptors from conformed `:in` bindings and their arguments."
+  [in args]
   (when-not (= (count in) (count args))
     (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
   (mapv (fn [[[binding-type binding] argument]]
           (let [idx (next-index!)
                 [variables rows] (binding-relation binding-type binding argument)
-                variables (vec variables)
-                exec-pattern (RelationPattern. idx (BindingSet. variables rows))]
+                variables (vec variables)]
             {:kind :relation
              :idx idx
              :variables variables
              :groundable (partial relation-groundable variables)
-             :exec-pattern exec-pattern}))
+             :binding-set (BindingSet. variables rows)}))
         (map vector in args)))
+
+
+(defn- external-binding-pattern [idx variables]
+  (let [variables (vec variables)
+        variable-set (set variables)]
+    (reify ExecPattern
+      (getIdx [_] idx)
+      (getVariables [_] variable-set)
+      (count [_ _input _added proposals] proposals)
+      (join [_ input added target-variables]
+        (if (empty? added)
+          input
+          (BindingSet. target-variables []))))))
+
+(declare plan-scope descriptor->node)
+
+(defn- descriptors->nodes [db descriptors]
+  (mapv #(descriptor->node db %) descriptors))
+
+(defn- descriptor->node
+  [{:keys [aev ave] :as db}
+   {:keys [kind idx variables clause branches children binding-set] :as descriptor}]
+  (let [exec-pattern
+        (case kind
+          :triple (let [{:keys [e a v]} clause
+                        [_ attribute] a]
+                    (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v)))
+
+          :predicate (let [{:keys [predicate args]} clause
+                           arguments (mapv pattern-value args)]
+                       (PredicatePattern. idx arguments (kotlin-function predicate (count arguments))))
+
+          :function (let [[{:keys [fun args]} output] clause
+                          arguments (mapv pattern-value args)]
+                      (FunctionPattern. idx arguments output (kotlin-function fun (count arguments))))
+
+          :relation (RelationPattern. idx binding-set)
+
+          :or (let [seed-pattern (external-binding-pattern (next-index!) variables)
+                    branch-stages (mapv (fn [branch]
+                                          (plan-scope (descriptors->nodes db branch)
+                                                      variables
+                                                      seed-pattern))
+                                        branches)]
+                (OrPattern. idx branch-stages))
+
+          :not (let [seed-pattern (external-binding-pattern (next-index!) variables)
+                     child-stages (plan-scope (descriptors->nodes db children)
+                                              variables
+                                              seed-pattern)]
+                 (NotPattern. idx child-stages)))]
+    (assoc descriptor :exec-pattern exec-pattern)))
 
 (defn- bound-target [variable-order bound added]
   (let [target-set (into (set bound) added)]
@@ -330,13 +353,13 @@
                               :db.error/insufficient-binding)))))))
 
 ;; clauses -> descriptors
-;; descriptors -> stages (recursively)
-;; stages -> runtime patterns
+;; descriptors -> runtime nodes (recursively)
+;; runtime nodes -> stages
 
 (defn plan
   "Compiles a validated, conformed query into a vector of executable Stage values."
   [db {:keys [in where] :as _conformed-query} args variable-order]
-  (let [input-nodes (compile-inputs in args)
-        {:keys [nodes] :as _where-scope} (compile-scope db where)
-        all-nodes (into input-nodes nodes)]
-    (plan-scope all-nodes (vec variable-order) nil)))
+  (let [descriptors (into (inputs->descriptors in args)
+                          (clauses->descriptors where))
+        nodes (descriptors->nodes db descriptors)]
+    (plan-scope nodes (vec variable-order) nil)))

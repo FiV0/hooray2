@@ -26,6 +26,87 @@
     (query/validate-query conformed-query)
     (plan/plan (h/db fix/*node*) conformed-query args variable-order)))
 
+(defn- descriptor-tree [{:keys [children branches] :as descriptor}]
+  (cons descriptor
+        (mapcat descriptor-tree
+                (concat children (mapcat identity branches)))))
+
+(deftest clauses-compile-to-runtime-independent-descriptors-test
+  (let [conformed-query (s/conform ::query/query
+                                   '{:find [?e ?name ?label]
+                                     :where [[?e :name ?name]
+                                             [(string? ?name)]
+                                             [(str ?name) ?label]]})
+        clauses (:where conformed-query)
+        [triple predicate function] (plan/clauses->descriptors clauses)]
+    (is (= {:kind :triple
+            :variables '[?e ?name]
+            :clause (second (first clauses))}
+           (select-keys triple [:kind :variables :clause])))
+    (is (= {:kind :predicate
+            :variables '[?name]
+            :clause (second (second clauses))}
+           (select-keys predicate [:kind :variables :clause])))
+    (is (= {:kind :function
+            :variables '[?name ?label]
+            :clause (second (nth clauses 2))}
+           (select-keys function [:kind :variables :clause])))
+    (is (every? #(= #{:kind :idx :variables :groundable :clause}
+                    (set (keys %)))
+                [triple predicate function]))
+    (is (= '[?e ?name] ((:groundable triple) #{})))
+    (is (= [] ((:groundable predicate) #{'?name})))
+    (is (= '[?label] ((:groundable function) #{'?name})))))
+
+(deftest composite-descriptors-preserve-branch-and-child-structure-test
+  (let [conformed-query (s/conform ::query/query
+                                   '{:find [?e ?friend]
+                                     :where [(not (or [?e :friend ?friend]
+                                                      (and [?e :colleague ?friend]
+                                                           [(= ?friend ?friend)])))]})
+        clause (first (:where conformed-query))
+        [{:keys [children] :as not-descriptor}]
+        (plan/clauses->descriptors [clause])
+        [{:keys [branches] :as or-descriptor}] children]
+    (is (= :not (:kind not-descriptor)))
+    (is (= (second clause) (:clause not-descriptor)))
+    (is (= [:or] (mapv :kind children)))
+    (is (= [[:triple] [:triple :predicate]]
+           (mapv #(mapv :kind %) branches)))
+    (is (not-any? #(contains? % :exec-pattern)
+                  (descriptor-tree not-descriptor)))
+    (is (= #{:kind :idx :variables :groundable :clause :branches}
+           (set (keys or-descriptor))))))
+
+(deftest or-descriptor-groundability-closes-each-branch-before-intersection-test
+  (let [conformed-query (s/conform ::query/query
+                                   '{:find [?e ?amount ?incremented]
+                                     :where [(or (and [(inc ?amount) ?incremented]
+                                                      [?e :age ?amount])
+                                                 (and [(inc ?amount) ?incremented]
+                                                      [?e :salary ?amount]))]})
+        [descriptor] (plan/clauses->descriptors (:where conformed-query))]
+    (is (= '[?amount ?incremented ?e]
+           ((:groundable descriptor) #{})))))
+
+(deftest inputs-compile-to-relation-descriptors-test
+  (let [conformed-query (s/conform ::query/query
+                                   '{:find [?x ?item ?left ?right ?e ?name]
+                                     :in [?x [?item ...] [?left ?right] [[?e ?name]]]
+                                     :where [[?e :name ?name]]})
+        descriptors (plan/inputs->descriptors (:in conformed-query)
+                                              [5 [3 1 2] [7 8] [[:alice "Alice"]]])
+        binding-sets (mapv :binding-set descriptors)]
+    (is (every? #(= #{:kind :idx :variables :groundable :binding-set}
+                    (set (keys %)))
+                descriptors))
+    (is (= [:relation :relation :relation :relation]
+           (mapv :kind descriptors)))
+    (is (= ['[?x] '[?item] '[?left ?right] '[?e ?name]]
+           (mapv #(.getVariables ^BindingSet %) binding-sets)))
+    (is (= [[[5]] [[1] [2] [3]] [[7 8]] [[:alice "Alice"]]]
+           (mapv #(mapv vec (.getRows ^BindingSet %)) binding-sets)))))
+
 (deftest stage-interface-can-be-implemented-in-clojure-test
   (let [x '?x
         pattern (reify ExecPattern
