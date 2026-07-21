@@ -2,7 +2,7 @@ package org.hooray.engine
 
 class NotPattern(
     override val idx: Int,
-    private val stages: List<Stage>,
+    private val stages: List<IStage>,
 ) : ExecPattern {
     private val engine: GenericJoinEngine = GenericJoinEngine()
 
@@ -41,7 +41,11 @@ class NotPattern(
         val inputRelation = RelationPattern(idx, input.project(orderedVariables))
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         val matches = engine.execute(stages.map { stage ->
-            stage.copy(participants = stage.participants + inputRelation)
+            Stage(
+                added = stage.added,
+                participants = stage.participants + inputRelation,
+                targetVariables = stage.targetVariables,
+            )
         }, unit)
             .project(orderedVariables)
         return input.antijoin(matches)

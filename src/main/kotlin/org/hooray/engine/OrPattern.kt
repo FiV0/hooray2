@@ -13,7 +13,7 @@ package org.hooray.engine
  */
 class OrPattern(
     override val idx: Int,
-    private val branches: List<List<Stage>>,
+    private val branches: List<List<IStage>>,
 ) : ExecPattern {
     private val engine = GenericJoinEngine()
 
@@ -95,7 +95,11 @@ class OrPattern(
         branches.forEach { stages ->
             val branchResult = engine.execute(stages.map { stage ->
                 if (stage.added.any { variable -> variable in inputRelation.variables }) {
-                    stage.copy(participants = stage.participants + inputRelation)
+                    Stage(
+                        added = stage.added,
+                        participants = stage.participants + inputRelation,
+                        targetVariables = stage.targetVariables,
+                    )
                 } else {
                     stage
                 }

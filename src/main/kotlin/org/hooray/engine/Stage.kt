@@ -14,12 +14,20 @@ package org.hooray.engine
  * the stage simply runs the one proposal immediately.
  *
  */
-data class Stage(
-    val added: List<Variable>,
-    val participants: List<ExecPattern>,
+interface IStage {
+    val added: List<Variable>
+    val participants: List<ExecPattern>
     val targetVariables: List<Variable>
-)
-{
+}
+
+/**
+ * A validated value implementation of [IStage].
+ */
+data class Stage(
+    override val added: List<Variable>,
+    override val participants: List<ExecPattern>,
+    override val targetVariables: List<Variable>,
+) : IStage {
     init {
         require(added.toSet().size == added.size) {
             "Stage added variables must be distinct"

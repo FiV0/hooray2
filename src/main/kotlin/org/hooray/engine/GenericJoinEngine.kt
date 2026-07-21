@@ -4,7 +4,7 @@ class GenericJoinEngine {
 
     private fun validateAll(
         input: BindingSet,
-        stage: Stage,
+        stage: IStage,
         validators: List<ExecPattern>,
     ): BindingSet {
         return validators.fold(input) { bindings, validator ->
@@ -20,7 +20,7 @@ class GenericJoinEngine {
         }
     }
 
-    private fun executeProposingStage(stage: Stage, input: BindingSet): BindingSet {
+    private fun executeProposingStage(stage: IStage, input: BindingSet): BindingSet {
         // If the stage has a single participant, we can skip the count, propose and validation.
         if (stage.participants.size == 1) {
             val proposer = stage.participants.first()
@@ -81,7 +81,7 @@ class GenericJoinEngine {
         return result
     }
 
-    private fun executeStage(stage: Stage, input: BindingSet): BindingSet {
+    private fun executeStage(stage: IStage, input: BindingSet): BindingSet {
         require(input.variables.intersect(stage.added.toSet()).isEmpty()) {
             "Stage added variables must not already be bound"
         }
@@ -96,7 +96,7 @@ class GenericJoinEngine {
         }
     }
 
-    fun execute(stages: List<Stage>, input: BindingSet): BindingSet {
+    fun execute(stages: List<IStage>, input: BindingSet): BindingSet {
         return stages.fold(input) { bindings, stage -> executeStage(stage, bindings) }
     }
 }
