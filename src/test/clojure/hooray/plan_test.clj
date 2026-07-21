@@ -15,8 +15,7 @@
     IStage
     NotPattern
     OrPattern
-    RelationPattern
-    Stage)))
+    RelationPattern)))
 
 (t/use-fixtures :each fix/with-node fix/with-people-schema)
 
@@ -134,7 +133,7 @@
                                               [?e :age ?amount])
                                          (and [?e :salary ?amount]
                                               [?e :name ?name]))]})
-        ^Stage stage (first stages)
+        ^IStage stage (first stages)
         participants (.getParticipants stage)
         ^BindingSet result (query/execute stages)]
     (is (= 1 (count stages)))
@@ -155,9 +154,9 @@
                              :where [[?e :name ?name]]}
                            [[:alice "Alice"]
                             [:bob "Not Bob"]])
-        ^Stage entity-stage (first stages)
-        ^Stage name-stage (second stages)
-        participants (mapcat #(.getParticipants ^Stage %) stages)
+        ^IStage entity-stage (first stages)
+        ^IStage name-stage (second stages)
+        participants (mapcat #(.getParticipants ^IStage %) stages)
         ^BindingSet result (query/execute stages)]
     (is (= '[?e] (.getAdded entity-stage)))
     (is (= '[?name] (.getAdded name-stage)))
@@ -170,8 +169,8 @@
                              :in [?x]
                              :where [[(+ ?x 2) ?y]]}
                            5)
-        ^Stage argument-stage (first stages)
-        ^Stage output-stage (second stages)
+        ^IStage argument-stage (first stages)
+        ^IStage output-stage (second stages)
         ^BindingSet result (query/execute stages)]
     (is (= '[?x] (.getAdded argument-stage)))
     (is (not-any? #(instance? FunctionPattern %) (.getParticipants argument-stage)))
@@ -188,7 +187,7 @@
                              :where [[?e :name ?name]
                                      (not (or [?e :age 30]
                                               [?e :salary 40]))]})
-        participants (mapcat #(.getParticipants ^Stage %) stages)
+        participants (mapcat #(.getParticipants ^IStage %) stages)
         ^BindingSet result (query/execute stages)]
     (is (some #(instance? NotPattern %) participants))
     (is (= #{[:cara "Cara"]}
@@ -205,8 +204,8 @@
                                               [?e :age ?amount])
                                          (and [?e :name ?name]
                                               [?e :salary ?amount]))]})
-        ^Stage first-stage (first stages)
-        ^Stage or-stage (second stages)
+        ^IStage first-stage (first stages)
+        ^IStage or-stage (second stages)
         or-participants (.getParticipants or-stage)
         ^BindingSet result (query/execute stages)]
     (testing "another pattern grounds a proper subset of the OR variables"
@@ -231,7 +230,7 @@
                                               [(inc ?amount) ?incremented])
                                          (and [?e :salary ?amount]
                                               [(inc ?amount) ?incremented]))]})
-        ^Stage stage (first stages)
+        ^IStage stage (first stages)
         ^BindingSet result (query/execute stages)]
     (is (= 1 (count stages)))
     (is (= '[?e ?amount ?incremented] (.getAdded stage)))
@@ -267,8 +266,8 @@
                                               [?e :age ?amount])
                                          (and [?e :sex ?name]
                                               [?e :salary ?amount]))]})
-        ^Stage name-stage (first (filter #(= '[?name] (.getAdded ^Stage %)) stages))
-        ^Stage amount-stage (first (filter #(= '[?amount] (.getAdded ^Stage %)) stages))
+        ^IStage name-stage (first (filter #(= '[?name] (.getAdded ^IStage %)) stages))
+        ^IStage amount-stage (first (filter #(= '[?amount] (.getAdded ^IStage %)) stages))
         ^BindingSet result (query/execute stages)]
     (testing "the OR does not validate a partial tuple"
       (is (not-any? #(instance? OrPattern %) (.getParticipants name-stage))))
@@ -287,8 +286,8 @@
                                          (and [?e :salary ?amount]
                                               [?e :name ?name]))
                                      [(> ?amount 35)]]})
-        ^Stage or-stage (first stages)
-        ^Stage validation-stage (second stages)
+        ^IStage or-stage (first stages)
+        ^IStage validation-stage (second stages)
         ^BindingSet result (query/execute stages)]
     (is (= 2 (count stages)))
     (is (= '[?e ?name ?amount] (.getAdded or-stage)))

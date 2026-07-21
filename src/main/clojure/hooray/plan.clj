@@ -9,14 +9,20 @@
     BindingSet
     ExecPattern
     FunctionPattern
+    IStage
     NotPattern
     OrPattern
     PatternValue$Constant
     PatternValue$Variable
     PredicatePattern
     RelationPattern
-    Stage
     TriplePattern)))
+
+(defrecord Stage [added participants target-variables]
+  IStage
+  (getAdded [_] added)
+  (getParticipants [_] participants)
+  (getTargetVariables [_] target-variables))
 
 (defn- distinctv [values]
   (vec (distinct values)))
@@ -286,7 +292,7 @@
             participant-ids (set (map (fn [^ExecPattern pattern]
                                         (.getIdx pattern))
                                       participants))]
-        {:stage (Stage. added participants target)
+        {:stage (->Stage added participants target)
          :completed (->> eligible-nodes
                          (filter (fn [{:keys [idx] :as node}]
                                    (and (contains? participant-ids idx)
@@ -302,10 +308,10 @@
         (let [or-added (or-can-propose? or-node bound)
               or-target (bound-target variable-order bound or-added)
               {:keys [idx exec-pattern]} or-node]
-          {:stage (Stage. or-added [exec-pattern] or-target)
+          {:stage (->Stage or-added [exec-pattern] or-target)
            :completed #{idx}})
         (when external-pattern
-          {:stage (Stage. added [external-pattern] target)
+          {:stage (->Stage added [external-pattern] target)
            :completed #{}})))))
 
 (defn- add-validation-stage [nodes completed bound stages]
@@ -316,11 +322,11 @@
                               idx)
                             validation-nodes))
        (conj stages
-             (Stage. []
-                     (mapv (fn [{:keys [exec-pattern]}]
-                             exec-pattern)
-                           validation-nodes)
-                     (vec bound)))])))
+             (->Stage []
+                      (mapv (fn [{:keys [exec-pattern]}]
+                              exec-pattern)
+                            validation-nodes)
+                      (vec bound)))])))
 
 (defn- plan-scope [nodes variable-order external-pattern]
   (loop [bound []
@@ -344,7 +350,7 @@
                                              variable-order
                                              external-pattern)
                        remaining-vars)]
-          (recur (.getTargetVariables ^Stage stage)
+          (recur (:target-variables stage)
                  (into completed proposal-completed)
                  (conj stages stage))
           (let [unbound (first remaining-vars)]
@@ -357,7 +363,7 @@
 ;; runtime nodes -> stages
 
 (defn plan
-  "Compiles a validated, conformed query into a vector of executable Stage values."
+  "Compiles a validated, conformed query into a vector of executable Stage records."
   [db {:keys [in where] :as _conformed-query} args variable-order]
   (let [descriptors (into (inputs->descriptors in args)
                           (clauses->descriptors where))
