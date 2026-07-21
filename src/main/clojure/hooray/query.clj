@@ -469,7 +469,7 @@
 (defn query [{:keys [opts] :as db} query args]
   {:pre [(s/valid? ::query query) (validate-query (s/conform ::query query))]}
   (let [{:keys [find keys strs syms in where] :as conformed-query} (s/conform ::query query)
-        vars-in-join-order (vec (query->variable-order conformed-query))
+        vars-in-join-order (query->variable-order conformed-query)
         var->idx (zipmap vars-in-join-order (range))
         rows (case (:algo opts)
                :generic (.getRows (execute (plan/plan db conformed-query args vars-in-join-order)))
