@@ -75,7 +75,7 @@
         missing-set (set missing)]
     (if (and (seq missing)
              (every? #(set/subset? missing-set
-                                  (branch-groundable % bound-set))
+                                   (branch-groundable % bound-set))
                      branches))
       missing
       [])))
