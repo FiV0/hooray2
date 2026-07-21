@@ -106,7 +106,7 @@
     (is (= [[[5]] [[1] [2] [3]] [[7 8]] [[:alice "Alice"]]]
            (mapv #(mapv vec (.getRows ^BindingSet %)) binding-sets)))))
 
-(deftest plan-scope-groups-descriptor-indexes-without-runtime-patterns-test
+(deftest plan-scope-descriptor-groups
   (let [entity '?entity
         name '?name
         entity-descriptor {:kind :triple
@@ -129,10 +129,7 @@
                             [])))))
 
 (deftest plan-scope-keeps-grouped-or-and-validation-logical-test
-  (let [entity '?entity
-        name '?name
-        amount '?amount
-        variables [entity name amount]
+  (let [variables ['?entity '?name '?amount]
         or-descriptor {:kind :or
                        :idx 3
                        :variables variables
@@ -140,7 +137,7 @@
                                      (vec (remove bound variables)))}
         predicate-descriptor {:kind :predicate
                               :idx 4
-                              :variables [amount]
+                              :variables ['?amount]
                               :groundable (constantly [])}]
     (is (= [{:added variables
              :participants [3]
@@ -152,7 +149,7 @@
                             variables
                             [])))))
 
-(deftest plan-scope-plans-only-relevant-incoming-variables-test
+(deftest plan-scope-keep-only-relevant-incoming-variables-test
   (let [incoming-a '?incoming-a
         incoming-b '?incoming-b
         irrelevant '?irrelevant
