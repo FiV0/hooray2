@@ -7,7 +7,6 @@
    (org.hooray UniversalComparator)
    (org.hooray.engine
     BindingSet
-    ExecPattern
     FunctionPattern
     IStage
     NotPattern
@@ -195,57 +194,33 @@
              :binding-set (BindingSet. variables rows)}))
         (map vector in args)))
 
+(declare assemble-scope)
 
-(defn- external-binding-pattern [idx variables]
-  (let [variables (vec variables)
-        variable-set (set variables)]
-    (reify ExecPattern
-      (getIdx [_] idx)
-      (getVariables [_] variable-set)
-      (count [_ _input _added proposals] proposals)
-      (join [_ input added target-variables]
-        (if (empty? added)
-          input
-          (BindingSet. target-variables []))))))
-
-(declare plan-scope descriptor->node)
-
-(defn- descriptors->nodes [db descriptors]
-  (mapv #(descriptor->node db %) descriptors))
-
-(defn- descriptor->node
+(defn- descriptor->exec-pattern
   [{:keys [aev ave] :as db}
-   {:keys [kind idx variables clause branches children binding-set] :as descriptor}]
-  (let [exec-pattern
-        (case kind
-          :triple (let [{:keys [e a v]} clause
-                        [_ attribute] a]
-                    (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v)))
+   {:keys [kind idx variables clause branches children binding-set] :as _descriptor}
+   incoming]
+  (case kind
+    :triple (let [{:keys [e a v]} clause
+                  [_ attribute] a]
+              (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v)))
 
-          :predicate (let [{:keys [predicate args]} clause
-                           arguments (mapv pattern-value args)]
-                       (PredicatePattern. idx arguments (kotlin-function predicate (count arguments))))
+    :predicate (let [{:keys [predicate args]} clause
+                     arguments (mapv pattern-value args)]
+                 (PredicatePattern. idx arguments (kotlin-function predicate (count arguments))))
 
-          :function (let [[{:keys [fun args]} output] clause
-                          arguments (mapv pattern-value args)]
-                      (FunctionPattern. idx arguments output (kotlin-function fun (count arguments))))
+    :function (let [[{:keys [fun args]} output] clause
+                    arguments (mapv pattern-value args)]
+                (FunctionPattern. idx arguments output (kotlin-function fun (count arguments))))
 
-          :relation (RelationPattern. idx binding-set)
+    :relation (RelationPattern. idx binding-set)
 
-          :or (let [seed-pattern (external-binding-pattern (next-index!) variables)
-                    branch-stages (mapv (fn [branch]
-                                          (plan-scope (descriptors->nodes db branch)
-                                                      variables
-                                                      seed-pattern))
-                                        branches)]
-                (OrPattern. idx branch-stages))
+    :or (OrPattern. idx
+                    (mapv (fn [branch]
+                            (assemble-scope db branch variables incoming))
+                          branches))
 
-          :not (let [seed-pattern (external-binding-pattern (next-index!) variables)
-                     child-stages (plan-scope (descriptors->nodes db children)
-                                              variables
-                                              seed-pattern)]
-                 (NotPattern. idx child-stages)))]
-    (assoc descriptor :exec-pattern exec-pattern)))
+    :not (NotPattern. idx (assemble-scope db children variables incoming))))
 
 (defn- bound-target [variable-order bound added]
   (let [target-set (into (set bound) added)]
@@ -273,8 +248,14 @@
        (filter #(fully-validatable? % bound))
        vec))
 
-(defn- proposing-stage-for
-  [nodes completed bound variable variable-order external-pattern]
+(defn- incoming-descriptor [variables]
+  {:idx -1
+   :kind :relation
+   :variables variables
+   :groundable (partial relation-groundable variables)})
+
+(defn- logical-proposing-stage-for
+  [nodes completed bound variable variable-order]
   (let [added [variable]
         target (bound-target variable-order bound added)
         eligible-nodes (remove (fn [{:keys [idx]}]
@@ -287,12 +268,12 @@
                               (filter (fn [node]
                                         (or (ordinary-can-propose? node bound variable)
                                             (fully-validatable? node target))))
-                              (mapv (fn [{:keys [exec-pattern]}]
-                                      exec-pattern)))
-            participant-ids (set (map (fn [^ExecPattern pattern]
-                                        (.getIdx pattern))
-                                      participants))]
-        {:stage (->Stage added participants target)
+                              (mapv (fn [{:keys [idx]}]
+                                      idx)))
+            participant-ids (set participants)]
+        {:stage {:added added
+                 :participants participants
+                 :target-variables target}
          :completed (->> eligible-nodes
                          (filter (fn [{:keys [idx] :as node}]
                                    (and (contains? participant-ids idx)
@@ -302,19 +283,17 @@
                          set)})
 
       :else
-      (if-let [or-node (first (filter #(let [missing (or-can-propose? % bound)]
-                                         (and missing (some #{variable} missing)))
-                                      eligible-nodes))]
-        (let [or-added (or-can-propose? or-node bound)
-              or-target (bound-target variable-order bound or-added)
-              {:keys [idx exec-pattern]} or-node]
-          {:stage (->Stage or-added [exec-pattern] or-target)
-           :completed #{idx}})
-        (when external-pattern
-          {:stage (->Stage added [external-pattern] target)
-           :completed #{}})))))
+      (when-let [{:keys [idx] :as or-node}
+                 (first (filter #(let [missing (or-can-propose? % bound)]
+                                   (and missing (some #{variable} missing)))
+                                eligible-nodes))]
+        (let [or-added (or-can-propose? or-node bound)]
+          {:stage {:added or-added
+                   :participants [idx]
+                   :target-variables (bound-target variable-order bound or-added)}
+           :completed #{idx}})))))
 
-(defn- add-validation-stage [nodes completed bound stages]
+(defn- add-logical-validation-stage [nodes completed bound stages]
   (let [validation-nodes (pending-validation-nodes nodes completed bound)]
     (if (empty? validation-nodes)
       [completed stages]
@@ -322,50 +301,119 @@
                               idx)
                             validation-nodes))
        (conj stages
-             (->Stage []
-                      (mapv (fn [{:keys [exec-pattern]}]
-                              exec-pattern)
-                            validation-nodes)
-                      (vec bound)))])))
+             {:added []
+              :participants (mapv (fn [{:keys [idx]}]
+                                    idx)
+                                  validation-nodes)
+              :target-variables (vec bound)})])))
 
-(defn- plan-scope [nodes variable-order external-pattern]
-  (loop [bound []
-         completed #{}
-         stages []]
-    (let [[completed stages] (add-validation-stage nodes completed bound stages)
-          remaining-vars (vec (remove (set bound) variable-order))]
-      (if (empty? remaining-vars)
-        (do
-          (when-not (= (set completed)
-                       (set (map (fn [{:keys [idx]}]
-                                   idx)
-                                 nodes)))
-            (throw (IllegalStateException. "Not every pattern was lowered into a stage")))
-          stages)
-        (if-let [{:keys [stage] proposal-completed :completed :as _proposal}
-                 (some #(proposing-stage-for nodes
-                                             completed
-                                             bound
-                                             %
-                                             variable-order
-                                             external-pattern)
-                       remaining-vars)]
-          (recur (:target-variables stage)
-                 (into completed proposal-completed)
-                 (conj stages stage))
-          (let [unbound (first remaining-vars)]
-            (err/incorrect-ex (format "%s not bound" unbound)
-                              {:unbound-var unbound :grounded (set bound)}
-                              :db.error/insufficient-binding)))))))
+(defn plan-scope
+  "Plans descriptors into logical stages whose participants are descriptor indexes.
+  Participant -1 represents relevant `incoming` variables and is planning-only."
+  [nodes variable-order incoming]
+  (let [variable-order (vec variable-order)
+        incoming-set (set incoming)
+        in-scope (filterv incoming-set variable-order)
+        new-variable-order (into in-scope (remove incoming-set variable-order))
+        nodes (vec nodes)
+        nodes (if (seq in-scope)
+                (into [(incoming-descriptor in-scope)] nodes)
+                nodes)]
+    (loop [bound []
+           completed #{}
+           stages []]
+      (let [[completed stages] (add-logical-validation-stage nodes completed bound stages)
+            remaining-vars (vec (remove (set bound) new-variable-order))]
+        (if (empty? remaining-vars)
+          (do
+            (when-not (= (set completed)
+                         (set (map (fn [{:keys [idx]}]
+                                     idx)
+                                   nodes)))
+              (throw (IllegalStateException. "Not every pattern was lowered into a stage")))
+            stages)
+          (if-let [{:keys [stage] proposal-completed :completed :as _proposal}
+                   (some #(logical-proposing-stage-for nodes
+                                                       completed
+                                                       bound
+                                                       %
+                                                       new-variable-order)
+                         remaining-vars)]
+            (recur (:target-variables stage)
+                   (into completed proposal-completed)
+                   (conj stages stage))
+            (let [unbound (first remaining-vars)]
+              (err/incorrect-ex (format "%s not bound" unbound)
+                                {:unbound-var unbound :grounded (set bound)}
+                                :db.error/insufficient-binding))))))))
+
+(defn- descriptor-execution-incoming
+  [{:keys [kind idx]}
+   {:keys [added participants target-variables]}
+   bound]
+  (case kind
+    :or (if (and (seq added) (= [idx] participants))
+          bound
+          target-variables)
+    :not target-variables
+    []))
+
+(defn- descriptor-incoming-by-index [descriptors logical-stages]
+  (let [descriptors-by-index (into {} (map (juxt :idx identity)) descriptors)]
+    (loop [bound []
+           [stage & remaining] logical-stages
+           incoming-by-index {}]
+      (if stage
+        (let [{:keys [participants target-variables]} stage
+              incoming-by-index
+              (reduce (fn [result participant]
+                        (if-let [{:keys [kind idx] :as descriptor}
+                                 (get descriptors-by-index participant)]
+                          (if (#{:or :not} kind)
+                            (assoc result idx (descriptor-execution-incoming descriptor stage bound))
+                            result)
+                          result))
+                      incoming-by-index
+                      participants)]
+          (recur target-variables remaining incoming-by-index))
+        incoming-by-index))))
+
+(defn- exec-patterns-by-index [db descriptors logical-stages]
+  (let [incoming-by-index (descriptor-incoming-by-index descriptors logical-stages)]
+    (into {}
+          (map (fn [{:keys [idx] :as descriptor}]
+                 [idx (descriptor->exec-pattern db
+                                                descriptor
+                                                (get incoming-by-index idx []))]))
+          descriptors)))
+
+(defn- participant-patterns [exec-patterns participant-indexes]
+  (into []
+        (keep (fn [idx]
+                (when-not (= -1 idx)
+                  (or (get exec-patterns idx)
+                      (throw (IllegalStateException.
+                              (format "No descriptor found for participant %s" idx)))))))
+        participant-indexes))
+
+(defn- logical-stage->stage
+  [exec-patterns {:keys [added participants target-variables] :as _logical-stage}]
+  (->Stage added
+           (participant-patterns exec-patterns participants)
+           target-variables))
+
+(defn- assemble-scope [db descriptors variable-order incoming]
+  (let [logical-stages (plan-scope descriptors variable-order incoming)
+        exec-patterns (exec-patterns-by-index db descriptors logical-stages)]
+    (mapv (partial logical-stage->stage exec-patterns) logical-stages)))
 
 ;; clauses -> descriptors
-;; descriptors -> runtime nodes (recursively)
-;; runtime nodes -> stages
+;; descriptors -> logical stages (recursively)
+;; descriptors + logical stages -> runtime patterns + stages
 
 (defn plan
   "Compiles a validated, conformed query into a vector of executable Stage records."
   [db {:keys [in where] :as _conformed-query} args variable-order]
   (let [descriptors (into (inputs->descriptors in args)
-                          (clauses->descriptors where))
-        nodes (descriptors->nodes db descriptors)]
-    (plan-scope nodes (vec variable-order) nil)))
+                          (clauses->descriptors where))]
+    (assemble-scope db descriptors (vec variable-order) [])))

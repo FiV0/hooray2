@@ -106,6 +106,75 @@
     (is (= [[[5]] [[1] [2] [3]] [[7 8]] [[:alice "Alice"]]]
            (mapv #(mapv vec (.getRows ^BindingSet %)) binding-sets)))))
 
+(deftest plan-scope-groups-descriptor-indexes-without-runtime-patterns-test
+  (let [entity '?entity
+        name '?name
+        entity-descriptor {:kind :triple
+                           :idx 1
+                           :variables [entity name]
+                           :groundable (fn [bound]
+                                         (vec (remove bound [entity name])))}
+        predicate-descriptor {:kind :predicate
+                              :idx 2
+                              :variables [name]
+                              :groundable (constantly [])}]
+    (is (= [{:added [entity]
+             :participants [1]
+             :target-variables [entity]}
+            {:added [name]
+             :participants [1 2]
+             :target-variables [entity name]}]
+           (plan/plan-scope [entity-descriptor predicate-descriptor]
+                            [entity name]
+                            [])))))
+
+(deftest plan-scope-keeps-grouped-or-and-validation-logical-test
+  (let [entity '?entity
+        name '?name
+        amount '?amount
+        variables [entity name amount]
+        or-descriptor {:kind :or
+                       :idx 3
+                       :variables variables
+                       :groundable (fn [bound]
+                                     (vec (remove bound variables)))}
+        predicate-descriptor {:kind :predicate
+                              :idx 4
+                              :variables [amount]
+                              :groundable (constantly [])}]
+    (is (= [{:added variables
+             :participants [3]
+             :target-variables variables}
+            {:added []
+             :participants [4]
+             :target-variables variables}]
+           (plan/plan-scope [or-descriptor predicate-descriptor]
+                            variables
+                            [])))))
+
+(deftest plan-scope-plans-only-relevant-incoming-variables-test
+  (let [incoming-a '?incoming-a
+        incoming-b '?incoming-b
+        irrelevant '?irrelevant
+        new-variable '?new
+        descriptor {:kind :triple
+                    :idx 7
+                    :variables [incoming-a new-variable]
+                    :groundable (fn [bound]
+                                  (vec (remove bound [incoming-a new-variable])))}]
+    (is (= [{:added [incoming-b]
+             :participants [-1]
+             :target-variables [incoming-b]}
+            {:added [incoming-a]
+             :participants [-1 7]
+             :target-variables [incoming-b incoming-a]}
+            {:added [new-variable]
+             :participants [7]
+             :target-variables [incoming-b incoming-a new-variable]}]
+           (plan/plan-scope [descriptor]
+                            [new-variable incoming-b incoming-a]
+                            [irrelevant incoming-a incoming-b])))))
+
 (deftest stage-interface-can-be-implemented-in-clojure-test
   (let [x '?x
         pattern (reify ExecPattern
