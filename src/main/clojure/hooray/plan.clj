@@ -388,7 +388,7 @@
 ;; that returns a list of variables that can be grounded by the pattern given some set of already
 ;; bound variables and the list of variables appearing in the sub-plan (the descriptor).
 ;; 2. We calculate stages as pure data per scope. Scopes are top-level scopes (:in + :where),
-;; `not` scopes and `or` scopes. A stages is a set of `added` variables in that stage
+;; `not` scopes and `or` scopes. A stage is a set of `added` variables in that stage
 ;; (most of the time a single variable), a set of participants (just descriptor idx identifiers) and
 ;; finally a list of target-variables after the result set is returned in.
 ;; 3. Finally we fold the descriptors + logical stages recursively into runtime patterns
