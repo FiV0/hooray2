@@ -158,6 +158,26 @@
                                  [(< ?limit 0)]))]}
               (h/db fix/*node*)))))
 
+#_
+(deftest test-nested-or-groundability-is-all-or-nothing
+  (h/transact fix/*node* [{:db/id :db/next
+                           :db/ident :next
+                           :db/valueType :db.type/long
+                           :db/cardinality :db.cardinality/one}])
+  (h/transact fix/*node* [{:db/id 1 :age 35}
+                          {:db/id 2 :age 35}
+                          {:db/id 3 :age 35}
+                          {:db/id 4 :next 3}])
+
+  (is (= [[2 1] [4 3]]
+         (sort (h/q '{:find [?v ?e]
+                      :where [(or (and (or [?v :next ?e]
+                                           (and [?e :age 35]
+                                                [(< ?v 3)]))
+                                       [(inc ?e) ?v]))
+                              [?e :age 35]]}
+                    (h/db fix/*node*))))))
+
 (deftest projection-semantics-with-bags
   (h/transact fix/*node*
               [{:db/id :db/person-department
