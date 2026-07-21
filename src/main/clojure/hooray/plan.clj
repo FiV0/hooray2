@@ -391,7 +391,8 @@
 ;; `not` scopes and `or` scopes. A stages is a set of `added` variables in that stage
 ;; (most of the time a single variable), a set of participants (just descriptor idx identifiers) and
 ;; finally a list of target-variables after the result set is returned in.
-;; 3. Finally we descriptors + logical stages into runtime patterns (`ExecPattern`) and stages (`IStage`).
+;; 3. Finally we fold the descriptors + logical stages recursively into runtime patterns
+;; (`ExecPattern`) and stages (`IStage`).
 
 (defn plan
   "Compiles a validated, conformed query into a vector of executable Stage records."
