@@ -26,10 +26,6 @@
 (defn- next-index! []
   (swap! next-pattern-index inc))
 
-;; variables is similar to orderedVariables in Kotlin
-;; groundable returns the variables immediately groundable from the supplied bounds
-(defrecord Pattern [idx variables groundable exec-pattern])
-
 (defn- variable-names [values]
   (->> values
        (keep (fn [[value-type value]]
@@ -38,7 +34,7 @@
        distinctv))
 
 (defn- groundable-variables
-  [{{:keys [groundable]} :pattern :as _node} bound]
+  [{:keys [groundable] :as _node} bound]
   (vec (groundable (set bound))))
 
 (defn- pattern-value [[value-type value]]
@@ -112,7 +108,7 @@
   (let [nodes (mapv #(compile-node db %) clauses)]
     {:nodes nodes
      :ordered-vars (->> nodes
-                        (mapcat (fn [{{:keys [variables]} :pattern}]
+                        (mapcat (fn [{:keys [variables]}]
                                   variables))
                         distinctv)}))
 
@@ -123,18 +119,21 @@
     (let [variables (variable-names [e v])
           exec-pattern (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v))]
       {:kind :triple
-       :pattern (->Pattern idx
-                           variables
-                           (fn [bound]
-                             (vec (remove bound variables)))
-                           exec-pattern)})))
+       :idx idx
+       :variables variables
+       :groundable (fn [bound]
+                     (vec (remove bound variables)))
+       :exec-pattern exec-pattern})))
 
 (defn- compile-predicate [idx {:keys [predicate args] :as _predicate}]
   (let [variables (variable-names args)
         arguments (mapv pattern-value args)
         exec-pattern (PredicatePattern. idx arguments (kotlin-function predicate (count arguments)))]
     {:kind :predicate
-     :pattern (->Pattern idx variables (constantly []) exec-pattern)}))
+     :idx idx
+     :variables variables
+     :groundable (constantly [])
+     :exec-pattern exec-pattern}))
 
 (defn- compile-function [idx [{:keys [fun args] :as _function} output]]
   (let [argument-vars (variable-names args)
@@ -142,14 +141,14 @@
         arguments (mapv pattern-value args)
         exec-pattern (FunctionPattern. idx arguments output (kotlin-function fun (count arguments)))]
     {:kind :function
-     :pattern (->Pattern idx
-                         variables
-                         (fn [bound]
-                           (if (and (set/subset? (set argument-vars) bound)
-                                    (not (contains? bound output)))
-                             [output]
-                             []))
-                         exec-pattern)}))
+     :idx idx
+     :variables variables
+     :groundable (fn [bound]
+                   (if (and (set/subset? (set argument-vars) bound)
+                            (not (contains? bound output)))
+                     [output]
+                     []))
+     :exec-pattern exec-pattern}))
 
 (defn- compile-or [db idx branches]
   (let [compiled-branches (mapv (fn [[branch-type branch]]
@@ -165,17 +164,20 @@
                             compiled-branches)
         exec-pattern (OrPattern. idx branch-stages)]
     {:kind :or
-     :pattern (->Pattern idx
-                         ordered-vars
-                         (partial or-groundable branch-stages seed-index ordered-vars)
-                         exec-pattern)}))
+     :idx idx
+     :variables ordered-vars
+     :groundable (partial or-groundable branch-stages seed-index ordered-vars)
+     :exec-pattern exec-pattern}))
 
 (defn- compile-not [db idx clauses]
   (let [{:keys [nodes ordered-vars] :as _scope} (compile-scope db clauses)
         seed-pattern (external-binding-pattern (next-index!) ordered-vars)
         exec-pattern (NotPattern. idx (plan-scope nodes ordered-vars seed-pattern))]
     {:kind :not
-     :pattern (->Pattern idx ordered-vars (constantly []) exec-pattern)}))
+     :idx idx
+     :variables ordered-vars
+     :groundable (constantly [])
+     :exec-pattern exec-pattern}))
 
 (defn- compile-node [db [clause-type clause]]
   (let [idx (next-index!)]
@@ -210,10 +212,10 @@
                 variables (vec variables)
                 exec-pattern (RelationPattern. idx (BindingSet. variables rows))]
             {:kind :relation
-             :pattern (->Pattern idx
-                                 variables
-                                 (partial relation-groundable variables)
-                                 exec-pattern)}))
+             :idx idx
+             :variables variables
+             :groundable (partial relation-groundable variables)
+             :exec-pattern exec-pattern}))
         (map vector in args)))
 
 (defn- bound-target [variable-order bound added]
@@ -224,9 +226,7 @@
   (and (not= :or kind)
        (some #{variable} (groundable-variables node bound))))
 
-(defn- or-can-propose? [{:keys [kind]
-                         {:keys [variables]} :pattern
-                         :as node}
+(defn- or-can-propose? [{:keys [kind variables] :as node}
                         bound]
   (when (= :or kind)
     (let [missing (vec (remove (set bound) variables))
@@ -234,12 +234,12 @@
       (when (and (seq missing) (set/subset? (set missing) groundable))
         missing))))
 
-(defn- fully-validatable? [{{:keys [variables]} :pattern} bound]
+(defn- fully-validatable? [{:keys [variables]} bound]
   (set/subset? (set variables) (set bound)))
 
 (defn- pending-validation-nodes [nodes completed bound]
   (->> nodes
-       (remove (fn [{{:keys [idx]} :pattern}]
+       (remove (fn [{:keys [idx]}]
                  (contains? completed idx)))
        (filter #(fully-validatable? % bound))
        vec))
@@ -248,7 +248,7 @@
   [nodes completed bound variable variable-order external-pattern]
   (let [added [variable]
         target (bound-target variable-order bound added)
-        eligible-nodes (remove (fn [{{:keys [idx]} :pattern}]
+        eligible-nodes (remove (fn [{:keys [idx]}]
                                  (contains? completed idx))
                                nodes)
         proposers (filterv #(ordinary-can-propose? % bound variable) eligible-nodes)]
@@ -258,17 +258,17 @@
                               (filter (fn [node]
                                         (or (ordinary-can-propose? node bound variable)
                                             (fully-validatable? node target))))
-                              (mapv (fn [{{:keys [exec-pattern]} :pattern}]
+                              (mapv (fn [{:keys [exec-pattern]}]
                                       exec-pattern)))
             participant-ids (set (map (fn [^ExecPattern pattern]
                                         (.getIdx pattern))
                                       participants))]
         {:stage (Stage. added participants target)
          :completed (->> eligible-nodes
-                         (filter (fn [{{:keys [idx]} :pattern :as node}]
+                         (filter (fn [{:keys [idx] :as node}]
                                    (and (contains? participant-ids idx)
                                         (fully-validatable? node target))))
-                         (map (fn [{{:keys [idx]} :pattern}]
+                         (map (fn [{:keys [idx]}]
                                 idx))
                          set)})
 
@@ -278,7 +278,7 @@
                                       eligible-nodes))]
         (let [or-added (or-can-propose? or-node bound)
               or-target (bound-target variable-order bound or-added)
-              {{:keys [idx exec-pattern]} :pattern} or-node]
+              {:keys [idx exec-pattern]} or-node]
           {:stage (Stage. or-added [exec-pattern] or-target)
            :completed #{idx}})
         (when external-pattern
@@ -289,12 +289,12 @@
   (let [validation-nodes (pending-validation-nodes nodes completed bound)]
     (if (empty? validation-nodes)
       [completed stages]
-      [(into completed (map (fn [{{:keys [idx]} :pattern}]
+      [(into completed (map (fn [{:keys [idx]}]
                               idx)
                             validation-nodes))
        (conj stages
              (Stage. []
-                     (mapv (fn [{{:keys [exec-pattern]} :pattern}]
+                     (mapv (fn [{:keys [exec-pattern]}]
                              exec-pattern)
                            validation-nodes)
                      (vec bound)))])))
@@ -308,7 +308,7 @@
       (if (empty? remaining-vars)
         (do
           (when-not (= (set completed)
-                       (set (map (fn [{{:keys [idx]} :pattern}]
+                       (set (map (fn [{:keys [idx]}]
                                    idx)
                                  nodes)))
             (throw (IllegalStateException. "Not every pattern was lowered into a stage")))
