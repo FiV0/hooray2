@@ -398,6 +398,29 @@
                               (format "No descriptor found for participant %s" idx)))))))
         participant-indexes))
 
+
+(defn- fold-stages [db descriptors logical-stages]
+  (let [descriptors-by-index (into {} (map (juxt :idx identity) descriptors))
+        get-descriptor (fn [idx] (or (get descriptors-by-index idx)
+                                     (throw (IllegalStateException.
+                                             (format "No descriptor found for participant %s" idx)))))]
+    (loop [patterns-by-index {}
+           stages []
+           bound []
+           [{:keys [added participants target-variables] :as logical-stage} & logical-stages] logical-stages]
+      (if-not logical-stage
+        stages
+        (let [participants (remove #{-1} participants)
+              patterns-by-index (reduce (fn [p-by-idx idx]
+                                          (update p-by-idx idx #(or %
+                                                                    (descriptor->exec-pattern db (get-descriptor idx) bound))))
+                                        patterns-by-index participants)]
+          (recur
+           patterns-by-index
+           (conj stages (->Stage added (map patterns-by-index participants) target-variables))
+           target-variables
+           logical-stages))))))
+
 (defn- logical-stage->stage
   [exec-patterns {:keys [added participants target-variables] :as _logical-stage}]
   (->Stage added
