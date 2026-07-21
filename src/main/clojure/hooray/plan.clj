@@ -194,34 +194,6 @@
              :binding-set (BindingSet. variables rows)}))
         (map vector in args)))
 
-(declare assemble-scope)
-
-(defn- descriptor->exec-pattern
-  [{:keys [aev ave] :as db}
-   {:keys [kind idx variables clause branches children binding-set] :as _descriptor}
-   incoming]
-  (case kind
-    :triple (let [{:keys [e a v]} clause
-                  [_ attribute] a]
-              (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v)))
-
-    :predicate (let [{:keys [predicate args]} clause
-                     arguments (mapv pattern-value args)]
-                 (PredicatePattern. idx arguments (kotlin-function predicate (count arguments))))
-
-    :function (let [[{:keys [fun args]} output] clause
-                    arguments (mapv pattern-value args)]
-                (FunctionPattern. idx arguments output (kotlin-function fun (count arguments))))
-
-    :relation (RelationPattern. idx binding-set)
-
-    :or (OrPattern. idx
-                    (mapv (fn [branch]
-                            (assemble-scope db branch variables incoming))
-                          branches))
-
-    :not (NotPattern. idx (assemble-scope db children variables incoming))))
-
 (defn- bound-target [variable-order bound added]
   (let [target-set (into (set bound) added)]
     (vec (filter target-set variable-order))))
@@ -248,11 +220,6 @@
        (filter #(fully-validatable? % bound))
        vec))
 
-(defn- incoming-descriptor [variables]
-  {:idx -1
-   :kind :relation
-   :variables variables
-   :groundable (partial relation-groundable variables)})
 
 (defn- logical-proposing-stage-for
   [nodes completed bound variable variable-order]
@@ -307,6 +274,12 @@
                                   validation-nodes)
               :target-variables (vec bound)})])))
 
+(defn- incoming-descriptor [variables]
+  {:idx -1
+   :kind :relation
+   :variables variables
+   :groundable (partial relation-groundable variables)})
+
 (defn plan-scope
   "Plans descriptors into logical stages whose participants are descriptor indexes.
   Participant -1 represents relevant `incoming` variables and is planning-only."
@@ -357,6 +330,35 @@
           target-variables)
     :not target-variables
     []))
+
+(declare assemble-scope)
+
+(defn- descriptor->exec-pattern
+  [{:keys [aev ave] :as db}
+   {:keys [kind idx variables clause branches children binding-set] :as _descriptor}
+   incoming]
+  (case kind
+    :triple (let [{:keys [e a v]} clause
+                  [_ attribute] a]
+              (TriplePattern. idx aev ave (pattern-value e) attribute (pattern-value v)))
+
+    :predicate (let [{:keys [predicate args]} clause
+                     arguments (mapv pattern-value args)]
+                 (PredicatePattern. idx arguments (kotlin-function predicate (count arguments))))
+
+    :function (let [[{:keys [fun args]} output] clause
+                    arguments (mapv pattern-value args)]
+                (FunctionPattern. idx arguments output (kotlin-function fun (count arguments))))
+
+    :relation (RelationPattern. idx binding-set)
+
+    :or (OrPattern. idx
+                    (mapv (fn [branch]
+                            (assemble-scope db branch variables incoming))
+                          branches))
+
+    :not (NotPattern. idx (assemble-scope db children variables incoming))))
+
 
 (defn- descriptor-incoming-by-index [descriptors logical-stages]
   (let [descriptors-by-index (into {} (map (juxt :idx identity)) descriptors)]
