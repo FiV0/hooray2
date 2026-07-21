@@ -349,56 +349,6 @@
 
     :not (NotPattern. idx (assemble-scope db children variables incoming))))
 
-(defn- descriptor-execution-incoming
-  [{:keys [kind idx]}
-   {:keys [added participants target-variables]}
-   bound]
-  (case kind
-    :or (if (and (seq added) (= [idx] participants))
-          bound
-          target-variables)
-    :not target-variables
-    []))
-
-(defn- descriptor-incoming-by-index [descriptors logical-stages]
-  (let [descriptors-by-index (into {} (map (juxt :idx identity)) descriptors)]
-    (loop [bound []
-           [stage & remaining] logical-stages
-           incoming-by-index {}]
-      (if stage
-        (let [{:keys [participants target-variables]} stage
-              incoming-by-index
-              (reduce (fn [result participant]
-                        (if-let [{:keys [kind idx] :as descriptor}
-                                 (get descriptors-by-index participant)]
-                          (if (#{:or :not} kind)
-                            (assoc result idx (descriptor-execution-incoming descriptor stage bound))
-                            result)
-                          result))
-                      incoming-by-index
-                      participants)]
-          (recur target-variables remaining incoming-by-index))
-        incoming-by-index))))
-
-(defn- exec-patterns-by-index [db descriptors logical-stages]
-  (let [incoming-by-index (descriptor-incoming-by-index descriptors logical-stages)]
-    (into {}
-          (map (fn [{:keys [idx] :as descriptor}]
-                 [idx (descriptor->exec-pattern db
-                                                descriptor
-                                                (get incoming-by-index idx []))]))
-          descriptors)))
-
-(defn- participant-patterns [exec-patterns participant-indexes]
-  (into []
-        (keep (fn [idx]
-                (when-not (= -1 idx)
-                  (or (get exec-patterns idx)
-                      (throw (IllegalStateException.
-                              (format "No descriptor found for participant %s" idx)))))))
-        participant-indexes))
-
-
 (defn- fold-stages [db descriptors logical-stages]
   (let [descriptors-by-index (into {} (map (juxt :idx identity) descriptors))
         get-descriptor (fn [idx] (or (get descriptors-by-index idx)
@@ -413,24 +363,24 @@
         (let [participants (remove #{-1} participants)
               patterns-by-index (reduce (fn [p-by-idx idx]
                                           (update p-by-idx idx #(or %
-                                                                    (descriptor->exec-pattern db (get-descriptor idx) bound))))
+                                                                    (descriptor->exec-pattern
+                                                                     db
+                                                                     (get-descriptor idx)
+                                                                     ;; TODO this condition looks smelly
+                                                                     ;; This is some special casing for `or` again.
+                                                                     (if (and (seq added)
+                                                                              (= [idx] participants))
+                                                                       bound
+                                                                       target-variables)))))
                                         patterns-by-index participants)]
           (recur
            patterns-by-index
-           (conj stages (->Stage added (map patterns-by-index participants) target-variables))
+           (conj stages (->Stage added (mapv patterns-by-index participants) target-variables))
            target-variables
            logical-stages))))))
 
-(defn- logical-stage->stage
-  [exec-patterns {:keys [added participants target-variables] :as _logical-stage}]
-  (->Stage added
-           (participant-patterns exec-patterns participants)
-           target-variables))
-
 (defn- assemble-scope [db descriptors variable-order incoming]
-  (let [logical-stages (plan-scope descriptors variable-order incoming)
-        exec-patterns (exec-patterns-by-index db descriptors logical-stages)]
-    (mapv (partial logical-stage->stage exec-patterns) logical-stages)))
+  (fold-stages db descriptors (plan-scope descriptors variable-order incoming)))
 
 ;; The planning pipeline goes through 3 stages.
 ;; 1. We first translate the query AST (conformed-query) into a recursive list of descriptors.
