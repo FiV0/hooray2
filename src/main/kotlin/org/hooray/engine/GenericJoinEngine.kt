@@ -53,15 +53,14 @@ class GenericJoinEngine {
             }
         }
 
-        val rowIndexesByProposer = linkedMapOf<Int, MutableList<Int>>()
+        val shards = linkedMapOf<Int, MutableList<Int>>()
         proposals.forEachIndexed { rowIndex, proposal ->
             if (proposal.proposer != NO_PROPOSER && proposal.count > 0) {
-                rowIndexesByProposer.getOrPut(proposal.proposer, ::mutableListOf).add(rowIndex)
+                shards.getOrPut(proposal.proposer, ::mutableListOf).add(rowIndex)
             }
         }
 
         val participantsById = stage.participants.associateBy { it.idx }
-        val shards = rowIndexesByProposer.entries.sortedBy { (_, rowIndexes) -> rowIndexes.first() }
         var result = BindingSet(stage.targetVariables, emptyList())
         for ((proposerId, rowIndexes) in shards) {
             val proposer = participantsById.getValue(proposerId)
