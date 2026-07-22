@@ -130,9 +130,11 @@
                               :variables [name]
                               :groundable (constantly [])}]
     (is (= [{:added [entity]
+             :proposers [1]
              :participants [1]
              :target-variables [entity]}
             {:added [name]
+             :proposers [1]
              :participants [1 2]
              :target-variables [entity name]}]
            (plan/plan-scope [entity-descriptor predicate-descriptor]
@@ -151,9 +153,11 @@
                               :variables ['?amount]
                               :groundable (constantly [])}]
     (is (= [{:added variables
+             :proposers [3]
              :participants [3]
              :target-variables variables}
             {:added []
+             :proposers []
              :participants [4]
              :target-variables variables}]
            (plan/plan-scope [or-descriptor predicate-descriptor]
@@ -171,12 +175,15 @@
                     :groundable (fn [bound]
                                   (vec (remove bound [incoming-a new-variable])))}]
     (is (= [{:added [incoming-b]
+             :proposers [-1]
              :participants [-1]
              :target-variables [incoming-b]}
             {:added [incoming-a]
+             :proposers [-1 7]
              :participants [-1 7]
              :target-variables [incoming-b incoming-a]}
             {:added [new-variable]
+             :proposers [7]
              :participants [7]
              :target-variables [incoming-b incoming-a new-variable]}]
            (plan/plan-scope [descriptor]

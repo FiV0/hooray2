@@ -239,6 +239,7 @@
                               (mapv :idx))
             participant-ids (set participants)]
         {:stage {:added added
+                 :proposers (mapv :idx proposers)
                  :participants participants
                  :target-variables target}
          :completed (->> eligible-descriptors
@@ -256,6 +257,7 @@
                                 eligible-descriptors))]
         (let [or-added (or-proposal selected-or bound)]
           {:stage {:added or-added
+                   :proposers [idx]
                    :participants [idx]
                    :target-variables (bound-target variable-order bound or-added)}
            :completed #{idx}})))))
@@ -269,6 +271,7 @@
       [(into completed participant-ids)
        (conj stages
              {:added []
+              :proposers []
               :participants participant-ids
               :target-variables (vec bound)})])
     [completed stages]))
@@ -281,6 +284,7 @@
 
 (defn plan-scope
   "Plans descriptors into logical stages whose participants are descriptor indexes.
+  Proposers are the participant indexes that can introduce the stage's added variables.
   Participant -1 represents relevant `incoming` variables and is planning-only."
   [descriptors variable-order incoming]
   (let [incoming-set (set incoming)
@@ -357,7 +361,7 @@
     (loop [patterns-by-index {}
            stages []
            bound []
-           [{:keys [added participants target-variables] :as logical-stage} & logical-stages] logical-stages]
+           [{:keys [added proposers participants target-variables] :as logical-stage} & logical-stages] logical-stages]
       (if-not logical-stage
         stages
         (let [participants (remove #{-1} participants)
@@ -366,10 +370,12 @@
                                                                     (descriptor->exec-pattern
                                                                      db
                                                                      (get-descriptor idx)
-                                                                     ;; TODO this condition looks smelly
-                                                                     ;; This is some special casing for `or` again.
-                                                                     (if (and (seq added)
-                                                                              (= [idx] participants))
+                                                                     ;; TODO: This hints at some better code organization.
+                                                                     ;; Some proposers will receive input as target-variables, because
+                                                                     ;; they don't win the proposal. The check here only works because
+                                                                     ;; patterns where it matters (`or` and `not`) they
+                                                                     ;; are not part of the proposers.
+                                                                     (if (some #{idx} proposers)
                                                                        bound
                                                                        target-variables)))))
                                         patterns-by-index participants)]
@@ -389,8 +395,8 @@
 ;; bound variables and the list of variables appearing in the sub-plan (the descriptor).
 ;; 2. We calculate stages as pure data per scope. Scopes are top-level scopes (:in + :where),
 ;; `not` scopes and `or` scopes. A stage is a set of `added` variables in that stage
-;; (most of the time a single variable), a set of participants (just descriptor idx identifiers) and
-;; finally a list of target-variables after the result set is returned in.
+;; (most of the time a single variable), proposer and participant descriptor indexes, and finally
+;; a list of target-variables after the result set is returned in.
 ;; 3. Finally we fold the descriptors + logical stages recursively into runtime patterns
 ;; (`ExecPattern`) and stages (`IStage`).
 
