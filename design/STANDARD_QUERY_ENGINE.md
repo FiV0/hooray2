@@ -38,17 +38,65 @@ distinct within a stage, and all variable lists contain no duplicates.
 
 ## Pattern contracts
 
-| Contract | Consumer | Responsibility |
-|----------|----------|----------------|
-| `hooray.plan/Pattern` | planner | Holds ordered variables, immediate groundability, and the corresponding executable pattern |
-| `ExecPattern` | executor | Exposes a stable `idx`, its variable set, proposal counts, and row execution through `join` |
+There are 4 concepts in the planning pipeline that appear throughout.
+`descriptors` are just clauses (`triple`, `or-pattern` etc..) that supplemented
+with additional data to make planning easier. The `:where` query AST is pretty
+much preserved. A logical stage map is a pure Clojure planning representation of what
+will later become an `IStage`. `ExecPattern` is the executor contract
+of one pattern (which can have sub-plans) in the `GenericJoinEngine`.
 
-The Clojure planning record contains `idx`, ordered `variables`, a `groundable`
-function, and its `exec-pattern`. Calling `groundable` returns only variables
-the pattern can introduce immediately from the supplied bound-variable set.
-The planner calls it again after each emitted stage, so dependencies become
-available as the plan advances rather than through a separate fixed-point
-calculation.
+### Descriptor maps
+
+Every descriptor contains `:idx`, `:kind`, ordered `:variables`, and a
+`:groundable` function. Clause descriptors also retain `:clause`; an `or`
+descriptor contains a vector of descriptor vectors in `:branches`, a `not`
+descriptor contains its child descriptors in `:children`, and an input
+relation descriptor contains its `:binding-set`.
+
+For example, a triple descriptor has this shape:
+
+```clojure
+{:kind :triple
+ :idx 1
+ :variables [?e ?name]
+ :groundable groundable-fn
+ :clause {:e [:variable ?e]
+          :a [:constant :name]
+          :v [:variable ?name]}}
+```
+
+Calling `(groundable bound-vars)` returns only variables the descriptor can introduce from
+the supplied bound-variable set. An `or` is groundable only when every branch can reach all of its missing
+variables.
+
+### Logical stage maps
+
+A logical stage is still pure Clojure data. `:proposers` identifies the
+participants that are allowed to introduce `:added`; `:participants` also
+includes descriptors that can validate the resulting layout. This distinction
+between `:proposers` and `:participants` is retained explicitly because
+recursive stage construction will need it a later step.
+
+A logical stage look as follows:
+
+```clojure
+{:added [?name]
+ :proposers [1]
+ :participants [1 2]
+ :target-variables [?e ?name]}
+```
+
+`?name` gets added in this stage. The exec-pattern with index 1 acts as proposer and both
+1 and 2 participate in this stage. It essentially means 1 proposes and 2 validates.
+The final variable layout after this stage should be `target-variables`.
+
+### `ExecPattern`
+
+`ExecPattern` is the executor contract for a runtime pattern. It exposes a
+stable `idx`, its variable set, proposal counts, and proposing or validation of
+a `BindingSet` through `join`. With multiple participants, `GenericJoinEngine` uses
+`ExecPattern.count` to choose the cheapest proposer independently for each
+input row.
 
 `ExecPattern.count` updates one proposal per input row when the pattern has a
 strictly cheaper positive candidate count. A participant that cannot propose
@@ -60,11 +108,21 @@ has two modes:
 - An empty `added` list asks the pattern to filter rows without changing the
   input layout.
 
+### `IStage`
+
+`IStage` is the executor contract for one binding-layout transition.
+
+```clojure
+{:added [?name]
+ :participants [triple-pattern predicate-pattern]
+ :target-variables [?e ?name]}
+```
+
 ## Compilation and planning
 
 Compilation resolves constants, attributes, predicates, functions, database
-indexes, and external relations. It preserves the clause tree and assigns a
-Clojure planning pattern to every node.
+indexes, and external relations. It preserves the clause AST (mostly just the `:where`)
+and assigns a `descriptor` to every node.
 
 Planning is recursive and proceeds from variable shapes to executable stages:
 
@@ -141,7 +199,7 @@ For a proposing stage with several participants, execution is row-local:
 2. The cheapest positive proposal wins; equal counts retain the earlier
    participant.
 3. Rows without a proposer are discarded.
-4. Rows are grouped by proposer, and the winner extends each group.
+4. Rows are grouped by proposer, and the winner extends each shard group.
 5. Every other participant validates the extended rows with `added = []`.
 6. The validated groups are unioned in the stage target layout.
 
@@ -153,11 +211,10 @@ they receive.
 | Pattern | Planning and execution rules |
 |---------|------------------------------|
 | `TriplePattern` | Uses a fixed attribute and constant or variable entity/value positions. Every unbound pattern variable is groundable. It proposes through AEV or AVE according to the bound side and validates exact or partial bindings existentially. A constant-only triple is a validation filter. It rejects `count` and proposing `join` calls whose `added` list is not a non-empty subset of its variables. Entity and value variables must differ. |
-| `RelationPattern` | Represents a materialized relation, including external and nested-plan inputs. Planning exposes only the next variable of a legal relation prefix. Its trie proposes that prefix segment and validates a bound prefix. Bound relation variables followed by `added` must form a prefix of the relation's variable order; unrelated input columns may interleave without changing that order. |
+| `RelationPattern` | Represents a materialized relation, including external and nested-plan inputs. Underneath a Relation is represented by tire, meaning for any prefix in variable order only the next variable can be introduced. Its trie proposes that prefix segment and validates a bound prefix. Bound relation variables followed by `added` must form a prefix of the relation's variable order for the Pattern to participate in a proposal or validation.|
 | `PredicatePattern` | Grounds nothing. Once all variable arguments are bound, it evaluates its unary or binary predicate and filters rows without changing their layout. |
 | `FunctionPattern` | Grounds only its output, and only after all variable arguments are bound. It evaluates a unary or binary function to propose the output, or compares the computed value with an already bound output. The output differs from every argument variable. |
-| `OrPattern` | Clojure planning walks each branch's ordered stages and exposes only variables producible by every branch. Branches have the same variables and introduction order. Execution injects the relevant input columns into each branch, unions branch results distinctly, and matches them back to the full input. It proposes all missing variables only as a stage's sole participant and validates only when every OR variable is bound. |
+| `OrPattern` | Planning walks each branch's ordered stages and exposes only variables producible by every branch. Branches have the same variables and introduction order. Execution injects the relevant input columns into each branch, unions branch results distinctly, and matches them back to the full input. It proposes all missing variables only as a stage's sole participant and validates only when every OR variable is bound. |
 | `NotPattern` | Grounds and proposes nothing. All of its variables are bound by the outer input. It injects those bindings into its nested stages and removes matching input rows with an antijoin. Unrelated input columns are preserved. |
 
-After the last stage, the query layer reorders and projects the binding set to
-the `:find` layout and applies result shaping.
+After the last stage, the `:find` projection is applied. If aggregates exists these are applied before the final projection.
