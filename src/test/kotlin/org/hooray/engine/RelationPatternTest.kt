@@ -37,6 +37,14 @@ class RelationPatternTest {
     }
 
     @Test
+    fun `does not propose when bound relation variables are out of prefix order`() {
+        val input = BindingSet(listOf(age), listOf(listOf(35)))
+        val proposals = listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE))
+
+        assertEquals(proposals, pattern.count(input, listOf(e), proposals))
+    }
+
+    @Test
     fun `validates with existential relation support`() {
         val input = BindingSet(listOf(e), listOf(listOf("a"), listOf("c")))
 
@@ -139,6 +147,46 @@ class RelationPatternTest {
         assertEquals(
             BindingSet(listOf(e, age, name), listOf(listOf("a", 36, "Ada"))),
             prefixPattern.join(completeInput, emptyList(), completeInput.variables),
+        )
+    }
+
+    @Test
+    fun `validates complete relations independent of input variable order`() {
+        val pattern = RelationPattern(
+            idx = 11,
+            relation = BindingSet(
+                listOf(e, age, name),
+                listOf(listOf("a", 35, "Alice"), listOf("b", 40, "Bob")),
+            ),
+        )
+        val input = BindingSet(
+            listOf(name, e, age),
+            listOf(listOf("Alice", "a", 35), listOf("Wrong", "a", 35)),
+        )
+
+        assertEquals(
+            BindingSet(listOf(name, e, age), listOf(listOf("Alice", "a", 35))),
+            pattern.join(input, emptyList(), input.variables),
+        )
+    }
+
+    @Test
+    fun `validates relation prefixes independent of input variable order`() {
+        val pattern = RelationPattern(
+            idx = 12,
+            relation = BindingSet(
+                listOf(e, age, name),
+                listOf(listOf("a", 35, "Alice"), listOf("b", 40, "Bob")),
+            ),
+        )
+        val input = BindingSet(
+            listOf(age, e),
+            listOf(listOf(35, "a"), listOf(99, "a")),
+        )
+
+        assertEquals(
+            BindingSet(listOf(age, e), listOf(listOf(35, "a"))),
+            pattern.join(input, emptyList(), input.variables),
         )
     }
 

@@ -8,9 +8,10 @@ import org.hooray.util.Trie
  * @property idx The index of this pattern in the plan.
  * @property relation The relation to match against.
  *
- * The contract with the outer caller is that any prefix of [variables] must appear
- * in the input binding set in that order. There are possibly more variables in the input relation
- * and they interleave the prefix, but variables from the prefix are not shuffled.
+ * When proposing variables, any prefix of [variables] must appear in the input binding set
+ * in that order. There are possibly more variables in the input relation and they interleave
+ * the prefix, but variables from the prefix are not shuffled. Validation accepts a bound
+ * relation prefix in any input layout.
  */
 class RelationPattern(
     override val idx: Int,
@@ -69,15 +70,22 @@ class RelationPattern(
         return prefixVars == orderedVariables.take(prefixVars.size)
     }
 
+    private fun prefixIndexesOrNull(
+        input: BindingSet,
+        added: List<Variable>,
+    ): List<Int>? {
+        val inputPrefix = input.variables.filter { variable -> variable in variables }
+        if (!isPrefix(inputPrefix + added)) return null
+        return inputPrefix.map(input::columnIndex)
+    }
+
     private fun prefixIndexes(
         input: BindingSet,
         added: List<Variable>,
     ): List<Int> {
-        val inputPrefix = input.variables.filter { variable -> variable in variables }
-        require(isPrefix(inputPrefix + added)) {
+        return requireNotNull(prefixIndexesOrNull(input, added)) {
             "Relation variables in the input followed by introduced variables must form a relation prefix"
         }
-        return inputPrefix.map(input::columnIndex)
     }
 
     override fun count(
@@ -86,7 +94,7 @@ class RelationPattern(
         proposals: List<Proposal>,
     ): List<Proposal> {
         if (added.isEmpty() || !variables.containsAll(added)) return proposals
-        val prefixIndexes = prefixIndexes(input, added)
+        val prefixIndexes = prefixIndexesOrNull(input, added) ?: return proposals
         val counts = input.rows.map { row ->
             countIntroductions(trieNodeFor(row, prefixIndexes), added.size)
         }
@@ -132,10 +140,14 @@ class RelationPattern(
         }
         if (!hasRows) return BindingSet(input.variables, emptyList())
 
-        val prefixIndexes = prefixIndexes(input, emptyList())
+        val boundVariables = orderedVariables.filter { variable -> variable in input.columnIndexes }
+        require(isPrefix(boundVariables)) {
+            "Bound relation variables must form a relation prefix"
+        }
+        val relationIndexes = boundVariables.map(input::columnIndex)
         return BindingSet(
             variables = input.variables,
-            rows = input.rows.filter { row -> trieNodeFor(row, prefixIndexes) != null },
+            rows = input.rows.filter { row -> trieNodeFor(row, relationIndexes) != null },
         )
     }
 }

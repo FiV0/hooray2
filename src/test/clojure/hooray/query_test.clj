@@ -367,6 +367,28 @@
                      [["Ivan" "Ivanov"]
                       ["Petr" "Petrov"]])))))
 
+(deftest test-relation-bindings-with-conflicting-variable-orders
+  (h/transact fix/*node* [{:db/id :relation-witness :name "Relation witness"}])
+
+  (t/is (= #{[1 2]}
+           (set (h/q '{:find [?a ?b]
+                       :in [[[?a ?b]] [[?b ?a]]]
+                       :where [[?e :name "Relation witness"]]}
+                     (h/db fix/*node*)
+                     [[1 2] [3 4]]
+                     [[2 1] [5 6]])))))
+
+(deftest test-relation-bindings-partially-validate-in-conflicting-variable-orders
+  (h/transact fix/*node* [{:db/id :partial-relation-witness :name "Partial relation witness"}])
+
+  (t/is (= #{[1 2 3 4]}
+           (set (h/q '{:find [?a ?b ?c ?d]
+                       :in [[[?b ?a ?c ?d]] [[?a ?b ?c ?d]]]
+                       :where [[?e :name "Partial relation witness"]]}
+                     (h/db fix/*node*)
+                     [[2 1 3 4]]
+                     [[1 2 3 4]])))))
+
 (deftest test-order-of-vars-in-predicate
   (t/is (= [[10 11]]
            (h/q '{:find [in1 in2]
