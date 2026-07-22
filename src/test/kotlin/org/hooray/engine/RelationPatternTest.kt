@@ -37,7 +37,7 @@ class RelationPatternTest {
     }
 
     @Test
-    fun `does not propose when bound relation variables are out of prefix order`() {
+    fun `does not propose when bound relation variables do not form a relation prefix`() {
         val input = BindingSet(listOf(age), listOf(listOf(35)))
         val proposals = listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE))
 

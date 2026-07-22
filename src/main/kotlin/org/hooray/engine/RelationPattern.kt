@@ -140,11 +140,9 @@ class RelationPattern(
         }
         if (!hasRows) return BindingSet(input.variables, emptyList())
 
-        val boundVariables = orderedVariables.filter { variable -> variable in input.columnIndexes }
-        require(isPrefix(boundVariables)) {
+        val relationIndexes = requireNotNull(prefixIndexesOrNull(input, emptyList())) {
             "Bound relation variables must form a relation prefix"
         }
-        val relationIndexes = boundVariables.map(input::columnIndex)
         return BindingSet(
             variables = input.variables,
             rows = input.rows.filter { row -> trieNodeFor(row, relationIndexes) != null },
