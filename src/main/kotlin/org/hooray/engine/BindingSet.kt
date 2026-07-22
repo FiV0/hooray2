@@ -119,6 +119,13 @@ data class BindingSet(
         )
     }
 
+    /**
+     * Natural join on the shared variables.
+     *
+     * The result column order is not stable: the sides are swapped so that the smaller
+     * input is indexed, so whether this layout or [other]'s comes first depends on the
+     * row counts. Callers must [project] or [reorder] the result into the layout they need.
+     */
     fun join(other: BindingSet): BindingSet {
         if (this.rowCount < other.rowCount) {
             return other.join(this)

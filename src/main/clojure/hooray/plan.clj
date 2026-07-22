@@ -7,6 +7,7 @@
    (org.hooray UniversalComparator)
    (org.hooray.engine
     BindingSet
+    ExecPattern
     FunctionPattern
     IStage
     NotPattern
@@ -25,6 +26,19 @@
 
 (defn- distinctv [values]
   (vec (distinct values)))
+
+(defn- ensure-distinct [values message]
+  (when-not (= (count values) (count (distinct values)))
+    (throw (IllegalStateException. ^String message))))
+
+(defn- ->stage [added participants target-variables]
+  (ensure-distinct added "Stage added variables must be distinct")
+  (ensure-distinct target-variables "Stage target variables must be distinct")
+  (ensure-distinct (mapv #(.getIdx ^ExecPattern %) participants)
+                   "Stage participant indexes must be distinct")
+  (when-not (every? (set target-variables) added)
+    (throw (IllegalStateException. "Stage target variables must contain added variables")))
+  (->Stage added participants target-variables))
 
 (defonce ^:private next-pattern-index (atom 0))
 
@@ -381,7 +395,7 @@
                                         patterns-by-index participants)]
           (recur
            patterns-by-index
-           (conj stages (->Stage added (mapv patterns-by-index participants) target-variables))
+           (conj stages (->stage added (mapv patterns-by-index participants) target-variables))
            target-variables
            logical-stages))))))
 
