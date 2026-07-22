@@ -9,7 +9,8 @@
             [hooray.db :as db]
             [hooray.error :as err]
             [hooray.query :as query]
-            [hooray.transact :as t])
+            [hooray.transact :as t]
+            [hooray.util :as util])
   (:import (java.util.function Predicate)
            (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp MinusOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
@@ -650,7 +651,7 @@
 ;; `test` runs once per tuple per delta, so the common arities call [f]
 ;; directly instead of paying `apply` + a lazy arg seq on every tuple.
 (defn- predicate-filter [{:keys [predicate args] :as _descriptor} layout]
-  (let [f (query/resolve-fn predicate)
+  (let [f (util/resolve-fn predicate)
         var->idx (zipmap layout (range))
         arg-readers (mapv #(arg-reader % layout var->idx) args)
         [r0 r1 r2] arg-readers]

@@ -1,0 +1,297 @@
+package org.hooray.engine
+
+import clojure.lang.Symbol
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+
+class TriplePatternTest {
+    private val e = Symbol.intern("?e")
+    private val age = Symbol.intern("?age")
+    private val seed = Symbol.intern("?seed")
+
+    @Test
+    fun `proposes both triple variables together`() {
+        val pattern = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2)),
+            pattern.count(
+                input,
+                listOf(e, age),
+                listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            ),
+        )
+        assertEquals(
+            BindingSet(
+                listOf(seed, e, age),
+                listOf(listOf(1, "a", 35), listOf(2, "a", 35), listOf(1, "b", 40), listOf(2, "b", 40)),
+            ),
+            pattern.join(input, listOf(e, age), listOf(seed, e, age)),
+        )
+    }
+
+    @Test
+    fun `uses entity and value bound shapes for proposal`() {
+        val byEntity = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+
+        assertEquals(
+            listOf(listOf("b", 40), listOf("a", 35)),
+            byEntity.join(
+                BindingSet(listOf(e), listOf(listOf("b"), listOf("a"))),
+                listOf(age),
+                listOf(e, age),
+            ).rows,
+        )
+        assertEquals(
+            listOf(listOf(40, "b"), listOf(35, "a")),
+            byEntity.join(
+                BindingSet(listOf(age), listOf(listOf(40), listOf(35))),
+                listOf(e),
+                listOf(age, e),
+            ).rows,
+        )
+    }
+
+    @Test
+    fun `proposes one variable when the other variable is unbound`() {
+        val pattern = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+
+        assertEquals(
+            BindingSet(
+                listOf(seed, e),
+                listOf(listOf(1, "a"), listOf(2, "a"), listOf(1, "b"), listOf(2, "b")),
+            ),
+            pattern.join(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2))),
+                listOf(e),
+                listOf(seed, e),
+            ),
+        )
+        assertEquals(
+            BindingSet(
+                listOf(seed, age),
+                listOf(listOf(1, 35), listOf(2, 35), listOf(1, 40), listOf(2, 40)),
+            ),
+            pattern.join(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2))),
+                listOf(age),
+                listOf(seed, age),
+            ),
+        )
+    }
+
+    @Test
+    fun `counts one-variable triple patterns`() {
+        val byValue = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Constant(40),
+        )
+        val byEntity = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+        val proposals = listOf(Proposal(NO_PROPOSER, Int.MAX_VALUE), Proposal(NO_PROPOSER, Int.MAX_VALUE))
+
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2)),
+            byValue.count(input, listOf(e), proposals),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2)),
+            byEntity.count(input, listOf(age), proposals),
+        )
+    }
+
+    @Test
+    fun `counts one of two variables with bound and unbound counterparts`() {
+        val pattern = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("a", "age", 40),
+            TestTriple("b", "age", 40),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+        val proposals = listOf(
+            Proposal(NO_PROPOSER, Int.MAX_VALUE),
+            Proposal(NO_PROPOSER, Int.MAX_VALUE),
+            Proposal(NO_PROPOSER, Int.MAX_VALUE),
+        )
+
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            pattern.count(
+                BindingSet(listOf(e), listOf(listOf("a"), listOf("b"), listOf("c"))),
+                listOf(age),
+                proposals,
+            ),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            pattern.count(
+                BindingSet(listOf(age), listOf(listOf(40), listOf(35), listOf(99))),
+                listOf(e),
+                proposals,
+            ),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2), Proposal(0, 2)),
+            pattern.count(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2), listOf(3))),
+                listOf(e),
+                proposals,
+            ),
+        )
+        assertEquals(
+            listOf(Proposal(0, 2), Proposal(0, 2), Proposal(0, 2)),
+            pattern.count(
+                BindingSet(listOf(seed), listOf(listOf(1), listOf(2), listOf(3))),
+                listOf(age),
+                proposals,
+            ),
+        )
+    }
+
+    @Test
+    fun `validates constant and one-variable triple patterns`() {
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+        val constantMatch = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Constant(35),
+        )
+        val constantMiss = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Constant(40),
+        )
+        val variableEntity = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Constant(35),
+        )
+        val variableValue = triplePattern(
+            TestTriple("a", "age", 35),
+            entity = PatternValue.Constant("a"),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+
+        assertEquals(input, constantMatch.join(input, emptyList(), listOf(seed)))
+        assertEquals(emptyList<BindingRow>(), constantMiss.join(input, emptyList(), listOf(seed)).rows)
+        assertEquals(
+            listOf(listOf("a")),
+            variableEntity.join(
+                BindingSet(listOf(e), listOf(listOf("a"), listOf("b"))),
+                emptyList(),
+                listOf(e),
+            ).rows,
+        )
+        assertEquals(input, variableEntity.join(input, emptyList(), listOf(seed)))
+        assertEquals(
+            listOf(listOf(35)),
+            variableValue.join(
+                BindingSet(listOf(age), listOf(listOf(35), listOf(40))),
+                emptyList(),
+                listOf(age),
+            ).rows,
+        )
+        assertEquals(input, variableValue.join(input, emptyList(), listOf(seed)))
+    }
+
+    @Test
+    fun `performs full and partial existential validation`() {
+        val pattern = triplePattern(
+            TestTriple("a", "age", 35),
+            TestTriple("b", "name", "B"),
+            entity = PatternValue.Variable(e),
+            attribute = "age",
+            value = PatternValue.Variable(age),
+        )
+
+        assertEquals(
+            listOf(listOf("a")),
+            pattern.join(
+                BindingSet(listOf(e), listOf(listOf("a"), listOf("b"))),
+                emptyList(),
+                listOf(e),
+            ).rows,
+        )
+        assertEquals(
+            listOf(listOf(35)),
+            pattern.join(
+                BindingSet(listOf(age), listOf(listOf(35), listOf(40))),
+                emptyList(),
+                listOf(age),
+            ).rows,
+        )
+        assertEquals(
+            listOf(listOf("a", 35)),
+            pattern.join(
+                BindingSet(listOf(e, age), listOf(listOf("a", 35), listOf("a", 40))),
+                emptyList(),
+                listOf(e, age),
+            ).rows,
+        )
+        val input = BindingSet(listOf(seed), listOf(listOf(1), listOf(2)))
+        assertEquals(input, pattern.join(input, emptyList(), listOf(seed)))
+    }
+
+    private fun triplePattern(
+        vararg triples: TestTriple,
+        entity: PatternValue,
+        attribute: Any,
+        value: PatternValue,
+    ): TriplePattern {
+        val indexes = indexes(*triples)
+        return TriplePattern(0, indexes.aev, indexes.ave, entity, attribute, value)
+    }
+
+    private fun indexes(vararg triples: TestTriple): TestIndexes {
+        val aev = linkedMapOf<Any, MutableMap<Any, MutableSet<Any>>>()
+        val ave = linkedMapOf<Any, MutableMap<Any, MutableSet<Any>>>()
+        for ((entity, attribute, value) in triples) {
+            aev.getOrPut(attribute, ::linkedMapOf).getOrPut(entity, ::linkedSetOf).add(value)
+            ave.getOrPut(attribute, ::linkedMapOf).getOrPut(value, ::linkedSetOf).add(entity)
+        }
+        return TestIndexes(aev, ave)
+    }
+
+    private data class TestTriple(val entity: Any, val attribute: Any, val value: Any)
+    private data class TestIndexes(
+        val aev: Map<Any, Map<Any, Set<Any>>>,
+        val ave: Map<Any, Map<Any, Set<Any>>>,
+    )
+}

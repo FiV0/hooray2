@@ -119,6 +119,54 @@
                                  [e :age age]]}
                        (d/db *conn*)))))
 
+(def ^:private node-schema
+  [{:db/ident :age
+    :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :next
+    :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one}])
+
+;; Datomic counterpart of hooray.query-test/test-nested-or-groundability-is-all-or-nothing.
+(deftest nested-or-check-only-branch-requires-manual-clause-order
+  (transact! node-schema)
+  (transact! [{:db/id "n1" :age 35}
+              {:db/id "n2" :age 35}
+              {:db/id "n3" :age 35}])
+
+  (testing "outer or before the grounding triple throws"
+    (is (thrown? Exception
+                 (d/q '{:find [?v ?e]
+                        :where [(or (and (or (and [(< ?v 3)] [?e :age 35])
+                                             (and [(> ?v 1)] [?e :age 35]))
+                                         [(inc ?e) ?v]))
+                                [?e :age 35]]}
+                      (d/db *conn*)))))
+
+  (testing "grounding triple first still throws when the fn follows the nested or"
+    (is (thrown? Exception
+                 (d/q '{:find [?v ?e]
+                        :where [[?e :age 35]
+                                (or (and (or [?v :next ?e]
+                                             (and [?e :age 35]
+                                                  [(< ?v 3)]))
+                                         [(inc ?e) ?v]))]}
+                      (d/db *conn*)))))
+
+  (testing "fully dependency-ordered clauses evaluate"
+    ;; (> ?v 3) instead of (< ?v 3) so the check-only branch is satisfiable
+    ;; for real eids; every :age 35 node then produces its [(inc ?e) ?e] row.
+    (let [eids (map first (d/q '[:find ?e :where [?e :age 35]] (d/db *conn*)))]
+      (is (= (set (map (fn [e] [(inc e) e]) eids))
+             (into #{} (map vec)
+                   (d/q '{:find [?v ?e]
+                          :where [[?e :age 35]
+                                  (or (and [(inc ?e) ?v]
+                                           (or [?v :next ?e]
+                                               (and [?e :age 35]
+                                                    [(> ?v 3)]))))]}
+                        (d/db *conn*))))))))
+
 (comment
   (t/run-all-tests)
   (t/run-test-var #'cyclic-or-dependency-not-grounded-throws)

@@ -3,6 +3,9 @@ package org.hooray.iterator
 import org.hooray.algo.FilterLeapfrogIndex
 import org.hooray.algo.ResultTuple
 
+typealias Predicate1<A> = (A) -> Boolean
+typealias Predicate2<A, B> = (A, B) -> Boolean
+
 class AVLPredicateLeapfrogIndex(
     val levels: List<Int>,
     val predicate: Any

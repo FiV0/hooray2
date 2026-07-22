@@ -128,7 +128,7 @@
               [(< ?age 40)])]}
           (h/db fix/*node*)))))
 
-#_
+
 (deftest test-or-and-branch-predicates-stay-bound-to-same-prefix
   (h/transact fix/*node* [{:db/id :db/limit
                            :db/ident :limit
@@ -137,7 +137,7 @@
   (h/transact fix/*node* [{:db/id 1 :name "valid" :age 5 :salary 10 :limit 5}
                           {:db/id 2 :name "leaked" :age 20 :salary 10 :limit 5}])
 
-  (is (= #{["valid"]}
+  (is (= [["valid"]]
          (h/q '{:find [?name]
                 :where [[?e :name ?name]
                         [?e :age ?age]
@@ -148,6 +148,118 @@
                             (and [(> ?age ?score)]
                                  [(< ?limit 0)]))]}
               (h/db fix/*node*)))))
+
+(deftest test-or-can-ground-all-result-variables
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}])
+
+  (is (= #{[:alice "Alice" 30]
+           [:bob "Bob" 40]}
+         (set (h/q '{:find [?e ?name ?amount]
+                     :where [(or (and [?e :name ?name]
+                                      [?e :age ?amount])
+                                 (and [?e :salary ?amount]
+                                      [?e :name ?name]))]}
+                   (h/db fix/*node*))))))
+
+(deftest test-or-branches-can-introduce-variables-in-different-orders
+  (h/transact fix/*node* [{:db/id :alice :age 30}
+                          {:db/id :bob :salary 40}])
+
+  (is (= #{[:alice 30 31]
+           [:bob 39 40]}
+         (set (h/q '{:find [?e ?a ?b]
+                     :where [(or (and [?e :age ?a]
+                                      [(inc ?a) ?b])
+                                 (and [?e :salary ?b]
+                                      [(dec ?b) ?a]))]}
+                   (h/db fix/*node*))))
+      "full proposal by or branches")
+
+  (is (= #{[:alice 30 31]
+           [:bob 39 40]}
+         (set (h/q '{:find [?e ?a ?b]
+                     :in [[[?e ?a]]]
+                     :where [(or (and [?e :age ?a]
+                                      [(inc ?a) ?b])
+                                 (and [?e :salary ?b]
+                                      [(dec ?b) ?a]))]}
+                   (h/db fix/*node*)
+                   [[:alice 30]
+                    [:bob 39]])))
+      "partially supplied branches"))
+
+(deftest test-function-output-can-be-grounded-from-input
+  (is (= [[5 7]]
+         (h/q '{:find [?x ?y]
+                :in [?x]
+                :where [[(+ ?x 2) ?y]]}
+              (h/db fix/*node*)
+              5))))
+
+(deftest test-or-can-ground-remaining-result-variables
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :sex :male :age 30}
+                          {:db/id :bob :name "Bob" :sex :male :salary 40}
+                          {:db/id :cara :name "Cara" :sex :female :age 50}])
+
+  (is (= #{[:alice "Alice" 30]
+           [:bob "Bob" 40]}
+         (set (h/q '{:find [?e ?name ?amount]
+                     :where [[?e :sex :male]
+                             (or (and [?e :name ?name]
+                                      [?e :age ?amount])
+                                 (and [?e :name ?name]
+                                      [?e :salary ?amount]))]}
+                   (h/db fix/*node*))))))
+
+(deftest test-nested-or-inside-not
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}
+                          {:db/id :cara :name "Cara" :sex :female}])
+
+  (is (= #{[:cara "Cara"]}
+         (set (h/q '{:find [?e ?name]
+                     :where [[?e :name ?name]
+                             (not (or [?e :age 30]
+                                      [?e :salary 40]))]}
+                   (h/db fix/*node*))))))
+
+(deftest test-predicate-filters-grouped-or-results
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}])
+
+  (is (= [[:bob "Bob" 40]]
+         (h/q '{:find [?e ?name ?amount]
+                :where [(or (and [?e :name ?name]
+                                 [?e :age ?amount])
+                            (and [?e :salary ?amount]
+                                 [?e :name ?name]))
+                        [(> ?amount 35)]]}
+              (h/db fix/*node*)))))
+
+(deftest test-nested-or-groundability-is-all-or-nothing
+  (h/transact fix/*node* [{:db/id 1 :age 35}
+                          {:db/id 2 :age 35}
+                          {:db/id 3 :age 35}])
+
+  ;; nested branches ground a different set of variables
+  (is (= [[2 1]]
+         (sort (h/q '{:find [?v ?e]
+                      :where [(or (and (or [?v :next ?e]
+                                           (and [?e :age 35]
+                                                [(< ?v 3)]))
+                                       [(inc ?e) ?v]))
+                              [?e :age 35]]}
+                    (h/db fix/*node*)))))
+
+  ;; nested branches ground the same set of variables
+  (is (= [[2 1] [3 2] [4 3]]
+         (sort (h/q '{:find [?v ?e]
+                      :where [(or (and (or (and [(< ?v 3)] [?e :age 35])
+                                           (and [(> ?v 1)] [?e :age 35]))
+                                       [(inc ?e) ?v]))
+                              [?e :age 35]]}
+                    (h/db fix/*node*))))))
 
 (deftest projection-semantics-with-bags
   (h/transact fix/*node*
@@ -255,6 +367,39 @@
                      [["Ivan" "Ivanov"]
                       ["Petr" "Petrov"]])))))
 
+(deftest test-relation-bindings-with-conflicting-variable-orders
+  (h/transact fix/*node* [{:db/id :relation-witness :name "Relation witness"}])
+
+  (t/is (= #{[1 2]}
+           (set (h/q '{:find [?a ?b]
+                       :in [[[?a ?b]] [[?b ?a]]]
+                       :where [[?e :name "Relation witness"]]}
+                     (h/db fix/*node*)
+                     [[1 2] [3 4]]
+                     [[2 1] [5 6]])))))
+
+(deftest test-relation-bindings-partially-validate-in-conflicting-variable-orders
+  (h/transact fix/*node* [{:db/id :partial-relation-witness :name "Partial relation witness"}])
+
+  (t/is (= #{[1 2 3 4]}
+           (set (h/q '{:find [?a ?b ?c ?d]
+                       :in [[[?b ?a ?c ?d]] [[?a ?b ?c ?d]]]
+                       :where [[?e :name "Partial relation witness"]]}
+                     (h/db fix/*node*)
+                     [[2 1 3 4]]
+                     [[1 2 3 4]])))))
+
+(deftest test-relation-bindings-propose-after-a-conflicting-input-order
+  (h/transact fix/*node* [{:db/id :proposal-relation-witness :name "Proposal relation witness"}])
+
+  (t/is (= #{[1 2 3]}
+           (set (h/q '{:find [?a ?b ?c]
+                       :in [[[?b ?a]] [[?a ?b ?c]]]
+                       :where [[?e :name "Proposal relation witness"]]}
+                     (h/db fix/*node*)
+                     [[2 1]]
+                     [[1 2 3]])))))
+
 (deftest test-order-of-vars-in-predicate
   (t/is (= [[10 11]]
            (h/q '{:find [in1 in2]
@@ -317,12 +462,12 @@
                      :ivan "Petr"))))
 
   (t/testing "Can query entity by single field with several arguments"
-    (t/is (= [[:ivan] [:petr]]
-             (h/q '{:find [e]
-                    :in [[name ...]]
-                    :where [[e :name name]]}
-                  (h/db fix/*node*)
-                  ["Ivan" "Petr"]))))
+    (t/is (= #{[:ivan] [:petr]}
+             (set (h/q '{:find [e]
+                         :in [[name ...]]
+                         :where [[e :name name]]}
+                       (h/db fix/*node*)
+                       ["Ivan" "Petr"])))))
 
   (t/testing "Can query entity by single field with literals"
     (t/is (= [[:ivan]] (h/q '{:find [e]
@@ -385,12 +530,13 @@
                                :args [{:name "Ivan" :last-name "Ivanov"}
                                       {:name "Petr" :last-name "Petrov"}]} (h/db fix/*node*))))
 
-    (t/is (= [["Ivan"]
-              ["Petr"]] (h/q '{:find [name]
-                               :in [[name ...]]
-                               :where [[(string? name)]]}
-                             (h/db fix/*node*)
-                             ["Ivan" "Petr"])))
+    (t/is (= #{["Ivan"]
+               ["Petr"]}
+             (set (h/q '{:find [name]
+                         :in [[name ...]]
+                         :where [[(string? name)]]}
+                       (h/db fix/*node*)
+                       ["Ivan" "Petr"]))))
 
     (t/is (= #{["Ivan" "Ivanov"]
                ["Petr" "Petrov"]}
@@ -680,14 +826,14 @@
                                             (or [e :sex :female]
                                                 (and [e :sex :male]
                                                      [e :name "Ivan"]))])))
-  (t/is (= [["Ivana"]
-            ["Ivan"]]
-           (h/q '{:find [name]
-                  :where [[e :name name]
-                          (or [e :sex :female]
-                              (and [e :sex :male]
-                                   [e :name "Ivan"]))]}
-                (h/db fix/*node*))))
+  (t/is (= #{["Ivana"]
+             ["Ivan"]}
+           (set (h/q '{:find [name]
+                       :where [[e :name name]
+                               (or [e :sex :female]
+                                   (and [e :sex :male]
+                                        [e :name "Ivan"]))]}
+                     (h/db fix/*node*)))))
 
   (t/is (= [[:ivan]]
            (h/q '{:find [e]
@@ -957,18 +1103,18 @@
                             [(>= age 50)]]} (h/db fix/*node*))))
 
     (t/testing "fallback to built in predicate for vars"
-      (t/is (= [["Ivan" 30 "Ivan" 30]
-                ["Ivan" 30 "Bob" 40]
-                ["Ivan" 30 "Dominic" 50]
-                ["Bob" 40 "Bob" 40]
-                ["Bob" 40 "Dominic" 50]
-                ["Dominic" 50 "Dominic" 50]]
-               (h/q '{:find [name age1 name2 age2]
-                      :where [[e :name name]
-                              [e :age age1]
-                              [e2 :name name2]
-                              [e2 :age age2]
-                              [(<= age1 age2)]]} (h/db fix/*node*))))))
+      (t/is (= #{["Ivan" 30 "Ivan" 30]
+                 ["Ivan" 30 "Bob" 40]
+                 ["Ivan" 30 "Dominic" 50]
+                 ["Bob" 40 "Bob" 40]
+                 ["Bob" 40 "Dominic" 50]
+                 ["Dominic" 50 "Dominic" 50]}
+               (set (h/q '{:find [name age1 name2 age2]
+                           :where [[e :name name]
+                                   [e :age age1]
+                                   [e2 :name name2]
+                                   [e2 :age age2]
+                                   [(<= age1 age2)]]} (h/db fix/*node*)))))))
 
   (t/testing "clojure.core predicate"
     (t/is (= [["Bob"] ["Dominic"]]
