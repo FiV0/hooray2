@@ -405,6 +405,53 @@ class BindingSetTest {
     }
 
     @Test
+    fun `natural join preserves receiver layout when receiver is smaller`() {
+        val left = BindingSet(
+            variables = listOf(e),
+            rows = listOf(listOf("a")),
+        )
+        val right = BindingSet(
+            variables = listOf(age),
+            rows = listOf(listOf(35), listOf(40)),
+        )
+
+        assertEquals(
+            BindingSet(
+                variables = listOf(e, age),
+                rows = listOf(listOf("a", 35), listOf("a", 40)),
+            ),
+            left.join(right),
+        )
+    }
+
+    @Test
+    fun `natural join preserves receiver layout with shared variables when receiver is smaller`() {
+        val left = BindingSet(
+            variables = listOf(e),
+            rows = listOf(listOf("a")),
+        )
+        val right = BindingSet(
+            variables = listOf(age, e, name),
+            rows = listOf(
+                listOf(35, "a", "A"),
+                listOf(36, "a", "Alias"),
+                listOf(40, "b", "B"),
+            ),
+        )
+
+        assertEquals(
+            BindingSet(
+                variables = listOf(e, age, name),
+                rows = listOf(
+                    listOf("a", 35, "A"),
+                    listOf("a", 36, "Alias"),
+                ),
+            ),
+            left.join(right),
+        )
+    }
+
+    @Test
     fun `natural join matches every shared variable`() {
         val left = BindingSet(
             variables = listOf(e, age),

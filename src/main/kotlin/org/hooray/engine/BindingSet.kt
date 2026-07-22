@@ -122,26 +122,36 @@ data class BindingSet(
     /**
      * Natural join on the shared variables.
      *
-     * The result column order is not stable: the sides are swapped so that the smaller
-     * input is indexed, so whether this layout or [other]'s comes first depends on the
-     * row counts. Callers must [project] or [reorder] the result into the layout they need.
+     * The result preserves this layout, followed by variables found only in [other].
+     * The smaller input is indexed without changing that logical column order.
      */
     fun join(other: BindingSet): BindingSet {
-        if (this.rowCount < other.rowCount) {
-            return other.join(this)
-        }
         val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
         val leftKeyIndexes = sharedVariables.map(::columnIndex)
+        val rightKeyIndexes = sharedVariables.map(other::columnIndex)
         val rightOnlyVariables = other.variables.filter { variable -> variable !in columnIndexes }
         val rightOnlyIndexes = rightOnlyVariables.map(other::columnIndex)
-        val rightIndex = other.indexBy(sharedVariables)
 
-        val joinedRows = buildList {
-            rows.forEach { leftRow ->
-                val key = leftKeyIndexes.map { index -> leftRow[index] }
-                rightIndex.rowIndexesByKey[key].orEmpty().forEach { rightRowIndex ->
-                    val rightRow = other.rows[rightRowIndex]
-                    add(leftRow + rightOnlyIndexes.map { index -> rightRow[index] })
+        val joinedRows = if (rowCount < other.rowCount) {
+            val leftIndex = indexBy(sharedVariables)
+            buildList {
+                other.rows.forEach { rightRow ->
+                    val key = rightKeyIndexes.map { index -> rightRow[index] }
+                    leftIndex.rowIndexesByKey[key].orEmpty().forEach { leftRowIndex ->
+                        val leftRow = rows[leftRowIndex]
+                        add(leftRow + rightOnlyIndexes.map { index -> rightRow[index] })
+                    }
+                }
+            }
+        } else {
+            val rightIndex = other.indexBy(sharedVariables)
+            buildList {
+                rows.forEach { leftRow ->
+                    val key = leftKeyIndexes.map { index -> leftRow[index] }
+                    rightIndex.rowIndexesByKey[key].orEmpty().forEach { rightRowIndex ->
+                        val rightRow = other.rows[rightRowIndex]
+                        add(leftRow + rightOnlyIndexes.map { index -> rightRow[index] })
+                    }
                 }
             }
         }
