@@ -322,9 +322,9 @@
 (def ^:private empty-binding-set (BindingSet. [] [[]]))
 
 (defn execute
-  "Executes planned stages from the unit relation and returns a BindingSet."
-  ^BindingSet [stages]
-  (.execute (GenericJoinEngine.) stages empty-binding-set))
+  "Executes planned stages from the unit relation and returns a list of tuples."
+  [stages]
+  (.getRows (.execute (GenericJoinEngine.) stages empty-binding-set)))
 
 (defmulti aggregate (fn [name & _args] name))
 
@@ -472,7 +472,7 @@
         vars-in-join-order (query->variable-order conformed-query)
         var->idx (zipmap vars-in-join-order (range))
         rows (case (:algo opts)
-               :generic (.getRows (execute (plan/plan db conformed-query args vars-in-join-order)))
+               :generic (execute (plan/plan db conformed-query args vars-in-join-order))
                :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args)
                                                          (map (partial compile-pattern db vars-in-join-order) where))]
                            (leapfrog-join compiled-patterns (count vars-in-join-order))))
