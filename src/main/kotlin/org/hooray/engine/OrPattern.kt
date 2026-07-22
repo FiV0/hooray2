@@ -18,7 +18,7 @@ class OrPattern(
 ) : ExecPattern {
     private val engine = GenericJoinEngine()
 
-    private val orderedVariables: List<Variable>
+    private val variablesList: List<Variable>
     override val variables: Set<Variable>
 
     init {
@@ -29,8 +29,10 @@ class OrPattern(
         require(branchVariables.all { it.toSet() == branchVariables.first().toSet() }) {
             "OR branches must have the same variables"
         }
-        orderedVariables = branchVariables.first()
-        variables = orderedVariables.toSet()
+        // We don't require branches to introduce variables in the same order,
+        // but we do require that each branch introduces the same set of variables.
+        variablesList = branchVariables.first()
+        variables = variablesList.toSet()
     }
 
     override fun count(
@@ -64,7 +66,7 @@ class OrPattern(
         added: List<Variable>,
         targetVariables: List<Variable>,
     ): BindingSet {
-        val missing = orderedVariables.filterNot { it in input.variables }
+        val missing = variablesList.filterNot { it in input.variables }
         require(added.toSet() == missing.toSet()) {
             "Or pattern can only propose all of its missing variables"
         }
@@ -85,10 +87,10 @@ class OrPattern(
 
     private fun executeBranches(input: BindingSet): BindingSet {
         val unit = BindingSet(emptyList(), listOf(emptyList()))
-        var result = BindingSet(orderedVariables, emptyList())
+        var result = BindingSet(variablesList, emptyList())
         val inputRelation = RelationPattern(
             idx,
-            input.project(orderedVariables.filter { variable -> variable in input.variables }),
+            input.project(variablesList.filter { variable -> variable in input.variables }),
         )
         branches.forEach { stages ->
             val branchResult = engine.execute(stages.map { stage ->
@@ -101,7 +103,7 @@ class OrPattern(
                 } else {
                     stage
                 }
-            }, unit).project(orderedVariables)
+            }, unit).project(variablesList)
             result = result.union(branchResult)
         }
         return result.distinctRows()
