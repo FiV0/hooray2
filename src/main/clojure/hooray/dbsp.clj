@@ -70,20 +70,12 @@
      :predicate  <symbol>
      :args       [{:kind :constant :value v} | {:kind :variable :var s} …]}
 
-  A predicate grounds nothing (`:groundable` is `[]`), so `left-deep-order`
-  only schedules it once every variable it references is grounded.
-
   Fn descriptor:
 
     {:kind       :fn
      :fn         <symbol>
      :args       [{:kind :constant :value v} | {:kind :variable :var s} …]
      :ret-var    <symbol>}
-
-  A function grounds its result variable unless the result variable also
-  appears as an argument (a self-referential clause cannot ground itself);
-  its argument variables must be bound by earlier patterns or an outer
-  scope.
 
   Any other clause type triggers `err/unsupported-ex`."
   [index [clause-type pattern]]
