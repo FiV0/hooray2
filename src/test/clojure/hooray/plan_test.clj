@@ -1,27 +1,14 @@
 (ns hooray.plan-test
   (:require
    [clojure.spec.alpha :as s]
-   [clojure.test :as t :refer [deftest is testing]]
+   [clojure.test :refer [deftest is]]
    [hooray.core :as h]
    [hooray.fixtures :as fix]
    [hooray.plan :as plan]
    [hooray.query :as query])
   (:import
-   (org.hooray.engine
-    BindingSet
-    FunctionPattern
-    IStage
-    NotPattern
-    OrPattern
-    RelationPattern)))
-
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
-
-(defn- plan-query [query & args]
-  (let [conformed-query (s/conform ::query/query query)
-        variable-order (vec (query/query->variable-order conformed-query))]
-    (query/validate-query conformed-query)
-    (plan/plan (h/db fix/*node*) conformed-query args variable-order)))
+   (hooray.plan Stage)
+   (org.hooray.engine BindingSet TriplePattern)))
 
 (deftest clauses-compile-to-runtime-independent-descriptors-test
   (let [conformed-query (s/conform ::query/query
@@ -181,175 +168,157 @@
                             [new-variable incoming-b incoming-a]
                             [irrelevant incoming-a incoming-b])))))
 
-(deftest or-pattern-grounds-all-variables-as-the-only-proposer-test
-  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
-                          {:db/id :bob :name "Bob" :salary 40}])
+(deftest plan-scope-groups-or-as-the-only-proposer-test
+  (let [variables ['?e '?name '?amount]
+        descriptor {:kind :or
+                    :idx 1
+                    :variables variables
+                    :groundable (fn [bound]
+                                  (vec (remove bound variables)))}]
+    (is (= [{:added variables
+             :proposers [1]
+             :participants [1]
+             :target-variables variables}]
+           (plan/plan-scope [descriptor] variables [])))))
 
-  (let [stages (plan-query '{:find [?e ?name ?amount]
-                             :where [(or (and [?e :name ?name]
-                                              [?e :age ?amount])
-                                         (and [?e :salary ?amount]
-                                              [?e :name ?name]))]})
-        ^IStage stage (first stages)
-        participants (.getParticipants stage)
-        result (query/execute stages)]
-    (is (= 1 (count stages)))
-    (is (= '[?e ?name ?amount] (.getAdded stage)))
-    (is (= '[?e ?name ?amount] (.getTargetVariables stage)))
-    (is (= 1 (count participants)))
-    (is (instance? OrPattern (first participants)))
-    (is (= #{[:alice "Alice" 30]
-             [:bob "Bob" 40]}
-           (set (map vec result))))))
+(deftest plan-scope-plans-input-relations-as-proposers-test
+  (let [variables ['?e '?name]
+        relation-descriptor {:kind :relation
+                             :idx 1
+                             :variables variables
+                             :groundable (fn [bound]
+                                           (when-let [variable (first (remove bound variables))]
+                                             [variable]))}
+        triple-descriptor {:kind :triple
+                           :idx 2
+                           :variables variables
+                           :groundable (fn [bound]
+                                         (vec (remove bound variables)))}]
+    (is (= [{:added ['?e]
+             :proposers [1 2]
+             :participants [1 2]
+             :target-variables ['?e]}
+            {:added ['?name]
+             :proposers [1 2]
+             :participants [1 2]
+             :target-variables variables}]
+           (plan/plan-scope [relation-descriptor triple-descriptor]
+                            variables
+                            [])))))
 
-(deftest input-bindings-are-planned-as-relations-test
-  (h/transact fix/*node* [{:db/id :alice :name "Alice"}
-                          {:db/id :bob :name "Bob"}])
+(deftest plan-scope-grounds-function-output-after-arguments-test
+  (let [x '?x
+        y '?y
+        relation-descriptor {:kind :relation
+                             :idx 1
+                             :variables [x]
+                             :groundable (fn [bound]
+                                           (when-not (contains? bound x)
+                                             [x]))}
+        function-descriptor {:kind :function
+                             :idx 2
+                             :variables [x y]
+                             :groundable (fn [bound]
+                                           (when (and (contains? bound x)
+                                                      (not (contains? bound y)))
+                                             [y]))}]
+    (is (= [{:added [x]
+             :proposers [1]
+             :participants [1]
+             :target-variables [x]}
+            {:added [y]
+             :proposers [2]
+             :participants [2]
+             :target-variables [x y]}]
+           (plan/plan-scope [relation-descriptor function-descriptor]
+                            [x y]
+                            [])))))
 
-  (let [stages (plan-query '{:find [?e ?name]
-                             :in [[[?e ?name]]]
-                             :where [[?e :name ?name]]}
-                           [[:alice "Alice"]
-                            [:bob "Not Bob"]])
-        ^IStage entity-stage (first stages)
-        ^IStage name-stage (second stages)
-        participants (mapcat #(.getParticipants ^IStage %) stages)
-        result (query/execute stages)]
-    (is (= '[?e] (.getAdded entity-stage)))
-    (is (= '[?name] (.getAdded name-stage)))
-    (is (some #(instance? RelationPattern %) participants))
-    (is (= #{[:alice "Alice"]}
-           (set (map vec result))))))
+(deftest plan-scope-groups-remaining-or-variables-test
+  (let [e '?e
+        variables [e '?name '?amount]
+        prefix-descriptor {:kind :triple
+                           :idx 1
+                           :variables [e]
+                           :groundable (fn [bound]
+                                         (vec (remove bound [e])))}
+        or-descriptor {:kind :or
+                       :idx 2
+                       :variables variables
+                       :groundable (fn [bound]
+                                     (vec (remove bound variables)))}]
+    (is (= [{:added [e]
+             :proposers [1]
+             :participants [1]
+             :target-variables [e]}
+            {:added ['?name '?amount]
+             :proposers [2]
+             :participants [2]
+             :target-variables variables}]
+           (plan/plan-scope [prefix-descriptor or-descriptor]
+                            variables
+                            [])))))
 
-(deftest function-output-becomes-groundable-after-its-arguments-test
-  (let [stages (plan-query '{:find [?x ?y]
-                             :in [?x]
-                             :where [[(+ ?x 2) ?y]]}
-                           5)
-        ^IStage argument-stage (first stages)
-        ^IStage output-stage (second stages)
-        result (query/execute stages)]
-    (is (= '[?x] (.getAdded argument-stage)))
-    (is (not-any? #(instance? FunctionPattern %) (.getParticipants argument-stage)))
-    (is (= '[?y] (.getAdded output-stage)))
-    (is (some #(instance? FunctionPattern %) (.getParticipants output-stage)))
-    (is (= [[5 7]] (mapv vec result)))))
-
-(deftest nested-or-inside-not-is-planned-recursively-test
-  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
-                          {:db/id :bob :name "Bob" :salary 40}
-                          {:db/id :cara :name "Cara" :sex :female}])
-
-  (let [stages (plan-query '{:find [?e ?name]
-                             :where [[?e :name ?name]
-                                     (not (or [?e :age 30]
-                                              [?e :salary 40]))]})
-        participants (mapcat #(.getParticipants ^IStage %) stages)
-        result (query/execute stages)]
-    (is (some #(instance? NotPattern %) participants))
-    (is (= #{[:cara "Cara"]}
-           (set (map vec result))))))
-
-(deftest or-pattern-grounds-the-remaining-variables-as-the-only-proposer-test
-  (h/transact fix/*node* [{:db/id :alice :name "Alice" :sex :male :age 30}
-                          {:db/id :bob :name "Bob" :sex :male :salary 40}
-                          {:db/id :cara :name "Cara" :sex :female :age 50}])
-
-  (let [stages (plan-query '{:find [?e ?name ?amount]
-                             :where [[?e :sex :male]
-                                     (or (and [?e :name ?name]
-                                              [?e :age ?amount])
-                                         (and [?e :name ?name]
-                                              [?e :salary ?amount]))]})
-        ^IStage first-stage (first stages)
-        ^IStage or-stage (second stages)
-        or-participants (.getParticipants or-stage)
-        result (query/execute stages)]
-    (testing "another pattern grounds a proper subset of the OR variables"
-      (is (= '[?e] (.getAdded first-stage))))
-
-    (testing "the OR is the sole proposer for every remaining variable"
-      (is (= '[?name ?amount] (.getAdded or-stage)))
-      (is (= '[?e ?name ?amount] (.getTargetVariables or-stage)))
-      (is (= 1 (count or-participants)))
-      (is (instance? OrPattern (first or-participants))))
-
-    (is (= #{[:alice "Alice" 30]
-             [:bob "Bob" 40]}
-           (set (map vec result))))))
-
-(deftest or-groundability-follows-each-branches-planned-stage-order-test
-  (h/transact fix/*node* [{:db/id :alice :age 30}
-                          {:db/id :bob :salary 40}])
-
-  (let [stages (plan-query '{:find [?e ?amount ?incremented]
-                             :where [(or (and [?e :age ?amount]
-                                              [(inc ?amount) ?incremented])
-                                         (and [?e :salary ?amount]
-                                              [(inc ?amount) ?incremented]))]})
-        ^IStage stage (first stages)
-        result (query/execute stages)]
-    (is (= 1 (count stages)))
-    (is (= '[?e ?amount ?incremented] (.getAdded stage)))
-    (is (= #{[:alice 30 31]
-             [:bob 40 41]}
-           (set (map vec result))))))
-
-(deftest or-groundability-requires-every-branch-to-produce-a-variable-test
+(deftest plan-scope-requires-every-or-branch-to-produce-a-variable-test
   (let [query '{:find [?e ?amount ?incremented]
-                :in [?e ?amount]
                 :where [(or (and [?e :age ?amount]
                                  [(inc ?amount) ?incremented])
                             (and [?e :salary ?amount]
                                  [(> ?incremented 0)]))]}
         conformed-query (s/conform ::query/query query)
-        variable-order (vec (query/query->variable-order conformed-query))]
+        variable-order (vec (query/query->variable-order conformed-query))
+        descriptors (plan/clauses->descriptors (:where conformed-query))]
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
          #"\?incremented not bound"
-         (plan/plan (h/db fix/*node*) conformed-query [:alice 30] variable-order)))))
+         (plan/plan-scope descriptors variable-order ['?e '?amount])))))
 
-(deftest or-pattern-validates-only-after-all-of-its-variables-are-grounded-test
-  (h/transact fix/*node* [{:db/id :alice
-                           :name "Alice"
-                           :sex :male
-                           :age 30
-                           :salary 40}])
+(deftest plan-scope-validates-or-only-after-all-variables-are-grounded-test
+  (let [e '?e
+        name '?name
+        amount '?amount
+        variables [e name amount]
+        name-descriptor {:kind :triple
+                         :idx 1
+                         :variables [e name]
+                         :groundable (fn [bound]
+                                       (vec (remove bound [e name])))}
+        amount-descriptor {:kind :triple
+                           :idx 2
+                           :variables [e amount]
+                           :groundable (fn [bound]
+                                         (vec (remove bound [e amount])))}
+        or-descriptor {:kind :or
+                       :idx 3
+                       :variables variables
+                       :groundable (constantly [])}]
+    (is (= [{:added [e]
+             :proposers [1 2]
+             :participants [1 2]
+             :target-variables [e]}
+            {:added [name]
+             :proposers [1]
+             :participants [1]
+             :target-variables [e name]}
+            {:added [amount]
+             :proposers [2]
+             :participants [2 3]
+             :target-variables variables}]
+           (plan/plan-scope [name-descriptor amount-descriptor or-descriptor]
+                            variables
+                            [])))))
 
-  (let [stages (plan-query '{:find [?e ?name ?amount]
-                             :where [[?e :name ?name]
-                                     [?e :salary ?amount]
-                                     (or (and [?e :name ?name]
-                                              [?e :age ?amount])
-                                         (and [?e :sex ?name]
-                                              [?e :salary ?amount]))]})
-        ^IStage name-stage (first (filter #(= '[?name] (.getAdded ^IStage %)) stages))
-        ^IStage amount-stage (first (filter #(= '[?amount] (.getAdded ^IStage %)) stages))
-        result (query/execute stages)]
-    (testing "the OR does not validate a partial tuple"
-      (is (not-any? #(instance? OrPattern %) (.getParticipants name-stage))))
-
-    (testing "the OR validates the complete tuple without leaking values across branches"
-      (is (some #(instance? OrPattern %) (.getParticipants amount-stage)))
-      (is (empty? result)))))
-
-(deftest grouped-or-proposal-runs-other-validators-in-a-following-stage-test
-  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
-                          {:db/id :bob :name "Bob" :salary 40}])
-
-  (let [stages (plan-query '{:find [?e ?name ?amount]
-                             :where [(or (and [?e :name ?name]
-                                              [?e :age ?amount])
-                                         (and [?e :salary ?amount]
-                                              [?e :name ?name]))
-                                     [(> ?amount 35)]]})
-        ^IStage or-stage (first stages)
-        ^IStage validation-stage (second stages)
-        result (query/execute stages)]
-    (is (= 2 (count stages)))
-    (is (= '[?e ?name ?amount] (.getAdded or-stage)))
-    (is (= 1 (count (.getParticipants or-stage))))
-    (is (instance? OrPattern (first (.getParticipants or-stage))))
-    (is (empty? (.getAdded validation-stage)))
-    (is (= [[:bob "Bob" 40]]
-           (mapv vec result)))))
+(deftest plan-assembles-executable-stages-test
+  (let [conformed-query (s/conform ::query/query
+                                   '{:find [?e ?name]
+                                     :where [[?e :name ?name]]})
+        variable-order (vec (query/query->variable-order conformed-query))]
+    (with-open [node (h/connect fix/*opts*)]
+      (let [stages (plan/plan (h/db node) conformed-query [] variable-order)
+            participant (-> stages first :participants first)]
+        (is (every? #(instance? Stage %) stages))
+        (is (instance? TriplePattern participant))
+        (is (= #{'?e '?name} (.getVariables ^TriplePattern participant)))
+        (is (= [(plan/->Stage ['?e] [participant] ['?e])
+                (plan/->Stage ['?name] [participant] ['?e '?name])]
+               stages))))))

@@ -149,7 +149,66 @@
                                  [(< ?limit 0)]))]}
               (h/db fix/*node*)))))
 
+(deftest test-or-can-ground-all-result-variables
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}])
 
+  (is (= #{[:alice "Alice" 30]
+           [:bob "Bob" 40]}
+         (set (h/q '{:find [?e ?name ?amount]
+                     :where [(or (and [?e :name ?name]
+                                      [?e :age ?amount])
+                                 (and [?e :salary ?amount]
+                                      [?e :name ?name]))]}
+                   (h/db fix/*node*))))))
+
+(deftest test-function-output-can-be-grounded-from-input
+  (is (= [[5 7]]
+         (h/q '{:find [?x ?y]
+                :in [?x]
+                :where [[(+ ?x 2) ?y]]}
+              (h/db fix/*node*)
+              5))))
+
+(deftest test-or-can-ground-remaining-result-variables
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :sex :male :age 30}
+                          {:db/id :bob :name "Bob" :sex :male :salary 40}
+                          {:db/id :cara :name "Cara" :sex :female :age 50}])
+
+  (is (= #{[:alice "Alice" 30]
+           [:bob "Bob" 40]}
+         (set (h/q '{:find [?e ?name ?amount]
+                     :where [[?e :sex :male]
+                             (or (and [?e :name ?name]
+                                      [?e :age ?amount])
+                                 (and [?e :name ?name]
+                                      [?e :salary ?amount]))]}
+                   (h/db fix/*node*))))))
+
+(deftest test-nested-or-inside-not
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}
+                          {:db/id :cara :name "Cara" :sex :female}])
+
+  (is (= #{[:cara "Cara"]}
+         (set (h/q '{:find [?e ?name]
+                     :where [[?e :name ?name]
+                             (not (or [?e :age 30]
+                                      [?e :salary 40]))]}
+                   (h/db fix/*node*))))))
+
+(deftest test-predicate-filters-grouped-or-results
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :bob :name "Bob" :salary 40}])
+
+  (is (= [[:bob "Bob" 40]]
+         (h/q '{:find [?e ?name ?amount]
+                :where [(or (and [?e :name ?name]
+                                 [?e :age ?amount])
+                            (and [?e :salary ?amount]
+                                 [?e :name ?name]))
+                        [(> ?amount 35)]]}
+              (h/db fix/*node*)))))
 
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id 1 :age 35}
