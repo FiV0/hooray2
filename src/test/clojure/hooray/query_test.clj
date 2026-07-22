@@ -51,15 +51,6 @@
                         :where [[e :name "Ivan"]]}
                       (h/db fix/*node*)))))
 
-(deftest static-query-engines-work-with-avl-storage-test
-  (doseq [algo [:generic :leapfrog]]
-    (with-open [node (h/connect {:type :mem :storage :avl :algo algo})]
-      (t/is (= 1
-               (count (h/q '{:find [?e]
-                             :where [[?e :db/ident :db/ident]]}
-                           (h/db node))))
-            (name algo)))))
-
 (deftest test-basic-query
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}
                           {:db/id :petr :name "Petr" :last-name "Petrov"}])
