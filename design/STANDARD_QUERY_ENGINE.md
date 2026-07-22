@@ -118,58 +118,38 @@ has two modes:
  :target-variables [?e ?name]}
 ```
 
-## Compilation and planning
+## Planning and Stage construction
 
-Compilation resolves constants, attributes, predicates, functions, database
-indexes, and external relations. It preserves the clause AST (mostly just the `:where`)
-and assigns a `descriptor` to every node.
+The planner is working on one conjunctive query scope at a time.
+A scope is either the top-level scope, one branch of an `or` or a `not` scope.
+Inner scopes are planned when the particular pattern (`or` or `not`) are required
+in the outer scope for the first time. For `or` and `not`, the planner
+might introduce an incoming bound set that comes from the outer scope to correctly
+plan an inner scope. `not` requires it because it is doing an antijoin. `or`
+might do filters/joins on outer variables. This incoming relation only exists
+at runtime. It is used for correct planning, but actually not introduced into the
+runtime Stages. The `or` and `not` pattern add the incoming relation pattern to
+the stages at runtime. There is a bit of an awkward split here where we try to do
+planning up front, but runtime relations are only available, well, at runtime.
 
-Planning is recursive and proceeds from variable shapes to executable stages:
+An ordinary pattern can propose the next single variable exactly when its
+`groundable` function returns a set containing that variable. Other unfinished
+patterns join the stage as validators only when every one of their variables is present in
+the target layout. In particular, an `or` does not validate (from its perspective)
+a partially grounded tuple. Once its complete tuple is bound, it validates the tuple with a semijoin.
+Similarly a `not` only validates when all it's participating variables are bound.
 
-1. Compile primitive clauses into Clojure planning records that contain their
-   `ExecPattern` values.
-2. Recursively plan `or` branches and `not` bodies with an external-binding
-   executor available as a fallback proposer.
-3. Attach those child stage lists to the composite executor.
-4. Derive the composite's Clojure groundability from the child stages.
-5. Emit runtime stages containing only `ExecPattern` participants.
-
-An `or` planning node walks each already-planned branch once in stage order.
-Internal stages contribute their added variables. An external-binding stage
-can be crossed only when its variables are supplied by the outer bound set;
-otherwise that branch cannot advance. The OR exposes the ordered intersection
-of the branch results. This accounts for sequential branch dependencies without
-recomputing closure over the branch participants.
-
-Every `or` branch is planned with the same variable set and introduction order.
-The projected input relation supplies whichever external-binding stages are
-satisfied by the actual outer input and constrains internally proposed stages
-that introduce an already bound branch variable.
-A `not` body is planned with all of its variables supplied by its outer input.
-The nested stages start from the unit binding set. At execution time a projected
-`RelationPattern` supplies the applicable outer bindings and constrains the
-nested rows.
-
-### Stage construction
-
-The planner starts with the incoming variables as bound and selects the next
-legal introduction in query variable order. After emitting a stage, it uses
+The planner select the next legal variable in query variable order. After emitting a stage, it uses
 that stage's target layout as the next bound set and reevaluates immediate
 groundability. A stage may add several variables when a pattern requires them
 as one proposal.
-
-An ordinary pattern can propose the next single variable exactly when its
-`groundable` function returns that variable. Other unfinished patterns join
-the stage as validators only when every one of their variables is present in
-the target layout. In particular, an `or` does not validate a partially grounded
-tuple. Once its complete tuple is bound, it validates the tuple with a semijoin.
-This assures that no branch leaking happens.
 
 When no pattern other than an `or` can introduce the next variable, an `or` may introduce
 all of its missing variables if its `groundable` function returns all of them.
 That proposing stage contains only the `or` because `OrPattern.count` is a no-op.
 Patterns made fully valid by the grouped proposal run in the following
-validation-only stage.
+validation-only stage. This is currently the only case where we introduce
+more than one variable at a time.
 
 Every top-level variable must be present in the initial input or groundable by
 a pattern in the scope. An `or` requires variables not groundable by every
