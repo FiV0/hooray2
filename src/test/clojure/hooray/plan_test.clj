@@ -9,9 +9,7 @@
   (:import
    (org.hooray.engine
     BindingSet
-    ExecPattern
     FunctionPattern
-    GenericJoinEngine
     IStage
     NotPattern
     OrPattern
