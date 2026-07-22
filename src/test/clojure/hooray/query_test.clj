@@ -187,7 +187,7 @@
                    (h/db fix/*node*)
                    [[:alice 30]
                     [:bob 39]])))
-      "partially suppplied branches"))
+      "partially supplied branches"))
 
 (deftest test-function-output-can-be-grounded-from-input
   (is (= [[5 7]]
