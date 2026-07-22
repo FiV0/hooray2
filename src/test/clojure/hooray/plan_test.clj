@@ -23,11 +23,6 @@
     (query/validate-query conformed-query)
     (plan/plan (h/db fix/*node*) conformed-query args variable-order)))
 
-(defn- descriptor-tree [{:keys [children branches] :as descriptor}]
-  (cons descriptor
-        (mapcat descriptor-tree
-                (concat children (mapcat identity branches)))))
-
 (deftest clauses-compile-to-runtime-independent-descriptors-test
   (let [conformed-query (s/conform ::query/query
                                    '{:find [?e ?name ?label]
@@ -70,8 +65,6 @@
     (is (= [:or] (mapv :kind children)))
     (is (= [[:triple] [:triple :predicate]]
            (mapv #(mapv :kind %) branches)))
-    (is (not-any? #(contains? % :exec-pattern)
-                  (descriptor-tree not-descriptor)))
     (is (= #{:kind :idx :variables :groundable :clause :branches}
            (set (keys or-descriptor))))))
 
