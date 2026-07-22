@@ -120,6 +120,9 @@ data class BindingSet(
     }
 
     fun join(other: BindingSet): BindingSet {
+        if (this.rowCount < other.rowCount) {
+            return other.join(this)
+        }
         val sharedVariables = variables.filter { variable -> variable in other.columnIndexes }
         val leftKeyIndexes = sharedVariables.map(::columnIndex)
         val rightOnlyVariables = other.variables.filter { variable -> variable !in columnIndexes }
