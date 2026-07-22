@@ -8,10 +8,10 @@ import org.hooray.util.Trie
  * @property idx The index of this pattern in the plan.
  * @property relation The relation to match against.
  *
- * When proposing variables, any prefix of [variables] must appear in the input binding set
- * in that order. There are possibly more variables in the input relation and they interleave
- * the prefix, but variables from the prefix are not shuffled. Validation accepts a bound
- * relation prefix in any input layout.
+ * Bound variables are read from the input in this relation's variable order, regardless of
+ * their input column order or unrelated interleaved columns. For proposals, the bound variables
+ * followed by the introduced variables must form a relation prefix. Validation requires the bound
+ * variables themselves to form a relation prefix.
  */
 class RelationPattern(
     override val idx: Int,
@@ -74,9 +74,9 @@ class RelationPattern(
         input: BindingSet,
         added: List<Variable>,
     ): List<Int>? {
-        val inputPrefix = input.variables.filter { variable -> variable in variables }
-        if (!isPrefix(inputPrefix + added)) return null
-        return inputPrefix.map(input::columnIndex)
+        val boundVariables = orderedVariables.filter { variable -> variable in input.columnIndexes }
+        if (!isPrefix(boundVariables + added)) return null
+        return boundVariables.map(input::columnIndex)
     }
 
     private fun prefixIndexes(

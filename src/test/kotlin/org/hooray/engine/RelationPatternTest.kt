@@ -131,6 +131,39 @@ class RelationPatternTest {
     }
 
     @Test
+    fun `counts and proposes relation prefixes independent of input variable order`() {
+        val shuffledPattern = RelationPattern(
+            idx = 10,
+            relation = BindingSet(
+                listOf(e, age, name),
+                listOf(listOf("a", 35, "Alice"), listOf("a", 36, "Ada"), listOf("b", 40, "Bob")),
+            ),
+        )
+        val input = BindingSet(
+            listOf(age, source, e),
+            listOf(listOf(35, "first", "a"), listOf(40, "second", "a")),
+        )
+        val proposals = List(input.rowCount) { Proposal(NO_PROPOSER, Int.MAX_VALUE) }
+
+        assertEquals(
+            listOf(Proposal(10, 1), Proposal(NO_PROPOSER, Int.MAX_VALUE)),
+            shuffledPattern.count(input, listOf(name), proposals),
+        )
+
+        assertEquals(
+            BindingSet(
+                listOf(source, name, e, age),
+                listOf(listOf("first", "Alice", "a", 35)),
+            ),
+            shuffledPattern.join(
+                input,
+                added = listOf(name),
+                targetVariables = listOf(source, name, e, age),
+            ),
+        )
+    }
+
+    @Test
     fun `validates complete relation prefixes`() {
         val prefixPattern = RelationPattern(
             idx = 10,

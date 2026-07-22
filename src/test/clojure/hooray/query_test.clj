@@ -389,6 +389,17 @@
                      [[2 1 3 4]]
                      [[1 2 3 4]])))))
 
+(deftest test-relation-bindings-propose-after-a-conflicting-input-order
+  (h/transact fix/*node* [{:db/id :proposal-relation-witness :name "Proposal relation witness"}])
+
+  (t/is (= #{[1 2 3]}
+           (set (h/q '{:find [?a ?b ?c]
+                       :in [[[?b ?a]] [[?a ?b ?c]]]
+                       :where [[?e :name "Proposal relation witness"]]}
+                     (h/db fix/*node*)
+                     [[2 1]]
+                     [[1 2 3]])))))
+
 (deftest test-order-of-vars-in-predicate
   (t/is (= [[10 11]]
            (h/q '{:find [in1 in2]
