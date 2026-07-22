@@ -104,8 +104,8 @@ class OrPattern(
                     stage
                 }
             }, unit).project(orderedVariables)
-            result = result.unionDistinct(branchResult)
+            result = result.union(branchResult)
         }
-        return result
+        return result.distinctRows()
     }
 }
