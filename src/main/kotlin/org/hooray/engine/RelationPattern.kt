@@ -8,9 +8,9 @@ import org.hooray.util.Trie
  * @property idx The index of this pattern in the plan.
  * @property relation The relation to match against.
  *
- * The contract with the outer caller is that any prefix of realtion.variables must appear
- * in the input binding set in that order. There are possibly more variables and they interleave the prefix,
- * but variables from the prefix are not shuffled.
+ * The contract with the outer caller is that any prefix of [variables] must appear
+ * in the input binding set in that order. There are possibly more variables in the input relation
+ * and they interleave the prefix, but variables from the prefix are not shuffled.
  */
 class RelationPattern(
     override val idx: Int,
