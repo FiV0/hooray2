@@ -263,7 +263,7 @@
                          (map :idx)
                          set)})
 
-      ;; This finds the first OR Pattern that that introduces the variable and
+      ;; This finds the first OR Pattern that introduces the variable and
       ;; can also propose its remaining not yet grounded variables.
       (when-let [{:keys [idx] :as selected-or}
                  (first (filter #(->> (or-proposal % bound)
@@ -410,7 +410,7 @@
 ;; 2. We calculate stages as pure data per scope. Scopes are top-level scopes (:in + :where),
 ;; `not` scopes and `or` scopes. A stage is a set of `added` variables in that stage
 ;; (most of the time a single variable), proposer and participant descriptor indexes, and finally
-;; a list of target-variables after the result set is returned in.
+;; a list of target-variables describing the result layout after the stage executes.
 ;; 3. Finally we fold the descriptors + logical stages recursively into runtime patterns
 ;; (`ExecPattern`) and stages (`IStage`).
 
