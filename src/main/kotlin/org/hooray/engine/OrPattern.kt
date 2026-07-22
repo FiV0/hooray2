@@ -6,9 +6,10 @@ package org.hooray.engine
  * @property idx The index of this pattern in the plan.
  * @property branches The branches to execute. Each branch is a list of stages.
  *
- * Every branch must introduce the same variables in the same order. Before nested execution, the branch-relevant
- * input columns are projected into a [RelationPattern] that constrains each branch. The branch results are unioned
- * distinctly and correlated with the complete input so that unrelated outer columns are preserved.
+ * Every branch must introduce the same variables, though each branch may introduce them in a different order.
+ * Before nested execution, the branch-relevant input columns are projected into a [RelationPattern] that constrains
+ * each branch. Branch results are aligned to a common variable order, unioned distinctly, and correlated with the
+ * complete input so that unrelated outer columns are preserved.
  * [GenericJoinEngine] calls an OrPattern to propose only when it is the sole participant in a stage.
  */
 class OrPattern(
@@ -27,9 +28,6 @@ class OrPattern(
         }
         require(branchVariables.all { it.toSet() == branchVariables.first().toSet() }) {
             "OR branches must have the same variables"
-        }
-        require(branchVariables.all { it == branchVariables.first() }) {
-            "OR branches must introduce variables in the same order"
         }
         orderedVariables = branchVariables.first()
         variables = orderedVariables.toSet()

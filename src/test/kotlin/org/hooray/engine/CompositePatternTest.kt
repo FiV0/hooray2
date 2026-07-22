@@ -12,7 +12,7 @@ class CompositePatternTest {
     private val present = Any()
 
     @Test
-    fun `or rejects branches with different variable order`() {
+    fun `or aligns branches with different variable orders`() {
         val firstTriple = binaryTriplePattern(0, x, y, 1 to "a")
         val secondTriple = binaryTriplePattern(1, y, x, "b" to 2)
         val first = listOf(
@@ -22,10 +22,18 @@ class CompositePatternTest {
             Stage(listOf(y, x), listOf(secondTriple), listOf(y, x)),
         )
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            OrPattern(2, listOf(first, second))
-        }
-        assertEquals("OR branches must introduce variables in the same order", error.message)
+        val pattern = OrPattern(2, listOf(first, second))
+
+        assertEquals(
+            BindingSet(
+                variables = listOf(x, y),
+                rows = listOf(listOf(1, "a"), listOf(2, "b")),
+            ),
+            GenericJoinEngine().execute(
+                stages = listOf(Stage(listOf(x, y), listOf(pattern), listOf(x, y))),
+                input = BindingSet(emptyList(), listOf(emptyList())),
+            ),
+        )
     }
 
     @Test

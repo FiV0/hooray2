@@ -162,6 +162,33 @@
                                       [?e :name ?name]))]}
                    (h/db fix/*node*))))))
 
+(deftest test-or-branches-can-introduce-variables-in-different-orders
+  (h/transact fix/*node* [{:db/id :alice :age 30}
+                          {:db/id :bob :salary 40}])
+
+  (is (= #{[:alice 30 31]
+           [:bob 39 40]}
+         (set (h/q '{:find [?e ?a ?b]
+                     :where [(or (and [?e :age ?a]
+                                      [(inc ?a) ?b])
+                                 (and [?e :salary ?b]
+                                      [(dec ?b) ?a]))]}
+                   (h/db fix/*node*))))
+      "full proposal by or branches")
+
+  (is (= #{[:alice 30 31]
+           [:bob 39 40]}
+         (set (h/q '{:find [?e ?a ?b]
+                     :in [[[?e ?a]]]
+                     :where [(or (and [?e :age ?a]
+                                      [(inc ?a) ?b])
+                                 (and [?e :salary ?b]
+                                      [(dec ?b) ?a]))]}
+                   (h/db fix/*node*)
+                   [[:alice 30]
+                    [:bob 39]])))
+      "partially suppplied branches"))
+
 (deftest test-function-output-can-be-grounded-from-input
   (is (= [[5 7]]
          (h/q '{:find [?x ?y]
