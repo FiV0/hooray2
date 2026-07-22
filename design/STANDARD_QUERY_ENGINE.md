@@ -4,9 +4,12 @@
 
 The standard query engine evaluates a conformed `:where` clause over ordered
 `BindingSet` values. Compilation turns clauses into patterns, planning arranges
-those patterns into stages, and `GenericJoinEngine` executes the stages. The
-planner works with variable shapes; the executor works with rows.
+those patterns into stages, and `GenericJoinEngine` executes the stages.
+In planning we are mainly concerned with variables, the order they are introduced in
+and how many are introduced at the same time. The execution is concerned
+with tuples and how they get built up.
 
+A query roughly goes through the following stages:
 ```text
 query -> conformed clauses -> Clojure planning patterns -> Stage lists
       -> GenericJoinEngine -> result BindingSet -> :find projection
