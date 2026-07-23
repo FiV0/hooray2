@@ -1283,9 +1283,9 @@
   (testing "not over a bound fn clause anti-joins matching rows"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
-                             :where [[?e :name name]
-                                     [?e :age age]
-                                     [?e :salary sal]
+                             :where [[e :name name]
+                                     [e :age age]
+                                     [e :salary sal]
                                      (not [(identity age) sal])]})]
       (h/transact node [{:db/id :eq :name "Eq" :age 30 :salary 30}
                         {:db/id :neq :name "Neq" :age 30 :salary 40}])
@@ -1298,10 +1298,10 @@
   (testing "a function result binds a subsequent top-level not"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
-                             :where [[?e :name name]
-                                     [?e :age age]
+                             :where [[e :name name]
+                                     [e :age age]
                                      [(quot age 2) half]
-                                     (not [?e :salary half])]})]
+                                     (not [e :salary half])]})]
       (h/transact node [{:db/id :blocked :name "Blocked" :age 30 :salary 15}
                         {:db/id :allowed :name "Allowed" :age 40 :salary 30}])
       (is (= #{[["Allowed"] 1]} (set (h/consume-delta! iq))))
