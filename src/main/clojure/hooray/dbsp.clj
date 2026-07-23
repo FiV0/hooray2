@@ -10,8 +10,8 @@
             [hooray.error :as err]
             [hooray.query :as query]
             [hooray.transact :as t]
-            [hooray.util :as util])
-  (:import (java.util.function Predicate)
+            [hooray.util :as util :refer [distinctv]])
+  (:import (java.util.function Function Predicate)
            (org.hooray.dbsp Circuit DistinctOp FilterOp IncrementalJoinOp MapOp MinusOp PlusOp Tuple)
            (org.hooray.incremental IntegerWeight ZSet)))
 
@@ -70,11 +70,14 @@
      :predicate  <symbol>
      :args       [{:kind :constant :value v} | {:kind :variable :var s} …]}
 
-  A predicate grounds nothing (`:groundable` is `[]`), so `left-deep-order`
-  only schedules it once every variable it references is grounded.
+  Fn descriptor:
 
-  Other clause types (`:fn`) are not yet
-  supported and trigger `err/unsupported-ex`."
+    {:kind       :fn
+     :fn         <symbol>
+     :args       [{:kind :constant :value v} | {:kind :variable :var s} …]
+     :ret-var    <symbol>}
+
+  Any other clause type triggers `err/unsupported-ex`."
   [index [clause-type pattern]]
   (case clause-type
     :triple (let [{:keys [e a v]} pattern
@@ -102,14 +105,14 @@
            {:index index
             :kind :and
             :children children
-            :vars (vec (distinct (mapcat :vars children)))
-            :groundable (vec (distinct (mapcat :groundable children)))})
+            :vars (distinctv (mapcat :vars children))
+            :groundable (distinctv (mapcat :groundable children))})
 
     :not (let [children (vec (map-indexed compile-pattern pattern))]
            {:index index
             :kind :not
             :children children
-            :vars (vec (distinct (mapcat :vars children)))
+            :vars (distinctv (mapcat :vars children))
             :groundable []})
 
     :predicate (let [{:keys [predicate args]} pattern
@@ -118,8 +121,22 @@
                   :kind :predicate
                   :predicate predicate
                   :args args*
-                  :vars (vec (distinct (keep elem-var args*)))
+                  :vars (distinctv (keep elem-var args*))
                   :groundable []})
+
+    :fn (let [[{:keys [fun args]} ret-var] pattern
+              args* (mapv elem args)
+              arg-vars (vec (keep elem-var args*))]
+          (when-not (<= 1 (count args*) 2)
+            (err/unsupported-ex "DBSP-standard engine only supports unary and binary functions"
+                                {:fn fun :args args :ret-var ret-var}))
+          {:index index
+           :kind :fn
+           :fn fun
+           :args args*
+           :ret-var ret-var
+           :vars (distinctv (conj arg-vars ret-var))
+           :groundable (if (some #{ret-var} arg-vars) [] [ret-var])})
 
     (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
                         {:clause-type clause-type :pattern pattern})))
@@ -205,7 +222,8 @@
 ;; operator projects to the pattern's variable columns.
 ;;
 ;; The plan is a tree of nodes `{:kind … :out-vars […] …}` with kinds
-;; `:triple`, `:chain`, `:union`, `:difference`, `:permute` and `:filter`. A node
+;; `:triple`, `:chain`, `:union`, `:difference`, `:permute`, `:filter` and
+;; `:function`. A node
 ;; optionally carries `:incoming`, the column layout of the running relation
 ;; it extends — the stream of the already-built left partial sub-tree of the
 ;; query. Without `:incoming` a node produces its stream standalone, rooted
@@ -232,6 +250,11 @@
 ;;   :filter       applies a stateless predicate to the running stream
 ;;                 (`:incoming` is required); rows that fail are dropped,
 ;;                 the layout is unchanged (out-vars = incoming)
+;;   :function     computes a function clause over the running stream. When
+;;                 its result variable is absent from `:incoming`, it appends
+;;                 the computed value as a new trailing column. When the result
+;;                 variable is already present, it keeps only rows where that
+;;                 column equals the computed value (`:incoming` is required)
 ;;
 ;; A scope (the top-level `:where`, an `and` and a `not` body)
 ;; plans its descriptors in `left-deep-order`, each node extending its
@@ -450,6 +473,25 @@
            :predicate descriptor
            :out-vars (vec incoming)}
     target (ensure-target target)))
+
+;; A function clause extends the running relation row-by-row. The single
+;; `:function` plan node records whether its result variable is already present
+;; in [incoming] through its input and output layouts; circuit construction
+;; chooses whether to append the result or join it with the existing binding.
+;; [incoming] is nil only when there is no positive relation to extend.
+(defmethod plan-node :fn
+  [{:keys [ret-var] :as descriptor} incoming target]
+  (when-not incoming
+    (err/unsupported-ex "DBSP-standard engine cannot plan a function without a positive relation"
+                        {:descriptor descriptor}))
+  (let [incoming (vec incoming)
+        out-vars (cond-> incoming
+                   (not (some #{ret-var} incoming)) (conj ret-var))]
+    (cond-> {:kind :function
+             :incoming incoming
+             :function descriptor
+             :out-vars out-vars}
+      target (ensure-target target))))
 
 (defn- plan-scope
   "Plans [descriptors] as one left-deep tree in `left-deep-order`. Without
@@ -673,6 +715,50 @@
   [^Circuit circuit {:keys [predicate out-vars] :as node} {:keys [stream vars] :as acc}]
   (check-incoming! node acc)
   (let [stream (.addUnary circuit (FilterOp/fromPredicate "filter-predicate" (predicate-filter predicate vars)) stream)]
+    (assoc acc :stream stream :vars out-vars)))
+
+(defn- function-map-transform
+  [{f-sym :fn :keys [args] :as _descriptor} layout]
+  (let [f (util/resolve-fn f-sym)
+        var->idx (zipmap layout (range))
+        [r0 r1] (mapv #(arg-reader % layout var->idx) args)]
+    (case (count args)
+      1 (reify Function
+          (apply [_ tuple] (.append ^Tuple tuple (f (r0 tuple)))))
+      2 (reify Function
+          (apply [_ tuple] (.append ^Tuple tuple (f (r0 tuple) (r1 tuple))))))))
+
+;; In case the output var is already present in the incoming stream, we simply
+;; check that the output of the function equals the existing var unification.
+;; An `:fn` becomes a filter.
+(defn- function-filter-predicate
+  [{f-sym :fn :keys [args ret-var] :as _descriptor} layout]
+  (let [f (util/resolve-fn f-sym)
+        var->idx (zipmap layout (range))
+        [r0 r1] (mapv #(arg-reader % layout var->idx) args)
+        ret-reader (arg-reader {:kind :variable :var ret-var} layout var->idx)]
+    (case (count args)
+      1 (reify Predicate
+          (test [_ tuple] (= (f (r0 tuple)) (ret-reader tuple))))
+      2 (reify Predicate
+          (test [_ tuple] (= (f (r0 tuple) (r1 tuple)) (ret-reader tuple)))))))
+
+;; A `:function` either appends a newly computed result or keeps rows whose
+;; existing result binding equals the computed value. The planned `:incoming`
+;; layout determines which circuit operator is required.
+(defmethod assemble-node :function
+  [^Circuit circuit {:keys [function incoming out-vars] :as node} {:keys [stream vars] :as acc}]
+  (check-incoming! node acc)
+  (let [{:keys [ret-var]} function
+        stream (if (some #{ret-var} incoming)
+                 (.addUnary circuit
+                            (FilterOp/fromPredicate "filter-function"
+                                                    (function-filter-predicate function vars))
+                            stream)
+                 (.addUnary circuit
+                            (MapOp/fromFunction "map-function"
+                                                (function-map-transform function vars))
+                            stream))]
     (assoc acc :stream stream :vars out-vars)))
 
 (defn plan->circuit

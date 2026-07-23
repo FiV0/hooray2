@@ -47,6 +47,13 @@ class Tuple(values: Array<Any?>) {
         return Tuple(combined)
     }
 
+    /** This tuple's columns followed by [value] as one new trailing column. */
+    fun append(value: Any?): Tuple {
+        val extended = values.copyOf(values.size + 1)
+        extended[values.size] = value
+        return Tuple(extended)
+    }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Tuple) return false

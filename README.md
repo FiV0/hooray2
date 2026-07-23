@@ -141,8 +141,8 @@ I have written two blog posts about combining WCOJ with DBSP:
 	- [x] Not (only `:standard`)
 	- [ ] Or-join
 	- [ ] Not-join
-	- [ ] predicates
-	- [ ] functions
+	- [x] predicates (only `:standard`)
+	- [x] functions (only `:standard`)
 	- [ ] aggregates
 	- [ ] pull
 

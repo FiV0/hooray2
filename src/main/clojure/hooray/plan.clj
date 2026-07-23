@@ -24,9 +24,6 @@
   (getParticipants [_] participants)
   (getTargetVariables [_] target-variables))
 
-(defn- distinctv [values]
-  (vec (distinct values)))
-
 (defn- ensure-distinct [values message]
   (when-not (= (count values) (count (distinct values)))
     (throw (IllegalStateException. ^String message))))
@@ -50,7 +47,7 @@
        (keep (fn [[value-type value]]
                (when (= :variable value-type)
                  value)))
-       distinctv))
+       util/distinctv))
 
 (defn- groundable-variables
   [{:keys [groundable] :as _node} bound]
@@ -109,7 +106,7 @@
   (->> descriptors
        (mapcat (fn [{:keys [variables]}]
                  variables))
-       distinctv))
+       util/distinctv))
 
 (defn- triple-descriptor [idx {:keys [e a v] :as clause}]
   (let [[attribute-type _attribute] a]

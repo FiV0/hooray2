@@ -1,6 +1,11 @@
 (ns hooray.util
   (:import (kotlin.jvm.functions Function0 Function1 Function2)))
 
+(defn distinctv
+  "Returns a vector without duplicate values, preserving encounter order."
+  [values]
+  (vec (distinct values)))
+
 (defn create-update-in
   "Creates a function that behaves like `clojure.core/update-in` but defaults to `default-map`
   for empty maps. Any collections left empty by the operation will be dissociated from their containing structures."

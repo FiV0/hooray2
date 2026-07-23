@@ -2,6 +2,7 @@ package org.hooray.dbsp
 
 import org.hooray.incremental.IntegerWeight
 import org.hooray.incremental.ZSet
+import java.util.function.Function
 
 /**
  * Applies [transform] to every tuple key. When two input tuples map to the same
@@ -34,5 +35,14 @@ class MapOp(
          */
         @JvmStatic
         fun project(order: IntArray): MapOp = MapOp("project") { it.project(order) }
+
+        /**
+         * Builds a tuple map from a Java function for straightforward
+         * Clojure interop.
+         */
+        @JvmStatic
+        fun fromFunction(name: String, transform: Function<Tuple, Tuple>): MapOp {
+            return MapOp(name) { tuple -> transform.apply(tuple) }
+        }
     }
 }
