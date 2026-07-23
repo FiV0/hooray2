@@ -1,11 +1,13 @@
 # Hooray2
 
-Experiments with Datalog.
-
-The goal of this repository is to test some ideas around Datalog.
+Hooray is an in-memory Datalog engine with data model and query syntax inspired by [Datomic](https://www.datomic.com/)
+and its derivatives.
 
 The two main concepts explored in the repository are Worst-case optimal join (WCOJ) and DBSP,
 a formal framwork for incremental computation. We also try to combine the two.
+
+The repository currently mostly serves as a testbed for [Triplox](https://github.com/FiV0/triplox), a distributed Datalog
+engine backed by object-storage.
 
 ## Just show me the code already
 
