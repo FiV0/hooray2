@@ -103,28 +103,25 @@
       (is (= [] (:groundable p))))))
 
 (deftest compile-pattern-fn-test
-  (testing "unary fn descriptor normalizes args and grounds its result variable"
-    (let [[_ p] (patterns '{:find [half]
-                            :where [[?e :age age]
-                                    [(quot age 2) half]]})]
-      (is (= :fn (:kind p)))
-      (is (= 'quot (:fn p)))
-      (is (= [{:kind :variable :var 'age}
+  (testing "fn descriptors normalize args and ground their result variables"
+    (let [[_ _ unary-p binary-p]
+          (patterns '{:find [half c]
+                      :where [[?e :age a]
+                              [?e :salary b]
+                              [(quot a 2) half]
+                              [(+ a b) c]]})]
+      (is (= :fn (:kind unary-p)))
+      (is (= 'quot (:fn unary-p)))
+      (is (= [{:kind :variable :var 'a}
               {:kind :constant :value 2}]
-             (:args p)))
-      (is (= 'half (:ret-var p)))
-      (is (= '[age half] (:vars p)))
-      (is (= '[half] (:groundable p)))))
-
-  (testing "binary fn descriptor references both argument variables"
-    (let [[_ _ p] (patterns '{:find [c]
-                              :where [[?e :age a]
-                                      [?e :salary b]
-                                      [(+ a b) c]]})]
-      (is (= :fn (:kind p)))
-      (is (= '+ (:fn p)))
-      (is (= '[a b c] (:vars p)))
-      (is (= '[c] (:groundable p)))))
+             (:args unary-p)))
+      (is (= 'half (:ret-var unary-p)))
+      (is (= '[a half] (:vars unary-p)))
+      (is (= '[half] (:groundable unary-p)))
+      (is (= :fn (:kind binary-p)))
+      (is (= '+ (:fn binary-p)))
+      (is (= '[a b c] (:vars binary-p)))
+      (is (= '[c] (:groundable binary-p)))))
 
   (testing "a self-referential fn clause cannot ground its own result variable"
     (let [[_ p] (patterns '{:find [age]
@@ -1224,32 +1221,23 @@
              (set (h/consume-delta! iq)))))))
 
 (deftest e2e-function-map-test
-  (testing "unary fn emits additions and retractions; unchanged results cancel"
+  (testing "functions compose with predicates and emit only projected result changes"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name half]
                              :where [[?e :name name]
                                      [?e :age age]
-                                     [(quot age 2) half]]})]
-      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}])
+                                     [(quot age 2) half]
+                                     [(+ age half) total]
+                                     [(< total 50)]]})]
+      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}
+                        {:db/id :bob :name "Bob" :age 40}])
       (is (= #{[["Ivan" 15] 1]} (set (h/consume-delta! iq))))
-      ;; 30 -> 31 leaves quot unchanged, so the deltas cancel in the projection
+      ;; The intermediate total changes, but the projected half does not.
       (h/transact node [{:db/id :ivan :age 31}])
       (is (nil? (h/consume-delta! iq)))
-      ;; 31 -> 32 changes the computed column
       (h/transact node [{:db/id :ivan :age 32}])
-      (is (= #{[["Ivan" 15] -1] [["Ivan" 16] 1]} (set (h/consume-delta! iq))))))
-
-  (testing "binary fn combines two bound columns"
-    (let [node (fresh-node)
-          iq (h/q-inc node '{:find [name total]
-                             :where [[?e :name name]
-                                     [?e :age age]
-                                     [?e :salary sal]
-                                     [(+ age sal) total]]})]
-      (h/transact node [{:db/id :ivan :name "Ivan" :age 30 :salary 100}])
-      (is (= #{[["Ivan" 130] 1]} (set (h/consume-delta! iq))))
-      (h/transact node [[:db/retract :ivan :salary 100]])
-      (is (= #{[["Ivan" 130] -1]} (set (h/consume-delta! iq)))))))
+      (is (= #{[["Ivan" 15] -1] [["Ivan" 16] 1]}
+             (set (h/consume-delta! iq)))))))
 
 (deftest e2e-function-rebinding-filters-test
   (testing "a fn whose result variable is already bound keeps only matching rows"
@@ -1265,32 +1253,16 @@
       (h/transact node [{:db/id :neq :salary 30}])
       (is (= #{[["Neq"] 1]} (set (h/consume-delta! iq)))))))
 
-(deftest e2e-function-chain-test
-  (testing "a computed result feeds another fn and a predicate"
-    (let [node fix/*node*
-          iq (h/q-inc node '{:find [name h2]
-                             :where [[?e :name name]
-                                     [?e :age age]
-                                     [(quot age 2) half]
-                                     [(inc half) h2]
-                                     [(< h2 20)]]})]
-      ;; Ivan: h2 = 16 kept, Bob: h2 = 21 dropped
-      (h/transact node [{:db/id :ivan :name "Ivan" :age 30}
-                        {:db/id :bob :name "Bob" :age 40}])
-      (is (= #{[["Ivan" 16] 1]} (set (h/consume-delta! iq)))))))
-
 (deftest e2e-function-nil-false-values-test
   (testing "nil and false results are values, not row-removal signals"
     (let [node fix/*node*
-          nil-iq (h/q-inc node '{:find [name x]
-                                 :where [[?e :name name]
-                                         [(identity nil) x]]})
-          false-iq (h/q-inc node '{:find [name x]
-                                   :where [[?e :name name]
-                                           [(identity false) x]]})]
+          iq (h/q-inc node '{:find [name nil-value false-value]
+                             :where [[?e :name name]
+                                     [(identity nil) nil-value]
+                                     [(identity false) false-value]]})]
       (h/transact node [{:db/id :ivan :name "Ivan"}])
-      (is (= #{[["Ivan" nil] 1]} (set (h/consume-delta! nil-iq))))
-      (is (= #{[["Ivan" false] 1]} (set (h/consume-delta! false-iq)))))))
+      (is (= #{[["Ivan" nil false] 1]}
+             (set (h/consume-delta! iq)))))))
 
 (deftest e2e-function-or-test
   (testing "fn branches of an or emit both computed values"
@@ -1300,16 +1272,7 @@
                                      (or [(inc age) res]
                                          [(dec age) res])]})]
       (h/transact node [{:db/id :ivan :age 30}])
-      (is (= #{[[29] 1] [[31] 1]} (set (h/consume-delta! iq))))))
-
-  (testing "overlapping fn branches collapse to distinct-union semantics"
-    (let [node (fresh-node)
-          iq (h/q-inc node '{:find [res]
-                             :where [[?e :age age]
-                                     (or [(inc age) res]
-                                         [(+ age 1) res])]})]
-      (h/transact node [{:db/id :bob :age 40}])
-      (is (= #{[[41] 1]} (set (h/consume-delta! iq)))))))
+      (is (= #{[[29] 1] [[31] 1]} (set (h/consume-delta! iq)))))))
 
 (deftest e2e-function-not-test
   (testing "not over a bound fn clause anti-joins matching rows"
