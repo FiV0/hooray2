@@ -1,5 +1,12 @@
 package org.hooray.engine
 
+// generic-join based on
+// http://www.frankmcsherry.org/dataflow/relational/join/2015/04/11/genericjoin.html
+// https://arxiv.org/abs/1310.3314
+//
+// The ExecPattern interface very much inspired by
+// https://github.com/frankmcsherry/datatoad
+
 class GenericJoinEngine {
 
     private fun validateAll(
