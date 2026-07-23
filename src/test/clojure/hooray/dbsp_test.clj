@@ -1278,7 +1278,7 @@
       (h/transact node [{:db/id :neq :salary 30}])
       (is (= #{[["Neq"] -1]} (set (h/consume-delta! iq)))))))
 
-(deftest e2e-cardinality-many-duplicate-add-is-noop-test
+(deftest e2e-idempotent-add-is-noop-test
   (let [node fix/*node*]
     (h/transact node [[:db/add 1 :edge 2]])
     (let [iq (h/q-inc node '{:find [?to]
