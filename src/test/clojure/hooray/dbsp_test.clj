@@ -748,7 +748,7 @@
       (is (= '[?e age half] (:out-vars function-node)))
       (is (= 'quot (-> function-node :function :fn)))))
 
-  (testing "fn branches of an or are arranged to the union layout"
+  (testing "fn branches of an `or` are arranged to the union layout"
     (let [p (dbsp/plan '{:find [res]
                          :where [[?e :age age]
                                  (or [(inc age) res]
