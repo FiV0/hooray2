@@ -1111,16 +1111,16 @@
   (let [node fix/*node*]
     (h/transact node [{:db/id :ivan :name "Ivan" :last-name "Ivanov"}])
     (let [iq (h/q-inc node '{:find [name last-name]
-                                    :where [[e :name name]
-                                            [e :last-name last-name]]})]
+                             :where [[e :name name]
+                                     [e :last-name last-name]]})]
       (h/transact node [{:db/id :petr :name "Petr" :last-name "Petrov"}])
       (is (= #{[["Petr" "Petrov"] 1]} (set (h/consume-delta! iq)))))))
 
 (deftest e2e-self-join-test
   (let [node fix/*node*
         iq (h/q-inc node '{:find [?a ?b]
-                                  :where [[?a :name n]
-                                          [?b :name n]]})]
+                           :where [[?a :name n]
+                                   [?b :name n]]})]
     (h/transact node [{:db/id 1 :name "Ivan"} {:db/id 2 :name "Ivan"}])
     ;; every ordered pair of entities sharing the name, including reflexive
     (is (= #{[[1 1] 1] [[1 2] 1] [[2 1] 1] [[2 2] 1]}
@@ -1129,9 +1129,9 @@
 (deftest e2e-three-pattern-chain-test
   (let [node fix/*node*
         iq (h/q-inc node '{:find [?a ?d]
-                                  :where [[?a :edge ?b]
-                                          [?b :edge ?c]
-                                          [?c :edge ?d]]})]
+                           :where [[?a :edge ?b]
+                                   [?b :edge ?c]
+                                   [?c :edge ?d]]})]
     ;; path n1 -> n2 -> n3 -> n4
     (h/transact node [{:db/id :n1 :edge :n2}
                       {:db/id :n2 :edge :n3}
@@ -1141,9 +1141,9 @@
 (deftest e2e-triangle-test
   (let [node fix/*node*
         iq (h/q-inc node '{:find [?a ?b ?c]
-                                  :where [[?a :edge ?b]
-                                          [?b :edge ?c]
-                                          [?c :edge ?a]]})]
+                           :where [[?a :edge ?b]
+                                   [?b :edge ?c]
+                                   [?c :edge ?a]]})]
     ;; directed 3-cycle n1 -> n2 -> n3 -> n1
     (h/transact node [{:db/id :n1 :edge :n2}
                       {:db/id :n2 :edge :n3}
@@ -1154,8 +1154,8 @@
 (deftest e2e-cartesian-test
   (let [node fix/*node*
         iq (h/q-inc node '{:find [n c]
-                                  :where [[e1 :name n]
-                                          [e2 :city c]]})]
+                           :where [[e1 :name n]
+                                   [e2 :city c]]})]
     (h/transact node [{:db/id 1 :name "Ivan"}
                       {:db/id 2 :name "Bob"}
                       {:db/id 3 :city "NYC"}
@@ -1278,6 +1278,20 @@
       (h/transact node [{:db/id :neq :salary 30}])
       (is (= #{[["Neq"] -1]} (set (h/consume-delta! iq)))))))
 
+(deftest e2e-function-result-binds-not-test
+  (testing "a function result binds a subsequent top-level not"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [(quot age 2) half]
+                                     (not [?e :salary half])]})]
+      (h/transact node [{:db/id :blocked :name "Blocked" :age 30 :salary 15}
+                        {:db/id :allowed :name "Allowed" :age 40 :salary 30}])
+      (is (= #{[["Allowed"] 1]} (set (h/consume-delta! iq))))
+      (h/transact node [{:db/id :allowed :salary 20}])
+      (is (= #{[["Allowed"] -1]} (set (h/consume-delta! iq)))))))
+
 (deftest e2e-idempotent-add-is-noop-test
   (let [node fix/*node*]
     (h/transact node [[:db/add 1 :edge 2]])
@@ -1322,9 +1336,9 @@
     (let [bare-node fix/*node*
           or-node (fresh-node)
           bare-iq (h/q-inc bare-node '{:find [?e]
-                                              :where [[?e :name "Ivan"]]})
+                                       :where [[?e :name "Ivan"]]})
           or-iq (h/q-inc or-node '{:find [?e]
-                                          :where [(or [?e :name "Ivan"])]})]
+                                   :where [(or [?e :name "Ivan"])]})]
       (h/transact bare-node [{:db/id 1 :name "Ivan"}])
       (h/transact or-node   [{:db/id 1 :name "Ivan"}])
       (is (= (set (h/consume-delta! bare-iq))
@@ -1334,8 +1348,8 @@
   (testing "two-branch :or returns the union of its branches"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [?e]
-                                    :where [(or [?e :name "Ada"]
-                                                [?e :name "Bob"])]})]
+                             :where [(or [?e :name "Ada"]
+                                         [?e :name "Bob"])]})]
       (h/transact node [{:db/id :ada  :name "Ada"}
                         {:db/id :bob  :name "Bob"}
                         {:db/id :carla :name "Carla"}])
@@ -1346,8 +1360,8 @@
   (testing "overlapping branches collapse via DistinctOp"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [?e]
-                                    :where [(or [?e :name "X"]
-                                                [?e :last-name "X"])]})]
+                             :where [(or [?e :name "X"]
+                                         [?e :last-name "X"])]})]
       ;; entity 1 satisfies both branches at once — DistinctOp keeps weight 1
       (h/transact node [{:db/id 1 :name "X" :last-name "X"}])
       (is (= #{[[1] 1]} (set (h/consume-delta! iq))))
@@ -1364,9 +1378,9 @@
   (testing ":or joined with an outer triple — adds"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
-                                    :where [[?e :name name]
-                                            (or [?e :last-name "Lovelace"]
-                                                [?e :last-name "Turing"])]})]
+                             :where [[?e :name name]
+                                     (or [?e :last-name "Lovelace"]
+                                         [?e :last-name "Turing"])]})]
       (h/transact node [{:db/id :ada  :name "Ada"   :last-name "Lovelace"}
                         {:db/id :alan :name "Alan"  :last-name "Turing"}
                         {:db/id :bob  :name "Bob"   :last-name "Smith"}])
@@ -1378,9 +1392,9 @@
     (let [node fix/*node*]
       (h/transact node [{:db/id :ada :name "Ada" :last-name "Lovelace"}])
       (let [iq (h/q-inc node '{:find [name]
-                                      :where [[?e :name name]
-                                              (or [?e :last-name "Lovelace"]
-                                                  [?e :last-name "Turing"])]})]
+                               :where [[?e :name name]
+                                       (or [?e :last-name "Lovelace"]
+                                           [?e :last-name "Turing"])]})]
         (h/transact node [[:db/retract :ada :last-name "Lovelace"]])
         (is (= #{[["Ada"] -1]} (set (h/consume-delta! iq))))))))
 
@@ -1388,9 +1402,9 @@
   (testing "2-var :or joined into a chain"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
-                                    :where [[?e :city "NYC"]
-                                            (or [?e :name name]
-                                                [?e :last-name name])]})]
+                             :where [[?e :city "NYC"]
+                                     (or [?e :name name]
+                                         [?e :last-name name])]})]
       (h/transact node [{:db/id :ada  :name "Ada"  :last-name "Lovelace" :city "NYC"}
                         {:db/id :bob  :name "Bob"  :last-name "Smith"    :city "London"}])
       (is (= #{[["Ada"] 1] [["Lovelace"] 1]}
@@ -1400,9 +1414,9 @@
   (testing "an :or block as the only :where pattern"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [?e]
-                                    :where [(or [?e :name "Ada"]
-                                                [?e :name "Bob"]
-                                                [?e :name "Carla"])]})]
+                             :where [(or [?e :name "Ada"]
+                                         [?e :name "Bob"]
+                                         [?e :name "Carla"])]})]
       (h/transact node [{:db/id 1 :name "Ada"}
                         {:db/id 2 :name "Bob"}
                         {:db/id 3 :name "Dave"}])
@@ -1622,10 +1636,10 @@
   (testing "nested :or joined with an outer triple"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
-                                    :where [[?e :name name]
-                                            (or [?e :last-name "Lovelace"]
-                                                (or [?e :last-name "Turing"]
-                                                    [?e :last-name "Hopper"]))]})]
+                             :where [[?e :name name]
+                                     (or [?e :last-name "Lovelace"]
+                                         (or [?e :last-name "Turing"]
+                                             [?e :last-name "Hopper"]))]})]
       (h/transact node [{:db/id :ada    :name "Ada"    :last-name "Lovelace"}
                         {:db/id :alan   :name "Alan"   :last-name "Turing"}
                         {:db/id :grace  :name "Grace"  :last-name "Hopper"}
