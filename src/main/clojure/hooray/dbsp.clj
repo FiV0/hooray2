@@ -136,7 +136,7 @@
            :args args*
            :ret-var ret-var
            :vars (distinctv (conj arg-vars ret-var))
-           :groundable (if (some #{ret-var} arg-vars) [] [ret-var])})
+           :groundable [ret-var]})
 
     (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
                         {:clause-type clause-type :pattern pattern})))

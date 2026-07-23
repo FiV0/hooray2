@@ -1278,6 +1278,20 @@
       (h/transact node [{:db/id :neq :salary 30}])
       (is (= #{[["Neq"] -1]} (set (h/consume-delta! iq)))))))
 
+(deftest e2e-function-result-binds-not-test
+  (testing "a function result binds a subsequent top-level not"
+    (let [node fix/*node*
+          iq (h/q-inc node '{:find [name]
+                             :where [[?e :name name]
+                                     [?e :age age]
+                                     [(quot age 2) half]
+                                     (not [?e :salary half])]})]
+      (h/transact node [{:db/id :blocked :name "Blocked" :age 30 :salary 15}
+                        {:db/id :allowed :name "Allowed" :age 40 :salary 30}])
+      (is (= #{[["Allowed"] 1]} (set (h/consume-delta! iq))))
+      (h/transact node [{:db/id :allowed :salary 20}])
+      (is (= #{[["Allowed"] -1]} (set (h/consume-delta! iq)))))))
+
 (deftest e2e-idempotent-add-is-noop-test
   (let [node fix/*node*]
     (h/transact node [[:db/add 1 :edge 2]])
