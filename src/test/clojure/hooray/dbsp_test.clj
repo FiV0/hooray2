@@ -1263,6 +1263,22 @@
       (h/transact node [{:db/id :ivan :age 30}])
       (is (= #{[[29] 1] [[31] 1]} (set (h/consume-delta! iq)))))))
 
+(deftest e2e-grouped-function-cycle-with-later-seed-test
+  (testing "a later outer triple seeds a grouped function dependency cycle"
+    (let [node fix/*node*]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"age not bound"
+                            (h/q-inc node '{:find [age incremented]
+                                            :where [(or (and [(inc age) incremented]
+                                                             [(dec incremented) age]))
+                                                    [e :age age]]})))
+      ;; moving [?e :age age]
+      (let [iq (h/q-inc node '{:find [age incremented]
+                               :where [[e :age age]
+                                       (or (and [(inc age) incremented]
+                                                [(dec incremented) age]))]})]
+        (h/transact node [{:db/id :ivan :age 30}])
+        (is (= #{[[30 31] 1]} (set (h/consume-delta! iq))))))))
+
 (deftest e2e-function-not-test
   (testing "not over a bound fn clause anti-joins matching rows"
     (let [node fix/*node*
