@@ -717,11 +717,7 @@
   (let [stream (.addUnary circuit (FilterOp/fromPredicate "filter-predicate" (predicate-filter predicate vars)) stream)]
     (assoc acc :stream stream :vars out-vars)))
 
-;; Like `predicate-filter`, the function lowerings run once per tuple per
-;; delta, so the two supported arities call [f] directly.
 (defn- function-map-transform
-  "A Function<Tuple,Tuple> appending the fn clause's computed value as a new
-  trailing column. nil/false results are appended as ordinary values."
   [{f-sym :fn :keys [args] :as _descriptor} layout]
   (let [f (util/resolve-fn f-sym)
         var->idx (zipmap layout (range))
@@ -733,9 +729,10 @@
       2 (reify Function
           (apply [_ tuple] (append tuple (f (r0 tuple) (r1 tuple))))))))
 
+;; In case the output var is already present in the incoming stream, we simply
+;; check that the output of the function equals the existing var unification.
+;; An `:fn` becomes a filter.
 (defn- function-filter-predicate
-  "A Predicate<Tuple> keeping rows whose bound result column equals the fn
-  clause's computed value (`=`, so nil/false results compare as values)."
   [{f-sym :fn :keys [args ret-var] :as _descriptor} layout]
   (let [f (util/resolve-fn f-sym)
         var->idx (zipmap layout (range))
