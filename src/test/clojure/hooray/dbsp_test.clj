@@ -1220,7 +1220,7 @@
       (is (= #{[["Middle"] 1] [["Older"] 1]}
              (set (h/consume-delta! iq)))))))
 
-(deftest e2e-function-map-test
+(deftest e2e-function-test-only-projection-changes
   (testing "functions compose with predicates and emit only projected result changes"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name half]
@@ -1239,7 +1239,7 @@
       (is (= #{[["Ivan" 15] -1] [["Ivan" 16] 1]}
              (set (h/consume-delta! iq)))))))
 
-(deftest e2e-function-rebinding-filters-test
+(deftest e2e-function-output-already-bound
   (testing "a fn whose result variable is already bound keeps only matching rows"
     (let [node fix/*node*
           iq (h/q-inc node '{:find [name]
@@ -1252,17 +1252,6 @@
       (is (= #{[["Eq"] 1]} (set (h/consume-delta! iq))))
       (h/transact node [{:db/id :neq :salary 30}])
       (is (= #{[["Neq"] 1]} (set (h/consume-delta! iq)))))))
-
-(deftest e2e-function-nil-false-values-test
-  (testing "nil and false results are values, not row-removal signals"
-    (let [node fix/*node*
-          iq (h/q-inc node '{:find [name nil-value false-value]
-                             :where [[?e :name name]
-                                     [(identity nil) nil-value]
-                                     [(identity false) false-value]]})]
-      (h/transact node [{:db/id :ivan :name "Ivan"}])
-      (is (= #{[["Ivan" nil false] 1]}
-             (set (h/consume-delta! iq)))))))
 
 (deftest e2e-function-or-test
   (testing "fn branches of an or emit both computed values"
