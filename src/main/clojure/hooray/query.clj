@@ -192,12 +192,31 @@
   (->> (map free-variables patterns)
        (reduce clojure.set/union)))
 
+(defn- elem-var
+  "The variable bound by [el], or nil if it is a constant."
+  [[arg-type arg]]
+  (when (= :variable arg-type) arg))
+
+(defn- ground-function-results [patterns grounded]
+  (loop [grounded (set grounded)]
+    (let [next-grounded (reduce (fn [bound [_ [{:keys [args]} ret-var]]]
+                                  (if (clojure.set/subset? (set (keep elem-var args)) bound)
+                                    (conj bound ret-var)
+                                    bound))
+                                grounded
+                                patterns)]
+      (if (= grounded next-grounded)
+        grounded
+        (recur next-grounded)))))
+
 ;; TODO this doesn't properly work for nested patterns, let's first pass to not-join and or-join
 (defn validate-patterns
   ([patterns] (validate-patterns patterns #{}))
   ([patterns context-pos-vars]
-   (let [{triples :triple ors :or ands :and nots :not} (group-by first patterns)
-         positive-vars (into context-pos-vars (mapcat free-variables (concat triples ors ands)))]
+   (let [{triples :triple ors :or ands :and nots :not fns :fn} (group-by first patterns)
+         relational-vars (into context-pos-vars
+                               (mapcat free-variables (concat triples ors ands)))
+         positive-vars (ground-function-results fns relational-vars)]
 
      (doseq [[_ or-branches] ors]
        (let [or-branches-free-vars (mapv free-variables or-branches)]

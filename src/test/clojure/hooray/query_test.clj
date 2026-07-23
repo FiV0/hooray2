@@ -197,6 +197,17 @@
               (h/db fix/*node*)
               5))))
 
+(deftest test-function-result-binds-not
+  (let [query '{:find [name]
+                :where [[?e :name name]
+                        [?e :age age]
+                        [(quot age 2) half]
+                        (not [?e :salary half])]}]
+    (h/transact fix/*node* [{:db/id :blocked :name "Blocked" :age 30 :salary 15}
+                            {:db/id :allowed :name "Allowed" :age 40 :salary 30}])
+    (is (= [["Allowed"]]
+           (h/q query (h/db fix/*node*))))))
+
 (deftest test-or-can-ground-remaining-result-variables
   (h/transact fix/*node* [{:db/id :alice :name "Alice" :sex :male :age 30}
                           {:db/id :bob :name "Bob" :sex :male :salary 40}
