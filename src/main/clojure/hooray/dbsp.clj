@@ -105,14 +105,14 @@
            {:index index
             :kind :and
             :children children
-            :vars (vec (distinct (mapcat :vars children)))
-            :groundable (vec (distinct (mapcat :groundable children)))})
+            :vars (util/distinctv (mapcat :vars children))
+            :groundable (util/distinctv (mapcat :groundable children))})
 
     :not (let [children (vec (map-indexed compile-pattern pattern))]
            {:index index
             :kind :not
             :children children
-            :vars (vec (distinct (mapcat :vars children)))
+            :vars (util/distinctv (mapcat :vars children))
             :groundable []})
 
     :predicate (let [{:keys [predicate args]} pattern
@@ -121,12 +121,12 @@
                   :kind :predicate
                   :predicate predicate
                   :args args*
-                  :vars (vec (distinct (keep elem-var args*)))
+                  :vars (util/distinctv (keep elem-var args*))
                   :groundable []})
 
     :fn (let [[{:keys [fun args]} ret-var] pattern
               args* (mapv elem args)
-              arg-vars (vec (distinct (keep elem-var args*)))]
+              arg-vars (util/distinctv (keep elem-var args*))]
           (when-not (<= 1 (count args*) 2)
             (err/unsupported-ex "DBSP-standard engine only supports unary and binary functions"
                                 {:fn fun :args args :ret-var ret-var}))
@@ -135,7 +135,7 @@
            :fn fun
            :args args*
            :ret-var ret-var
-           :vars (vec (distinct (conj arg-vars ret-var)))
+           :vars (util/distinctv (conj arg-vars ret-var))
            :groundable (if (some #{ret-var} arg-vars) [] [ret-var])})
 
     (err/unsupported-ex (format "DBSP-standard engine does not yet support `%s` clauses" (name clause-type))
