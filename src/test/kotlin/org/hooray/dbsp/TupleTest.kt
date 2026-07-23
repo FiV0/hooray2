@@ -72,6 +72,12 @@ class TupleTest {
     }
 
     @Test
+    fun `append adds one trailing column`() {
+        assertEquals(Tuple.of(1, 2, 3), Tuple.of(1, 2).append(3))
+        assertEquals(Tuple.of(null), Tuple.EMPTY.append(null))
+    }
+
+    @Test
     fun `empty tuple is the cartesian join key`() {
         assertEquals(0, Tuple.EMPTY.arity)
         assertEquals(Tuple.EMPTY, Tuple.of(1, 2).prefix(0))

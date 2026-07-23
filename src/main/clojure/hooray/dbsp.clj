@@ -721,13 +721,12 @@
   [{f-sym :fn :keys [args] :as _descriptor} layout]
   (let [f (util/resolve-fn f-sym)
         var->idx (zipmap layout (range))
-        [r0 r1] (mapv #(arg-reader % layout var->idx) args)
-        append (fn ^Tuple [^Tuple tuple v] (.concat tuple (Tuple/of (object-array [v]))))]
+        [r0 r1] (mapv #(arg-reader % layout var->idx) args)]
     (case (count args)
       1 (reify Function
-          (apply [_ tuple] (append tuple (f (r0 tuple)))))
+          (apply [_ tuple] (.append ^Tuple tuple (f (r0 tuple)))))
       2 (reify Function
-          (apply [_ tuple] (append tuple (f (r0 tuple) (r1 tuple))))))))
+          (apply [_ tuple] (.append ^Tuple tuple (f (r0 tuple) (r1 tuple))))))))
 
 ;; In case the output var is already present in the incoming stream, we simply
 ;; check that the output of the function equals the existing var unification.
