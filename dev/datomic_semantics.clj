@@ -171,4 +171,37 @@
   (t/run-all-tests)
   (t/run-test-var #'cyclic-or-dependency-not-grounded-throws)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; tx-report-queue auto retraction
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(comment
+  (def db-uri (str "datomic:mem://test-" (random-uuid)))
+
+  (d/create-database db-uri)
+
+  (def conn (d/connect db-uri))
+
+  (def schema [{:db/ident :person/name
+                :db/valueType :db.type/string
+                :db/cardinality :db.cardinality/one}])
+
+  (d/transact conn schema)
+
+  (def tempids (:tempids @(d/transact conn [{:db/id "alice" :person/name "alica"}])))
+
+  (def report-queue (d/tx-report-queue conn))
+
+  (d/transact conn [{:db/id (get tempids "alice") :person/name "alice"}])
+
+  ;; contains both addition and retraction
+  (-> report-queue
+      first
+      :tx-data)
+  ;; => [#datom[13194139534315 50 #inst "2026-08-04T12:25:28.066-00:00" 13194139534315 true]
+  ;;     #datom[17592186045418 72 "alice" 13194139534315 true]
+  ;;     #datom[17592186045418 72 "alica" 13194139534315 false]]
+
+  (d/delete-database db-uri)
+
   )
