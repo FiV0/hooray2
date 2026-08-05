@@ -16,12 +16,17 @@ The planner for this engine will live in
 `src/main/clojure/hooray/plan2.clj`. It starts as a copy of `plan.clj` so that
 descriptor construction, groundability, variable ordering, and logical stage
 planning retain the semantics already used by the current `:generic` engine.
-The two planners diverge only at runtime lowering:
+The stage executor will live separately in
+`src/main/clojure/hooray/staged_generic_join.clj`. The two planners diverge
+only at runtime lowering:
 
 - `plan.clj` lowers descriptors to `ExecPattern` and `IStage` values for
   `GenericJoinEngine`;
-- `plan2.clj` lowers the same descriptors and logical stages to ordinary
-  `PrefixExtender`s plus recursive OR and NOT stages for `GenericJoin`.
+- `plan2.clj` lowers the same descriptors and logical stages to checked
+  Clojure maps containing ordinary `PrefixExtender`s plus recursive OR and
+  NOT stages;
+- `staged_generic_join.clj` executes those maps while delegating each ordinary
+  prefix range to `GenericJoin`.
 
 The intended query path is:
 
@@ -36,6 +41,9 @@ plan2.clj: descriptors -> logical stages
           |
           v
 plan2.clj: logical stages -> compiled prefix scope
+          |
+          v
+staged_generic_join.clj: fold runtime stages
           |
           v
 BindingSet between stage boundaries
@@ -145,6 +153,7 @@ extender itself does not need a more general layout contract.
 - Replacing `GenericPrefixExtender`, `GenericPredicatePrefixExtender`, or
   `GenericFnPrefixExtender` with `ExecPattern` implementations.
 - Reusing `GenericJoinEngine` for the new path.
+- Adding a Kotlin stage hierarchy or another JVM stage interface.
 - Changing query validation, query variable order, `:find` projection, or
   aggregation semantics.
 - Adding cost-based stage ordering.
@@ -193,14 +202,15 @@ The existing groundability rules remain:
 OR groundability remains a fixed point per branch, including nested
 composites. NOT remains validation-only.
 
-### Replace runtime lowering
+### Lower to Clojure scope and stage maps
 
 The current final phase of `plan.clj` creates `ExecPattern` values and
 `IStage` records. `plan2.clj` replaces that phase with a compiled scope made of
-ordinary extenders and recursive stage data.
+ordinary extenders and recursive Clojure stage maps.
 
-The following maps are illustrative; their exact record names are not part of
-the public API:
+The compiled representation uses Clojure maps and vectors. The container
+shape is Clojure data; the values under `:extenders` are the existing Kotlin
+`PrefixExtender` objects:
 
 ```clojure
 {:input-variables [?e]
@@ -219,6 +229,15 @@ the public API:
            :body compiled-body}]}
 ```
 
+These maps are internal runtime-plan data, not a new public interface.
+`plan2.clj` constructs them through small `generic-stage`, `or-stage`,
+`not-stage`, and `compiled-scope` helpers. Those helpers check required keys,
+distinct variables, prefix layouts, OR branch layouts, and validation-only NOT
+targets at the lowering boundary. Tests can compare the resulting maps
+directly for stage topology and layouts while testing the leaf extenders
+separately. This does not require Kotlin data classes, `IStage`
+implementations, or another cross-language stage protocol.
+
 The ownership boundary is:
 
 - a compiled scope owns every ordinary leaf extender in one conjunction;
@@ -228,7 +247,9 @@ The ownership boundary is:
 - the preceding target layout, or the unit layout for the first stage, is the
   physical input of a runtime stage;
 - `input-variables` describes the correlated relation supplied to a nested
-  scope, not a pre-populated prefix that skips its early levels.
+  scope, not a pre-populated prefix that skips its early levels;
+- `plan2.clj` owns compilation and validation of this representation;
+- `staged_generic_join.clj` owns its execution.
 
 ### Lower logical stages into composite barriers
 
@@ -345,15 +366,58 @@ The contract is:
   start level zero.
 
 `Join<T>` stays unchanged. `LeapfrogJoin`, `CombiJoin`, and unrelated join
-implementations do not acquire a seeded contract.
+implementations do not acquire a seeded contract. `joinFrom` is the only
+Kotlin API required by the staged design; `GenericJoin` does not accept stage
+objects and does not gain OR, NOT, `BindingSet`, or recursive-scope behavior.
 
-The staged executor constructs a `GenericJoin` per generic range. For a normal
-range it supplies the scope's leaf extenders. For a proposing OR range it adds
-one temporary `GenericRelationPrefixExtender` containing the completed OR
-relation. This keeps candidate selection and intersection in the existing
-generic join loop.
+The Clojure staged executor constructs a `GenericJoin` per generic range. For
+a normal range it supplies the scope's leaf extenders. For a proposing OR
+range it adds one temporary `GenericRelationPrefixExtender` containing the
+completed OR relation. This keeps candidate selection and intersection in the
+existing Kotlin generic join loop.
 
 ## Execution
+
+Stage execution lives in the Clojure namespace
+`hooray.staged-generic-join`, not in `plan2.clj` and not in a new Kotlin engine.
+Its public runtime entry point accepts a compiled scope and an input
+`BindingSet`, checks that the input layout equals the scope's
+`input-variables`, and returns a `BindingSet` in the scope's final planned
+layout.
+
+An `execute-scope` function reduces the scope's `:stages` over the current
+bindings. An `execute-stage` function dispatches on the stage's `:kind` with a
+closed `case` over `:generic`, `:or`, and `:not`; an unknown kind is an error.
+There is no stage protocol, multimethod, Kotlin data class, or `IStage`
+implementation. Recursive OR branches and NOT bodies call `execute-scope`
+with their compiled child maps.
+
+The intended Clojure shape is:
+
+```clojure
+(defn execute-scope [{:keys [stages] :as scope} input]
+  (reduce (fn [bindings stage]
+            (execute-stage scope bindings stage))
+          input
+          stages))
+
+(defn execute-stage [scope input {:keys [kind] :as stage}]
+  (case kind
+    :generic (execute-generic-stage scope input stage)
+    :or (execute-or-stage scope input stage)
+    :not (execute-not-stage scope input stage)
+    (throw (IllegalStateException. (str "Unknown stage kind " kind)))))
+```
+
+These signatures are illustrative; the contract and ownership boundary are
+the decision.
+
+This leaves orchestration in Clojure while keeping the row-intensive
+`count`/`propose`/`intersect` loop in Kotlin. Calls between Clojure and Kotlin
+happen once per generic range or materialized composite boundary, not once per
+candidate value. The existing Kotlin `BindingSet` remains the boundary value;
+its projection, reorder, union, semijoin, and antijoin methods are called
+directly from Clojure.
 
 ### Scope execution
 
@@ -500,12 +564,16 @@ available until the staged prefix engine is complete.
 At cutover, the `:generic-old` arm in `query.clj` becomes conceptually:
 
 ```clojure
-(plan2/execute (plan2/plan db conformed-query args vars-in-join-order))
+(.getRows
+ (staged-generic-join/execute
+  (plan2/plan db conformed-query args vars-in-join-order)
+  empty-binding-set))
 ```
 
-`plan2/execute` returns rows in the query variable order expected by the
-existing `compile-find` path. Projection, aggregates, `:keys`, `:strs`, and
-`:syms` remain unchanged.
+`plan2/plan` only compiles the recursive scope. The staged executor returns a
+`BindingSet` in the query variable order expected by the existing
+`compile-find` path, and `query.clj` unwraps its rows. Projection, aggregates,
+`:keys`, `:strs`, and `:syms` remain unchanged.
 
 The direct recursive `compile-pattern` path stays in place until this cutover
 so each phase can be compared with the restored engine. It is removed from the
@@ -546,7 +614,23 @@ hot prefix loop. Explicit stage boundaries keep the leaf interface small.
 about recursive scopes, projection, union, semijoin, and antijoin would mix the
 prefix kernel with the planner/runtime coordinator. The proposed change keeps
 `GenericJoin` responsible for a seeded range of ordinary levels while
-`plan2.clj` folds composite stages around it.
+`staged_generic_join.clj` folds composite stages around it.
+
+### Represent and execute stages in Kotlin
+
+A Kotlin sealed hierarchy and staged engine would give exhaustive type
+checking, but these stages are internal values produced by a Clojure planner
+and consumed by one coordinator. It would add constructors and interop types
+without moving the hot prefix loop. Checked Clojure maps retain direct planner
+tests and keep recursive lowering local to `plan2.clj`; the separate Clojure
+executor provides the runtime boundary.
+
+### Execute stages inside plan2.clj
+
+Keeping compilation and execution in one namespace would require fewer files,
+but it would make the copied planner responsible for storage access,
+materialization, and recursion at runtime. A separate executor keeps
+`plan2.clj` usable for pure descriptor, logical-stage, and lowering tests.
 
 ### Extract shared planning helpers immediately
 
@@ -584,7 +668,9 @@ Focused verification:
 ### Phase 2: Copy planning into plan2.clj
 
 Copy descriptor construction and `plan-scope` from `plan.clj`, with a separate
-`hooray.plan2` namespace and tests. Do not add runtime extenders yet.
+`hooray.plan2` namespace and tests. Add the checked Clojure constructors and
+lower logical stages into recursive scope and stage maps. Do not execute the
+maps or add runtime extenders yet.
 
 Acceptance criteria:
 
@@ -600,6 +686,9 @@ Acceptance criteria:
   the leaf validation absorbed into its correlation join.
 - Proposing branches receive the pre-stage layout; validating bodies receive
   the post-generic layout.
+- Compiled-scope topology and all three stage variants are directly comparable
+  Clojure maps with checked layout invariants.
+- `plan2.clj` contains no stage execution or storage access.
 - No implementation helper is extracted back into `plan.clj` in this phase.
 
 Focused verification:
@@ -608,10 +697,11 @@ Focused verification:
 ./gradlew test --tests 'hooray.plan2_test__init'
 ```
 
-### Phase 3: Ordinary lowering and generic-stage execution
+### Phase 3: Clojure executor and ordinary generic stages
 
 Compile triple, relation, predicate, and function descriptors to their current
-extenders. Lower and execute generic ranges with `BindingSet` boundaries.
+extenders. Add `hooray.staged-generic-join` and execute generic ranges with
+`BindingSet` boundaries.
 
 Acceptance criteria:
 
@@ -623,6 +713,8 @@ Acceptance criteria:
 - Predicate argument order and function dependencies remain correct.
 - Consecutive generic stages preserve layouts and multiplicity.
 - Empty generic results retain the planned target layout.
+- The executor rejects unknown stage kinds and mismatched scope input layouts.
+- No Kotlin stage class or staged-engine class is introduced.
 
 Focused verification:
 
@@ -633,8 +725,9 @@ Focused verification:
 
 ### Phase 4: OR stages
 
-Add isolated branch execution, distinct union, validation semijoin, and the
-temporary relation extender used for proposing OR stages.
+Add isolated branch execution to the Clojure executor, distinct union,
+validation semijoin, and the temporary relation extender used for proposing
+OR stages.
 
 Acceptance criteria:
 
@@ -662,8 +755,8 @@ Focused verification:
 
 ### Phase 5: NOT stages
 
-Add correlated body execution and antijoin. Stop compiling NOT to
-`GenericNotPrefixExtender` in the staged path.
+Add correlated body execution and antijoin to the Clojure executor. Stop
+compiling NOT to `GenericNotPrefixExtender` in the staged path.
 
 Acceptance criteria:
 
@@ -682,9 +775,10 @@ Focused verification:
 
 ### Phase 6: Cut over :generic-old
 
-Route `:generic-old` through `plan2/plan` and `plan2/execute`. Keep `:generic`
-as the independent reference engine and continue using
-`with-each-query-engine` to run the public query suite against both.
+Route `:generic-old` through `plan2/plan` and
+`staged-generic-join/execute`. Keep `:generic` as the independent reference
+engine and continue using `with-each-query-engine` to run the public query
+suite against both.
 
 Acceptance criteria:
 
@@ -722,6 +816,12 @@ through the earlier phases makes behavior comparisons and rollback simple.
 - `plan.clj` and `plan2.clj` intentionally duplicate descriptor and logical
   planning code during the experiment. Changes to shared query semantics must
   be applied consciously to both until a later extraction.
+- Plain stage maps have no compiler-enforced exhaustiveness. Checked
+  constructors validate their shape, and the executor rejects unknown
+  `:kind` values at its boundary.
+- Clojure coordinates stage and composite boundaries while Kotlin executes
+  prefix-level loops and `BindingSet` operations. This introduces JVM interop
+  calls per stage, but not per candidate value.
 - OR and NOT allocate intermediate `BindingSet` relations at explicit
   boundaries.
 - Distinct correlated inputs prevent duplicate outer rows from repeating
