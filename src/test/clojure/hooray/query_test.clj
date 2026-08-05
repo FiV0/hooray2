@@ -43,7 +43,7 @@
 (create-ns 'tpch)
 (alias 'tpch 'tpch)
 
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
+(t/use-fixtures :each fix/with-each-query-engine fix/with-node fix/with-people-schema)
 
 (deftest test-sanity-check
   (h/transact fix/*node* [{:db/id 1 :name "Ivan"}])

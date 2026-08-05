@@ -12,7 +12,7 @@
 
 (s/def ::type #{:mem})
 (s/def ::storage #{:hash :avl :btree})
-(s/def ::algo #{:hash :leapfrog :generic :combi})
+(s/def ::algo #{:hash :leapfrog :generic :generic-old :combi})
 
 (s/def ::conn-opts (s/keys :req-un [::type ::storage ::algo]))
 
