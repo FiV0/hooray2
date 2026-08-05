@@ -145,7 +145,7 @@ class GenericSingleJoin(val extenders : List<PrefixExtender>, val prefixes: List
     }
 }
 
-class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<ResultTuple> {
+class GenericJoin(val extenders: List<PrefixExtender>, private val levels: Int) : Join<ResultTuple> {
 
     // Precompute which extenders participate in which levels
     private val extenderSets : List<List<PrefixExtender>> = List(levels) { level ->
@@ -158,15 +158,30 @@ class GenericJoin(val extenders: List<PrefixExtender>, levels: Int) : Join<Resul
         participants
     }
 
-    override fun join(): List<ResultTuple> {
-        var prefixes: List<Prefix> = listOf(persistentListOf())
+    fun joinFrom(prefixes: List<Prefix>, startLevel: Int): List<ResultTuple> {
+        require(startLevel in 0..levels) {
+            "Start level $startLevel must be between 0 and target level $levels"
+        }
+        prefixes.forEachIndexed { index, prefix ->
+            require(prefix.size == startLevel) {
+                "Prefix $index has arity ${prefix.size}, expected $startLevel"
+            }
+        }
+
+        if (prefixes.isEmpty()) {
+            return emptyList()
+        }
 
         // For every level, perform a single join with the extenders participating in that level
-        for (extenderSet in extenderSets) {
-            val singleJoin = GenericSingleJoin(extenderSet, prefixes)
-            prefixes = singleJoin.join()
+        var result = prefixes
+        for (level in startLevel until levels) {
+            val extenderSet = extenderSets[level]
+            val singleJoin = GenericSingleJoin(extenderSet, result)
+            result = singleJoin.join()
         }
         // After all levels are processed, the prefixes are the result tuples
-        return prefixes
+        return result
     }
+
+    override fun join(): List<ResultTuple> = joinFrom(listOf(persistentListOf()), 0)
 }

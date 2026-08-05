@@ -7,6 +7,84 @@ import org.junit.jupiter.api.assertThrows
 class GenericJoinTest {
 
     @Test
+    fun `joinFrom resumes from the requested level`() {
+        val level0Extender = object : PrefixExtender {
+            override fun count(prefix: Prefix): Int = error("level zero must not execute")
+            override fun propose(prefix: Prefix): List<Extension> = error("level zero must not execute")
+            override fun intersect(prefix: Prefix, extensions: List<Extension>): List<Extension> =
+                error("level zero must not execute")
+
+            override fun participatesInLevel(level: Int) = level == 0
+        }
+        val level1Extender = PrefixExtender.createSingleLevel(listOf("a", "b"), 1)
+        val join = GenericJoin(listOf(level0Extender, level1Extender), 2)
+
+        assertEquals(
+            listOf(listOf(2, "a"), listOf(2, "b")),
+            join.joinFrom(listOf(listOf(2)), 1),
+        )
+    }
+
+    @Test
+    fun `joinFrom preserves duplicate prefixes`() {
+        val extender = PrefixExtender.createSingleLevel(listOf("x"), 1)
+        val join = GenericJoin(listOf(extender), 2)
+
+        assertEquals(
+            listOf(listOf(1, "x"), listOf(1, "x")),
+            join.joinFrom(listOf(listOf(1), listOf(1)), 1),
+        )
+    }
+
+    @Test
+    fun `joinFrom accepts empty input`() {
+        val extender = PrefixExtender.createSingleLevel(listOf("x"), 1)
+        val join = GenericJoin(listOf(extender), 2)
+
+        assertEquals(emptyList<ResultTuple>(), join.joinFrom(emptyList(), 1))
+    }
+
+    @Test
+    fun `joinFrom returns prefixes unchanged at the target level`() {
+        val join = GenericJoin(emptyList(), 2)
+        val prefixes = listOf(listOf<Any>(1, "x"), listOf<Any>(1, "x"))
+
+        assertEquals(prefixes, join.joinFrom(prefixes, 2))
+    }
+
+    @Test
+    fun `joinFrom rejects invalid start levels`() {
+        val join = GenericJoin(emptyList(), 2)
+
+        assertThrows<IllegalArgumentException> {
+            join.joinFrom(emptyList(), -1)
+        }
+        assertThrows<IllegalArgumentException> {
+            join.joinFrom(emptyList(), 3)
+        }
+    }
+
+    @Test
+    fun `joinFrom rejects prefixes with the wrong arity`() {
+        val join = GenericJoin(emptyList(), 2)
+
+        assertThrows<IllegalArgumentException> {
+            join.joinFrom(listOf(emptyList()), 1)
+        }
+        assertThrows<IllegalArgumentException> {
+            join.joinFrom(listOf(listOf(1), listOf(1, 2)), 1)
+        }
+    }
+
+    @Test
+    fun `join delegates to joinFrom from the unit prefix`() {
+        val extender = PrefixExtender.createSingleLevel(listOf(1, 2), 0)
+        val join = GenericJoin(listOf(extender), 1)
+
+        assertEquals(join.joinFrom(listOf(emptyList()), 0), join.join())
+    }
+
+    @Test
     fun `test empty extenders fails`() {
         val emptyExtenders = emptyList<PrefixExtender>()
         val prefixes = listOf(emptyList<Any>())
