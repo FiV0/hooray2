@@ -6,6 +6,12 @@
    [hooray.plan2 :as plan2]
    [hooray.query :as query]))
 
+(def empty-db
+  {:eav {}
+   :aev {}
+   :ave {}
+   :opts {:storage :hash}})
+
 (defn- conform-query [query]
   (s/conform ::query/query query))
 
@@ -51,13 +57,14 @@
                          '{:find [?e ?name]
                            :where [[?e :name ?name]]})
         variable-order (vec (query/query->variable-order conformed-query))
-        compiled (plan2/plan nil conformed-query [] variable-order)]
+        compiled (plan2/plan empty-db conformed-query [] variable-order)]
     (is (= {:input-variables []
             :variable-order '[?e ?name]
             :extenders []
             :stages [{:kind :generic
                       :target-variables '[?e ?name]}]}
-           compiled))))
+           (assoc compiled :extenders [])))
+    (is (= 1 (count (:extenders compiled))))))
 
 (deftest ordinary-proposal-and-composite-validation-become-separate-stages-test
   (let [conformed-query (conform-query
@@ -66,7 +73,7 @@
                                    (or [(= ?name "A")]
                                        [(= ?name "B")])]})
         variable-order (vec (query/query->variable-order conformed-query))
-        {:keys [stages]} (plan2/plan nil conformed-query [] variable-order)
+        {:keys [stages]} (plan2/plan empty-db conformed-query [] variable-order)
         [generic-stage or-stage] stages]
     (is (= [:generic :or] (mapv :kind stages)))
     (is (= variable-order (:target-variables generic-stage)))
@@ -82,7 +89,7 @@
                                    (or [?e :name ?name]
                                        [?e :alias ?name])]})
         variable-order (vec (query/query->variable-order conformed-query))
-        {:keys [stages]} (plan2/plan nil conformed-query [] variable-order)
+        {:keys [stages]} (plan2/plan empty-db conformed-query [] variable-order)
         or-stage (second stages)]
     (is (= [:generic :or] (mapv :kind stages)))
     (is (= '[?name] (:added or-stage)))
@@ -98,7 +105,7 @@
                                             [?e :years ?age]))
                                    [(< ?age 100)]]})
         variable-order (vec (query/query->variable-order conformed-query))
-        {:keys [stages]} (plan2/plan nil conformed-query [] variable-order)]
+        {:keys [stages]} (plan2/plan empty-db conformed-query [] variable-order)]
     (is (= [:or] (mapv :kind stages)))
     (is (= variable-order (:added (first stages))))
     (is (= variable-order (:target-variables (first stages))))))
@@ -109,7 +116,7 @@
                            :where [[?e :name ?name]
                                    (not [?e :blocked-name ?name])]})
         variable-order (vec (query/query->variable-order conformed-query))
-        {:keys [stages]} (plan2/plan nil conformed-query [] variable-order)
+        {:keys [stages]} (plan2/plan empty-db conformed-query [] variable-order)
         not-stage (second stages)]
     (is (= [:generic :not] (mapv :kind stages)))
     (is (= variable-order (:target-variables not-stage)))

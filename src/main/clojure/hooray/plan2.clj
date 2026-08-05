@@ -1,11 +1,20 @@
 (ns hooray.plan2
   (:require
+   [clojure.core.match :refer [match]]
    [clojure.set :as set]
+   [hooray.db :as db]
    [hooray.error :as err]
    [hooray.util :as util])
   (:import
    (org.hooray UniversalComparator)
-   (org.hooray.engine BindingSet)))
+   (org.hooray.engine BindingSet)
+   (org.hooray.iterator
+    GenericFnPrefixExtender
+    GenericPredicatePrefixExtender
+    GenericPrefixExtender
+    GenericRelationPrefixExtender
+    SealedIndex$MapIndex
+    SealedIndex$SetIndex)))
 
 (defn- ensure-distinct [values message]
   (when-not (= (count values) (count (distinct values)))
@@ -26,6 +35,18 @@
 (defn- groundable-variables
   [{:keys [groundable] :as _descriptor} bound]
   (vec (groundable (set bound))))
+
+(defn- fn+args->function [f args var->idx]
+  (match args
+    [[:constant c1] [:constant c2]] (util/->closure (fn [] (f c1 c2)))
+    [[:constant c1] [:variable _]] (util/->function (fn [a] (f c1 a)))
+    [[:variable _] [:constant c2]] (util/->function (fn [a] (f a c2)))
+    [[:variable v1] [:variable v2]] (if (< (var->idx v1) (var->idx v2))
+                                      (util/->bifunction (fn [a b] (f a b)))
+                                      (util/->bifunction (fn [a b] (f b a))))
+    [[:constant c]] (util/->closure (fn [] (f c)))
+    [[:variable _]] (util/->function (fn [a] (f a)))
+    :else (throw (ex-info "Unknown function pattern" {:fn f :args args}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; clauses -> descriptors
@@ -372,6 +393,83 @@
      :extenders (vec extenders)
      :stages stages}))
 
+(defn- sealed-index [index]
+  (if (set? index)
+    (SealedIndex$SetIndex. index)
+    (SealedIndex$MapIndex. index)))
+
+(defn- triple-extender
+  [{:keys [eav aev ave opts] :as _db} variable-order {:keys [e a v] :as clause}]
+  (let [empty-set (db/set* (:storage opts))
+        empty-map (db/map* (:storage opts))
+        var->idx (zipmap variable-order (range))]
+    (match [e a v]
+      [[:constant _] [:constant _] [:constant _]]
+      (err/unsupported-ex)
+
+      [[:constant entity] [:constant attribute] [:variable value-var]]
+      (GenericPrefixExtender.
+       (sealed-index (get-in eav [entity attribute] empty-set))
+       [(int (var->idx value-var))])
+
+      [[:variable entity-var] [:constant attribute] [:constant value]]
+      (GenericPrefixExtender.
+       (sealed-index (get-in ave [attribute value] empty-set))
+       [(int (var->idx entity-var))])
+
+      [[:variable entity-var] [:constant attribute] [:variable value-var]]
+      (let [entity-level (int (var->idx entity-var))
+            value-level (int (var->idx value-var))
+            [index levels] (if (< entity-level value-level)
+                             [aev [entity-level value-level]]
+                             [ave [value-level entity-level]])]
+        (GenericPrefixExtender.
+         (sealed-index (get index attribute empty-map))
+         levels))
+
+      :else (throw (ex-info "Unknown triple clause" {:triple clause})))))
+
+(defn- relation-extender
+  [{:keys [variables binding-set] :as _descriptor} variable-order]
+  (let [variable-set (set variables)
+        ordered-variables (filterv variable-set variable-order)
+        var->idx (zipmap variable-order (range))
+        ^BindingSet normalized (.reorder ^BindingSet binding-set ordered-variables)
+        levels (mapv (comp int var->idx) ordered-variables)]
+    (GenericRelationPrefixExtender. levels (.getRows normalized))))
+
+(defn- predicate-extender
+  [{:keys [clause]} variable-order]
+  (let [{:keys [predicate args]} clause
+        var->idx (zipmap variable-order (range))
+        variable-args (->> args
+                           (keep (fn [[argument-type value]]
+                                   (when (= :variable argument-type)
+                                     value))))]
+    (GenericPredicatePrefixExtender.
+     (sort (mapv (comp int var->idx) variable-args))
+     (fn+args->function (util/resolve-fn predicate) args var->idx))))
+
+(defn- function-extender
+  [{:keys [clause]} variable-order]
+  (let [[{:keys [fun args]} output] clause
+        var->idx (zipmap variable-order (range))
+        variable-args (->> args
+                           (keep (fn [[argument-type value]]
+                                   (when (= :variable argument-type)
+                                     value))))]
+    (GenericFnPrefixExtender.
+     (sort (mapv (comp int var->idx) variable-args))
+     (int (var->idx output))
+     (fn+args->function (util/resolve-fn fun) args var->idx))))
+
+(defn- descriptor->extender [db descriptor variable-order]
+  (case (:kind descriptor)
+    :triple (triple-extender db variable-order (:clause descriptor))
+    :relation (relation-extender descriptor variable-order)
+    :predicate (predicate-extender descriptor variable-order)
+    :function (function-extender descriptor variable-order)))
+
 (declare compile-scope)
 
 (defn- append-generic-stage [stages target-variables]
@@ -380,34 +478,36 @@
     (conj stages (generic-stage target-variables))))
 
 (defn- compile-or-stage
-  [{:keys [variables branches]} input-variables added target-variables]
-  (let [compiled-branches (mapv #(compile-scope % variables input-variables) branches)]
+  [db {:keys [variables branches]} input-variables added target-variables]
+  (let [compiled-branches (mapv #(compile-scope db % variables input-variables) branches)]
     (or-stage variables added input-variables target-variables compiled-branches)))
 
 (defn- compile-not-stage
-  [{:keys [variables children]} input-variables target-variables]
+  [db {:keys [variables children]} input-variables target-variables]
   (not-stage variables
              input-variables
              target-variables
-             (compile-scope children variables input-variables)))
+             (compile-scope db children variables input-variables)))
 
 (defn- append-validation-composites
-  [stages descriptors input-variables target-variables]
+  [db stages descriptors input-variables target-variables]
   (reduce (fn [compiled descriptor]
             (case (:kind descriptor)
               :or (conj compiled
-                        (compile-or-stage descriptor
+                        (compile-or-stage db
+                                          descriptor
                                           input-variables
                                           []
                                           target-variables))
               :not (conj compiled
-                         (compile-not-stage descriptor
+                         (compile-not-stage db
+                                            descriptor
                                             input-variables
                                             target-variables))))
           stages
           descriptors))
 
-(defn- lower-stages [descriptors logical-stages]
+(defn- lower-stages [db descriptors logical-stages]
   (let [descriptors-by-index (into {} (map (juxt :idx identity) descriptors))
         descriptor-for (fn [idx]
                          (or (get descriptors-by-index idx)
@@ -429,7 +529,8 @@
             proposing-or
             (recur target-variables
                    (conj stages
-                         (compile-or-stage proposing-or
+                         (compile-or-stage db
+                                           proposing-or
                                            bound
                                            added
                                            target-variables))
@@ -438,7 +539,8 @@
 
             (seq added)
             (let [stages (append-generic-stage stages target-variables)
-                  stages (append-validation-composites stages
+                  stages (append-validation-composites db
+                                                        stages
                                                         composites
                                                         target-variables
                                                         target-variables)]
@@ -450,22 +552,26 @@
                 (throw (IllegalStateException.
                         "Leaf-only validation must immediately follow a proposing OR")))
               (recur target-variables
-                     (append-validation-composites stages
+                     (append-validation-composites db
+                                                   stages
                                                    composites
                                                    bound
                                                    target-variables)
                      false
                      remaining))))))))
 
-(defn- compile-scope [descriptors variable-order incoming]
+(defn- compile-scope [db descriptors variable-order incoming]
   (let [{:keys [input-variables variable-order]} (scope-layout variable-order incoming)
         logical-stages (plan-scope descriptors variable-order input-variables)
-        stages (lower-stages descriptors logical-stages)]
-    (compiled-scope input-variables variable-order [] stages)))
+        stages (lower-stages db descriptors logical-stages)
+        extenders (->> descriptors
+                       (remove #(#{:or :not} (:kind %)))
+                       (mapv #(descriptor->extender db % variable-order)))]
+    (compiled-scope input-variables variable-order extenders stages)))
 
 (defn plan
   "Compiles a validated, conformed query into a recursive Clojure staged-prefix plan."
-  [_db {:keys [in where] :as _conformed-query} args variable-order]
+  [db {:keys [in where] :as _conformed-query} args variable-order]
   (let [descriptors (into (inputs->descriptors in args)
                           (clauses->descriptors where))]
-    (compile-scope descriptors (vec variable-order) [])))
+    (compile-scope db descriptors (vec variable-order) [])))
