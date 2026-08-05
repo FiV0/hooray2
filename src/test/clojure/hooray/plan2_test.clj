@@ -141,3 +141,16 @@
                                      :variable-order ['?e]
                                      :extenders []
                                      :stages []})))))
+
+(deftest compiled-scope-uses-a-valid-topological-prefix-order-test
+  (let [conformed-query (conform-query
+                         '{:find [?result ?e]
+                           :where [[(> ?result 0)]
+                                   [?e :age ?age]
+                                   [(inc ?age) ?result]]})
+        requested-order (vec (query/query->variable-order conformed-query))
+        compiled (plan2/plan empty-db conformed-query [] requested-order)]
+    (is (= '[?result ?e ?age] requested-order))
+    (is (= '[?e ?age ?result] (:variable-order compiled)))
+    (is (= '[?e ?age ?result]
+           (get-in compiled [:stages 0 :target-variables])))))

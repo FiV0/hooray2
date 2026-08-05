@@ -153,4 +153,28 @@ class GenericFnPrefixExtenderTest {
         val prefix = listOf(10, "ignored", 5)
         assertEquals(listOf(15), fnExtender.propose(prefix))
     }
+
+    @Test
+    fun `unary function validates when its output is already bound`() {
+        val double: Fn1<Any, Any> = { x -> (x as Int) * 2 }
+        val fnExtender = GenericFnPrefixExtender(listOf(1), 0, double)
+
+        assertEquals(false, fnExtender.participatesInLevel(0))
+        assertEquals(true, fnExtender.participatesInLevel(1))
+        assertEquals(Int.MAX_VALUE, fnExtender.count(listOf(10)))
+        assertThrows<IllegalStateException> {
+            fnExtender.propose(listOf(10))
+        }
+        assertEquals(listOf(5), fnExtender.intersect(listOf(10), listOf(4, 5, 6)))
+    }
+
+    @Test
+    fun `binary function validates in argument order when its output is already bound`() {
+        val sum: Fn2<Any, Any, Any> = { a, b -> (a as Int) + (b as Int) }
+        val fnExtender = GenericFnPrefixExtender(listOf(0, 2), 1, sum)
+
+        assertEquals(false, fnExtender.participatesInLevel(1))
+        assertEquals(true, fnExtender.participatesInLevel(2))
+        assertEquals(listOf(4), fnExtender.intersect(listOf(3, 7), listOf(2, 4, 5)))
+    }
 }

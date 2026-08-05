@@ -561,7 +561,17 @@
                      remaining))))))))
 
 (defn- compile-scope [db descriptors variable-order incoming]
-  (let [{:keys [input-variables variable-order]} (scope-layout variable-order incoming)
+  (let [{input-variables :input-variables
+         requested-variable-order :variable-order} (scope-layout variable-order incoming)
+        initial-logical-stages (plan-scope descriptors
+                                           requested-variable-order
+                                           input-variables)
+        variable-order (->> initial-logical-stages
+                            (mapcat :added)
+                            vec)
+        _ (when-not (= (set requested-variable-order) (set variable-order))
+            (throw (IllegalStateException.
+                    "Logical stages must introduce every scope variable")))
         logical-stages (plan-scope descriptors variable-order input-variables)
         stages (lower-stages db descriptors logical-stages)
         extenders (->> descriptors

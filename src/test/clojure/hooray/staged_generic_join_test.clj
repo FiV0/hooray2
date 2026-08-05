@@ -15,9 +15,9 @@
 
 (defn- staged-query [db query-form & args]
   (let [conformed-query (s/conform ::query/query query-form)
-        variable-order (vec (query/query->variable-order conformed-query))
-        var->idx (zipmap variable-order (range))
-        scope (plan2/plan db conformed-query args variable-order)
+        requested-variable-order (vec (query/query->variable-order conformed-query))
+        scope (plan2/plan db conformed-query args requested-variable-order)
+        var->idx (zipmap (:variable-order scope) (range))
         rows (.getRows ^BindingSet (staged-generic-join/execute scope unit-bindings))]
     ((query/compile-find (:find conformed-query) var->idx) rows)))
 
@@ -136,3 +136,102 @@
                      :where [[?e :name "Relation witness"]]}
                    [[2 1]]
                    [[1 2 3]]))))))
+
+(t/deftest or-branch-predicates-remain-attached-to-their-branch-test
+  (h/transact fix/*node* [{:db/id :db/limit
+                           :db/ident :limit
+                           :db/valueType :db.type/long
+                           :db/cardinality :db.cardinality/one}])
+  (h/transact fix/*node* [{:db/id 1 :name "valid" :age 5 :salary 10 :limit 5}
+                          {:db/id 2 :name "leaked" :age 20 :salary 10 :limit 5}])
+
+  (t/is (= [["valid"]]
+           (staged-query
+            (h/db fix/*node*)
+            '{:find [?name]
+              :where [[?e :name ?name]
+                      [?e :age ?age]
+                      [?e :salary ?score]
+                      [?e :limit ?limit]
+                      (or (and [(< ?age ?score)]
+                               [(< ?limit 10)])
+                          (and [(> ?age ?score)]
+                               [(< ?limit 0)]))]}))))
+
+(t/deftest or-branches-can-produce-their-common-layout-in-different-orders-test
+  (h/transact fix/*node* [{:db/id :alice :age 30}
+                          {:db/id :bob :salary 40}])
+  (let [db (h/db fix/*node*)
+        query-form '{:find [?e ?a ?b]
+                     :where [(or (and [?e :age ?a]
+                                      [(inc ?a) ?b])
+                                 (and [?e :salary ?b]
+                                      [(dec ?b) ?a]))]}]
+    (t/is (= #{[:alice 30 31]
+               [:bob 39 40]}
+             (set (staged-query db query-form))))
+    (t/is (= #{[:alice 30 31]
+               [:bob 39 40]}
+             (set (staged-query
+                   db
+                   (assoc query-form :in '[[[?e ?a]]])
+                   [[:alice 30]
+                    [:bob 39]]))))))
+
+(t/deftest nested-or-groundability-remains-all-or-nothing-test
+  (h/transact fix/*node* [{:db/id 1 :age 35}
+                          {:db/id 2 :age 35}
+                          {:db/id 3 :age 35}])
+  (let [db (h/db fix/*node*)]
+    (t/is (= [[2 1]]
+             (sort
+              (staged-query
+               db
+               '{:find [?v ?e]
+                 :where [(or (and (or [?v :next ?e]
+                                      (and [?e :age 35]
+                                           [(< ?v 3)]))
+                                  [(inc ?e) ?v]))
+                         [?e :age 35]]}))))
+    (t/is (= [[2 1] [3 2] [4 3]]
+             (sort
+              (staged-query
+               db
+               '{:find [?v ?e]
+                 :where [(or (and (or (and [(< ?v 3)] [?e :age 35])
+                                      (and [(> ?v 1)] [?e :age 35]))
+                                  [(inc ?e) ?v]))
+                         [?e :age 35]]}))))))
+
+(t/deftest or-materialization-uses-set-semantics-and-preserves-outer-columns-test
+  (h/transact fix/*node* [{:db/id :alice :age 30}])
+
+  (t/is (= [["outer" :alice 30]]
+           (staged-query
+            (h/db fix/*node*)
+            '{:find [?tag ?e ?age]
+              :in [?tag]
+              :where [(or [?e :age ?age]
+                          [?e :age ?age])]}
+            "outer"))))
+
+(t/deftest validating-or-preserves-duplicate-outer-rows-test
+  (let [scope {:input-variables []
+               :variable-order ['?value '?tag]
+               :extenders [(PrefixExtender/createSingleLevel [1 1] 0)
+                           (PrefixExtender/createSingleLevel ["outer"] 1)]
+               :stages [{:kind :generic
+                         :target-variables ['?value '?tag]}
+                        {:kind :or
+                         :variables ['?value]
+                         :added []
+                         :target-variables ['?value '?tag]
+                         :branches [{:input-variables ['?value]
+                                     :variable-order ['?value]
+                                     :extenders []
+                                     :stages [{:kind :generic
+                                               :target-variables ['?value]}]}]}]}
+        result (staged-generic-join/execute scope unit-bindings)]
+    (t/is (= ['?value '?tag] (.getVariables ^BindingSet result)))
+    (t/is (= [[1 "outer"] [1 "outer"]]
+             (.getRows ^BindingSet result)))))
