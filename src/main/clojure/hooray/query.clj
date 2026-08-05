@@ -7,6 +7,8 @@
    [hooray.db :as db]
    [hooray.error :as err]
    [hooray.plan :as plan]
+   [hooray.plan2 :as plan2]
+   [hooray.staged-generic-join :as staged-generic-join]
    [hooray.util :as util])
   (:import
    (java.util Map HashMap)
@@ -538,9 +540,10 @@
         var->idx (zipmap vars-in-join-order (range))
         rows (case (:algo opts)
                :generic (execute (plan/plan db conformed-query args vars-in-join-order))
-               :generic-old (let [compiled-patterns (concat (in->iterators in var->idx args opts)
-                                                            (map (partial compile-pattern db vars-in-join-order) where))]
-                              (generic-old-join compiled-patterns (count vars-in-join-order)))
+               :generic-old (let [target-variables (vec vars-in-join-order)
+                                  scope (plan2/plan db conformed-query args target-variables)
+                                  result (staged-generic-join/execute scope empty-binding-set)]
+                              (.getRows ^BindingSet (.reorder ^BindingSet result target-variables)))
                :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args opts)
                                                          (map (partial compile-pattern db vars-in-join-order) where))]
                            (leapfrog-join compiled-patterns (count vars-in-join-order))))

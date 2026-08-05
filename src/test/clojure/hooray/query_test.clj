@@ -128,7 +128,6 @@
               [(< ?age 40)])]}
           (h/db fix/*node*)))))
 
-#_
 (deftest test-or-and-branch-predicates-stay-bound-to-same-prefix
   (h/transact fix/*node* [{:db/id :db/limit
                            :db/ident :limit
@@ -162,7 +161,6 @@
                                       [?e :name ?name]))]}
                    (h/db fix/*node*))))))
 
-#_
 (deftest test-or-branches-can-introduce-variables-in-different-orders
   (h/transact fix/*node* [{:db/id :alice :age 30}
                           {:db/id :bob :salary 40}])
@@ -249,7 +247,6 @@
                         [(> ?amount 35)]]}
               (h/db fix/*node*)))))
 
-#_
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id 1 :age 35}
                           {:db/id 2 :age 35}
@@ -379,7 +376,6 @@
                      (h/db fix/*node*)
                      [["Ivan" "Ivanov"]
                       ["Petr" "Petrov"]])))))
-#_
 (deftest test-relation-bindings-with-conflicting-variable-orders
   (h/transact fix/*node* [{:db/id :relation-witness :name "Relation witness"}])
 
@@ -391,7 +387,6 @@
                      [[1 2] [3 4]]
                      [[2 1] [5 6]])))))
 
-#_
 (deftest test-relation-bindings-partially-validate-in-conflicting-variable-orders
   (h/transact fix/*node* [{:db/id :partial-relation-witness :name "Partial relation witness"}])
 
@@ -403,7 +398,6 @@
                      [[2 1 3 4]]
                      [[1 2 3 4]])))))
 
-#_
 (deftest test-relation-bindings-propose-after-a-conflicting-input-order
   (h/transact fix/*node* [{:db/id :proposal-relation-witness :name "Proposal relation witness"}])
 
