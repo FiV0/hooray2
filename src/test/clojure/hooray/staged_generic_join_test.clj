@@ -235,3 +235,64 @@
     (t/is (= ['?value '?tag] (.getVariables ^BindingSet result)))
     (t/is (= [[1 "outer"] [1 "outer"]]
              (.getRows ^BindingSet result)))))
+
+(t/deftest not-correlates-function-results-and-nested-or-test
+  (h/transact fix/*node* [{:db/id :blocked :name "Blocked" :age 30 :salary 15}
+                          {:db/id :allowed :name "Allowed" :age 40 :salary 30}
+                          {:db/id :plain :name "Plain"}])
+  (let [db (h/db fix/*node*)]
+    (t/is (= [["Allowed"]]
+             (staged-query
+              db
+              '{:find [?name]
+                :where [[?e :name ?name]
+                        [?e :age ?age]
+                        [(quot ?age 2) ?half]
+                        (not [?e :salary ?half])]})))
+    (t/is (= #{[:plain "Plain"]}
+             (set
+              (staged-query
+               db
+               '{:find [?e ?name]
+                 :where [[?e :name ?name]
+                         (not (or [?e :age 30]
+                                  [?e :salary 30]))]}))))))
+
+(t/deftest not-inside-an-or-branch-uses-only-that-branch-input-test
+  (h/transact fix/*node* [{:db/id :db/blocked
+                           :db/ident :blocked
+                           :db/valueType :db.type/boolean
+                           :db/cardinality :db.cardinality/one}])
+  (h/transact fix/*node* [{:db/id :alice :age 30}
+                          {:db/id :bob :salary 40}
+                          {:db/id :cara :age 50 :blocked true}])
+
+  (t/is (= #{[:alice 30]
+             [:bob 40]}
+           (set
+            (staged-query
+             (h/db fix/*node*)
+             '{:find [?e ?amount]
+               :where [(or (and [?e :age ?amount]
+                                (not [?e :blocked true]))
+                           [?e :salary ?amount])]})))))
+
+(t/deftest not-antijoin-preserves-duplicate-nonmatching-outer-rows-test
+  (let [scope {:input-variables []
+               :variable-order ['?value '?tag]
+               :extenders [(PrefixExtender/createSingleLevel [1 1] 0)
+                           (PrefixExtender/createSingleLevel ["outer"] 1)]
+               :stages [{:kind :generic
+                         :target-variables ['?value '?tag]}
+                        {:kind :not
+                         :variables ['?value]
+                         :target-variables ['?value '?tag]
+                         :body {:input-variables ['?value]
+                                :variable-order ['?value]
+                                :extenders [(PrefixExtender/createSingleLevel [2] 0)]
+                                :stages [{:kind :generic
+                                          :target-variables ['?value]}]}}]}
+        result (staged-generic-join/execute scope unit-bindings)]
+    (t/is (= ['?value '?tag] (.getVariables ^BindingSet result)))
+    (t/is (= [[1 "outer"] [1 "outer"]]
+             (.getRows ^BindingSet result)))))

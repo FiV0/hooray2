@@ -63,11 +63,29 @@
            input
            stage))))))
 
+(defn- execute-not-stage
+  [^BindingSet input
+   {:keys [variables target-variables body] :as _stage}]
+  (when-not (= target-variables (.getVariables input))
+    (throw (IllegalStateException. "NOT stage must preserve its input layout")))
+  (if (zero? (.getRowCount input))
+    (empty-bindings target-variables)
+    (let [{:keys [input-variables]} body
+          correlated-input (-> input
+                               (.project variables)
+                               (.distinctRows)
+                               (.reorder input-variables))
+          body-result (execute body correlated-input)
+          matches (-> body-result
+                      (.project variables)
+                      (.distinctRows))]
+      (.antijoin input matches))))
+
 (defn- execute-stage [scope input {:keys [kind] :as stage}]
   (case kind
     :generic (execute-generic-stage scope input stage)
     :or (execute-or-stage scope input stage)
-    :not (throw (UnsupportedOperationException. "NOT stages are not implemented yet"))
+    :not (execute-not-stage input stage)
     (throw (IllegalStateException. (str "Unknown stage kind " kind)))))
 
 (defn- execute-stages [{:keys [stages] :as scope} input]
