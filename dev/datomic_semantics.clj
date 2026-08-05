@@ -169,7 +169,7 @@
 
 (comment
   (t/run-all-tests)
-  (t/run-test-var #'cyclic-or-dependency-not-grounded-throws)
+  (t/run-test-var #'cyclic-or-dependency-not-grounded-throws))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; tx-report-queue auto retraction
