@@ -14,11 +14,9 @@
    (java.util Map HashMap)
    (org.hooray.algo
     FilterLeapfrogIndex
-    GenericJoin
     Join
     LeapfrogIndex
-    LeapfrogJoin
-    PrefixExtender)
+    LeapfrogJoin)
    (org.hooray.engine
     BindingSet
     GenericJoinEngine)
@@ -30,15 +28,7 @@
     AVLLeapfrogIndex
     AVLNotLeapfrogIndex
     AVLOrLeapfrogIndex
-    AVLPredicateLeapfrogIndex
-    GenericAndPrefixExtender
-    GenericFnPrefixExtender
-    GenericNotPrefixExtender
-    GenericOrPrefixExtender
-    GenericPredicatePrefixExtender
-    GenericPrefixExtender
-    SealedIndex$MapIndex
-    SealedIndex$SetIndex)))
+    AVLPredicateLeapfrogIndex)))
 
 (s/def ::variable symbol?)
 (s/def ::constant (complement symbol?))
@@ -255,26 +245,17 @@
   (validate-patterns where)
   true)
 
-(defn create-iterator [{:keys [storage algo] :as _opts} index var-in-join-order participates-in-level]
-  (match [storage algo]
-    [:hash :generic-old]
-    (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex. index)) participates-in-level)
-
-    [:avl :generic-old]
-    (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex. index)) participates-in-level)
-
-    [:btree :generic-old]
-    (GenericPrefixExtender. (if (set? index) (SealedIndex$SetIndex. index) (SealedIndex$MapIndex. index)) participates-in-level)
-
-    [:avl :leapfrog]
+(defn create-iterator [{:keys [storage] :as _opts} index var-in-join-order participates-in-level]
+  (case storage
+    :avl
     (AVLLeapfrogIndex. (if (set? index) (AVLIndex$AVLSetIndex. index) (AVLIndex$AVLMapIndex. index))
                        var-in-join-order (set (for [level participates-in-level]
                                                 (nth var-in-join-order level))))
 
-    [:btree :leapfrog]
+    :btree
     (err/unsupported-ex "BTrees not yet supported!")
 
-    :else (throw (ex-info "not yet supported storage + algo type" {:storage storage :algo algo}))))
+    (throw (ex-info "not yet supported storage type for leapfrog" {:storage storage}))))
 
 (defn fn+args->function [f args var->idx]
   (match args
@@ -291,8 +272,7 @@
 (defn- compile-pattern [{:keys [eav ave aev opts] :as db} var-in-join-order [type pattern]]
   (let [empty-set (db/set* (:storage opts))
         empty-map (db/map* (:storage opts))
-        var->idx (zipmap var-in-join-order (range))
-        algo (:algo opts)]
+        var->idx (zipmap var-in-join-order (range))]
     (case type
       :triple (let [{:keys [e a v]} pattern]
                 (match [e a v]
@@ -312,58 +292,39 @@
                     (create-iterator opts (get index a-const empty-map) var-in-join-order participates-in-level))
 
                   :else (throw (ex-info "Unknown triple clause" {:triple pattern}))))
-      :or (case algo
-            :generic-old (GenericOrPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern)
-                                                   (count var-in-join-order))
-            :leapfrog (AVLOrLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
-      :and (case algo
-             :generic-old (GenericAndPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern))
-             :leapfrog (AVLAndLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)))
-      :not (case algo
-             :generic-old (GenericNotPrefixExtender. (mapv (partial compile-pattern db var-in-join-order) pattern)
-                                                     (dec (count var-in-join-order)))
-             :leapfrog (AVLNotLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)
-                                             (dec (count var-in-join-order))))
+      :or (AVLOrLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern))
+      :and (AVLAndLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern))
+      :not (AVLNotLeapfrogIndex. (mapv (partial compile-pattern db var-in-join-order) pattern)
+                                 (dec (count var-in-join-order)))
 
       :predicate (let [{:keys [predicate args]} pattern
                        variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
                                           (map second))]
-                   (case algo
-                     :generic-old (GenericPredicatePrefixExtender.
-                                   (sort (mapv var->idx variable-args))
-                                   (fn+args->function (util/resolve-fn predicate) args var->idx))
-                     :leapfrog (AVLPredicateLeapfrogIndex.
-                                (sort (mapv var->idx variable-args))
-                                (fn+args->function (util/resolve-fn predicate) args var->idx))))
+                   (AVLPredicateLeapfrogIndex.
+                    (sort (mapv var->idx variable-args))
+                    (fn+args->function (util/resolve-fn predicate) args var->idx)))
 
       :fn (let [[{:keys [fun args]} ret-var] pattern
                 variable-args (->> (filter (fn [[type _value]] (= type :variable)) args)
                                    (map second))]
-            (case algo
-              :generic-old (GenericFnPrefixExtender.
-                            (sort (mapv var->idx variable-args))
-                            (get var->idx ret-var)
-                            (fn+args->function (util/resolve-fn fun) args var->idx))
-              :leapfrog (AVLFnLeapfrogIndex.
-                         (sort (mapv var->idx variable-args))
-                         (get var->idx ret-var)
-                         (fn+args->function (util/resolve-fn fun) args var->idx)))))))
+            (AVLFnLeapfrogIndex.
+             (sort (mapv var->idx variable-args))
+             (get var->idx ret-var)
+             (fn+args->function (util/resolve-fn fun) args var->idx))))))
 
-(defn- in->iterators [in var->idx args {:keys [algo] :as _opts}]
+(defn- in->iterators [in var->idx args]
   (when (not= (count in) (count args))
     (throw (IllegalArgumentException. (format ":in %s and :args %s" (pr-str in) (pr-str args)))))
   (let [create-single-iterator (fn [var args]
-                                 (case algo
-                                   :generic-old (PrefixExtender/createSingleLevel args (var->idx var))
-                                   :leapfrog (LeapfrogIndex/createSingleLevel args (var->idx var))))
+                                 (LeapfrogIndex/createSingleLevel args (var->idx var)))
         create-from-prefix-iterator (fn [vars args]
-                                      (case algo
-                                        :generic-old (PrefixExtender/createFromPrefixExtender (mapv (comp int var->idx) vars) args)
-                                        :leapfrog (LeapfrogIndex/createFromPrefixLeapfrogIndex (mapv (comp int var->idx) vars) args)))
+                                      (LeapfrogIndex/createFromPrefixLeapfrogIndex
+                                       (mapv (comp int var->idx) vars)
+                                       args))
         create-from-prefixes-iterator (fn [vars args]
-                                        (case algo
-                                          :generic-old (PrefixExtender/createFromPrefixesExtender (mapv (comp int var->idx) vars) args)
-                                          :leapfrog (LeapfrogIndex/createFromPrefixesLeapfrogIndex (mapv (comp int var->idx) vars) args)))]
+                                        (LeapfrogIndex/createFromPrefixesLeapfrogIndex
+                                         (mapv (comp int var->idx) vars)
+                                         args))]
     (letfn [(in->iterator [[[type var] arg]]
               (case type
                 :scale-binding (create-single-iterator var [arg])
@@ -382,9 +343,6 @@
         filters (filter #(instance? FilterLeapfrogIndex %) compiled-patterns)
         ^Join join-algo (LeapfrogJoin. indexes levels filters)]
     (.join join-algo)))
-
-(defn- generic-old-join [compiled-patterns levels]
-  (.join (GenericJoin. compiled-patterns levels)))
 
 (def ^:private empty-binding-set (BindingSet. [] [[]]))
 
@@ -544,7 +502,7 @@
                                   scope (plan2/plan db conformed-query args target-variables)
                                   result (staged-generic-join/execute scope empty-binding-set)]
                               (.getRows ^BindingSet (.reorder ^BindingSet result target-variables)))
-               :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args opts)
+               :leapfrog (let [compiled-patterns (concat (in->iterators in var->idx args)
                                                          (map (partial compile-pattern db vars-in-join-order) where))]
                            (leapfrog-join compiled-patterns (count vars-in-join-order))))
         compiled-find (compile-find find var->idx)]

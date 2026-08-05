@@ -1,8 +1,8 @@
 # Staged Composite Execution for the PrefixExtender Engine
 
-Version 0.1
+Version 0.2
 
-Status: Proposed
+Status: Implemented
 
 ## Overview
 
@@ -182,6 +182,16 @@ extender itself does not need a more general layout contract.
 4. nested scopes put relevant incoming variables first and otherwise preserve
    query variable order.
 
+The requested variable order is a planning tie-breaker, not necessarily the
+physical prefix order. `plan-scope` may have to ground a later requested
+variable before an earlier predicate or function dependency can run. After an
+initial logical-planning pass, `plan2.clj` derives the stable physical order
+from the stages' `:added` variables and plans the scope again against that
+order. The resulting stage targets are therefore prefixes of the compiled
+scope's `variable-order`. At the root query boundary, `query.clj` reorders the
+completed `BindingSet` back to `query->variable-order` before applying the
+existing find projection.
+
 The copied planner deliberately remains separate rather than extracting a
 shared namespace immediately. That keeps changes to the experimental prefix
 engine from changing the production `:generic` planner by accident. Once both
@@ -300,8 +310,9 @@ Leaf compilation moves from the `:generic-old` branches in `query.clj` into
   compiler does and creates `GenericPrefixExtender`;
 - a predicate descriptor creates `GenericPredicatePrefixExtender` using
   scope-relative levels and the existing argument-order adapter;
-- a function descriptor creates `GenericFnPrefixExtender` after planning has
-  placed every input before its output;
+- a function descriptor creates `GenericFnPrefixExtender`; it proposes when
+  its arguments precede its output, and validates at its last participating
+  level when correlation has already bound the output before an argument;
 - a relation descriptor creates `GenericRelationPrefixExtender` after layout
   normalization;
 - OR and NOT descriptors compile recursively to stages, never to extenders.
@@ -565,15 +576,18 @@ At cutover, the `:generic-old` arm in `query.clj` becomes conceptually:
 
 ```clojure
 (.getRows
- (staged-generic-join/execute
-  (plan2/plan db conformed-query args vars-in-join-order)
-  empty-binding-set))
+ (.reorder
+  (staged-generic-join/execute
+   (plan2/plan db conformed-query args vars-in-join-order)
+   empty-binding-set)
+  vars-in-join-order))
 ```
 
 `plan2/plan` only compiles the recursive scope. The staged executor returns a
-`BindingSet` in the query variable order expected by the existing
-`compile-find` path, and `query.clj` unwraps its rows. Projection, aggregates,
-`:keys`, `:strs`, and `:syms` remain unchanged.
+`BindingSet` in the scope's physical prefix order. `query.clj` reorders the
+root result to the query variable order expected by the existing
+`compile-find` path and unwraps its rows. Projection, aggregates, `:keys`,
+`:strs`, and `:syms` remain unchanged.
 
 The direct recursive `compile-pattern` path stays in place until this cutover
 so each phase can be compared with the restored engine. It is removed from the
