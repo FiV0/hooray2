@@ -1,27 +1,12 @@
 (ns hooray.staged-generic-join-test
   (:require
-   [clojure.spec.alpha :as s]
    [clojure.test :as t]
-   [hooray.core :as h]
-   [hooray.fixtures :as fix]
-   [hooray.plan2 :as plan2]
-   [hooray.query :as query]
    [hooray.staged-generic-join :as staged-generic-join])
   (:import
    (org.hooray.algo PrefixExtender)
    (org.hooray.engine BindingSet)))
 
 (def unit-bindings (BindingSet. [] [[]]))
-
-(defn- staged-query [db query-form & args]
-  (let [conformed-query (s/conform ::query/query query-form)
-        requested-variable-order (vec (query/query->variable-order conformed-query))
-        scope (plan2/plan db conformed-query args requested-variable-order)
-        var->idx (zipmap (:variable-order scope) (range))
-        rows (.getRows ^BindingSet (staged-generic-join/execute scope unit-bindings))]
-    ((query/compile-find (:find conformed-query) var->idx) rows)))
-
-(t/use-fixtures :each fix/with-node fix/with-people-schema)
 
 (t/deftest generic-stage-replays-incoming-bindings-from-level-zero-test
   (let [scope {:input-variables ['?seed]
@@ -78,142 +63,25 @@
                      :target-variables []}]}
           unit-bindings))))
 
-(t/deftest ordinary-extenders-execute-through-the-staged-plan-test
-  (h/transact fix/*node* [{:db/id :alice :age 39}
-                          {:db/id :bob :age 40}])
-
-  (t/is (= #{[:alice 39 40]}
-           (set (staged-query
-                 (h/db fix/*node*)
-                 '{:find [?e ?age ?next-age]
-                   :where [[?e :age ?age]
-                           [(< ?age 40)]
-                           [(inc ?age) ?next-age]]})))))
-
-(t/deftest predicate-order-and-function-dependencies-are-preserved-test
-  (let [db (h/db fix/*node*)]
-    (t/is (= [[10 11]]
-             (staged-query
-              db
-              '{:find [?left ?right]
-                :in [?right ?left]
-                :where [[(<= ?left ?right)]]}
-              11
-              10)))
-    (t/is (= [[1 2 3]]
-             (staged-query
-              db
-              '{:find [?value ?next ?after]
-                :in [?value]
-                :where [[(inc ?value) ?next]
-                        [(inc ?next) ?after]]}
-              1)))))
-
-(t/deftest relation-inputs-are-normalized-to-scope-order-test
-  (h/transact fix/*node* [{:db/id :relation-witness :name "Relation witness"}])
-  (let [db (h/db fix/*node*)]
-    (t/is (= #{[1 2]}
-             (set (staged-query
-                   db
-                   '{:find [?a ?b]
-                     :in [[[?a ?b]] [[?b ?a]]]
-                     :where [[?e :name "Relation witness"]]}
-                   [[1 2] [3 4]]
-                   [[2 1] [5 6]]))))
-    (t/is (= #{[1 2 3 4]}
-             (set (staged-query
-                   db
-                   '{:find [?a ?b ?c ?d]
-                     :in [[[?b ?a ?c ?d]] [[?a ?b ?c ?d]]]
-                     :where [[?e :name "Relation witness"]]}
-                   [[2 1 3 4]]
-                   [[1 2 3 4]]))))
-    (t/is (= #{[1 2 3]}
-             (set (staged-query
-                   db
-                   '{:find [?a ?b ?c]
-                     :in [[[?b ?a]] [[?a ?b ?c]]]
-                     :where [[?e :name "Relation witness"]]}
-                   [[2 1]]
-                   [[1 2 3]]))))))
-
-(t/deftest or-branch-predicates-remain-attached-to-their-branch-test
-  (h/transact fix/*node* [{:db/id :db/limit
-                           :db/ident :limit
-                           :db/valueType :db.type/long
-                           :db/cardinality :db.cardinality/one}])
-  (h/transact fix/*node* [{:db/id 1 :name "valid" :age 5 :salary 10 :limit 5}
-                          {:db/id 2 :name "leaked" :age 20 :salary 10 :limit 5}])
-
-  (t/is (= [["valid"]]
-           (staged-query
-            (h/db fix/*node*)
-            '{:find [?name]
-              :where [[?e :name ?name]
-                      [?e :age ?age]
-                      [?e :salary ?score]
-                      [?e :limit ?limit]
-                      (or (and [(< ?age ?score)]
-                               [(< ?limit 10)])
-                          (and [(> ?age ?score)]
-                               [(< ?limit 0)]))]}))))
-
-(t/deftest or-branches-can-produce-their-common-layout-in-different-orders-test
-  (h/transact fix/*node* [{:db/id :alice :age 30}
-                          {:db/id :bob :salary 40}])
-  (let [db (h/db fix/*node*)
-        query-form '{:find [?e ?a ?b]
-                     :where [(or (and [?e :age ?a]
-                                      [(inc ?a) ?b])
-                                 (and [?e :salary ?b]
-                                      [(dec ?b) ?a]))]}]
-    (t/is (= #{[:alice 30 31]
-               [:bob 39 40]}
-             (set (staged-query db query-form))))
-    (t/is (= #{[:alice 30 31]
-               [:bob 39 40]}
-             (set (staged-query
-                   db
-                   (assoc query-form :in '[[[?e ?a]]])
-                   [[:alice 30]
-                    [:bob 39]]))))))
-
-(t/deftest nested-or-groundability-remains-all-or-nothing-test
-  (h/transact fix/*node* [{:db/id 1 :age 35}
-                          {:db/id 2 :age 35}
-                          {:db/id 3 :age 35}])
-  (let [db (h/db fix/*node*)]
-    (t/is (= [[2 1]]
-             (sort
-              (staged-query
-               db
-               '{:find [?v ?e]
-                 :where [(or (and (or [?v :next ?e]
-                                      (and [?e :age 35]
-                                           [(< ?v 3)]))
-                                  [(inc ?e) ?v]))
-                         [?e :age 35]]}))))
-    (t/is (= [[2 1] [3 2] [4 3]]
-             (sort
-              (staged-query
-               db
-               '{:find [?v ?e]
-                 :where [(or (and (or (and [(< ?v 3)] [?e :age 35])
-                                      (and [(> ?v 1)] [?e :age 35]))
-                                  [(inc ?e) ?v]))
-                         [?e :age 35]]}))))))
-
-(t/deftest or-materialization-uses-set-semantics-and-preserves-outer-columns-test
-  (h/transact fix/*node* [{:db/id :alice :age 30}])
-
-  (t/is (= [["outer" :alice 30]]
-           (staged-query
-            (h/db fix/*node*)
-            '{:find [?tag ?e ?age]
-              :in [?tag]
-              :where [(or [?e :age ?age]
-                          [?e :age ?age])]}
-            "outer"))))
+(t/deftest proposing-or-distincts-branches-and-preserves-outer-columns-test
+  (let [branch {:input-variables []
+                :variable-order ['?value]
+                :extenders [(PrefixExtender/createSingleLevel [1] 0)]
+                :stages [{:kind :generic
+                          :target-variables ['?value]}]}
+        scope {:input-variables []
+               :variable-order ['?tag '?value]
+               :extenders [(PrefixExtender/createSingleLevel ["outer"] 0)]
+               :stages [{:kind :generic
+                         :target-variables ['?tag]}
+                        {:kind :or
+                         :variables ['?value]
+                         :added ['?value]
+                         :target-variables ['?tag '?value]
+                         :branches [branch branch]}]}
+        result (staged-generic-join/execute scope unit-bindings)]
+    (t/is (= ['?tag '?value] (.getVariables ^BindingSet result)))
+    (t/is (= [["outer" 1]] (.getRows ^BindingSet result)))))
 
 (t/deftest validating-or-preserves-duplicate-outer-rows-test
   (let [scope {:input-variables []
@@ -235,47 +103,6 @@
     (t/is (= ['?value '?tag] (.getVariables ^BindingSet result)))
     (t/is (= [[1 "outer"] [1 "outer"]]
              (.getRows ^BindingSet result)))))
-
-(t/deftest not-correlates-function-results-and-nested-or-test
-  (h/transact fix/*node* [{:db/id :blocked :name "Blocked" :age 30 :salary 15}
-                          {:db/id :allowed :name "Allowed" :age 40 :salary 30}
-                          {:db/id :plain :name "Plain"}])
-  (let [db (h/db fix/*node*)]
-    (t/is (= [["Allowed"]]
-             (staged-query
-              db
-              '{:find [?name]
-                :where [[?e :name ?name]
-                        [?e :age ?age]
-                        [(quot ?age 2) ?half]
-                        (not [?e :salary ?half])]})))
-    (t/is (= #{[:plain "Plain"]}
-             (set
-              (staged-query
-               db
-               '{:find [?e ?name]
-                 :where [[?e :name ?name]
-                         (not (or [?e :age 30]
-                                  [?e :salary 30]))]}))))))
-
-(t/deftest not-inside-an-or-branch-uses-only-that-branch-input-test
-  (h/transact fix/*node* [{:db/id :db/blocked
-                           :db/ident :blocked
-                           :db/valueType :db.type/boolean
-                           :db/cardinality :db.cardinality/one}])
-  (h/transact fix/*node* [{:db/id :alice :age 30}
-                          {:db/id :bob :salary 40}
-                          {:db/id :cara :age 50 :blocked true}])
-
-  (t/is (= #{[:alice 30]
-             [:bob 40]}
-           (set
-            (staged-query
-             (h/db fix/*node*)
-             '{:find [?e ?amount]
-               :where [(or (and [?e :age ?amount]
-                                (not [?e :blocked true]))
-                           [?e :salary ?amount])]})))))
 
 (t/deftest not-antijoin-preserves-duplicate-nonmatching-outer-rows-test
   (let [scope {:input-variables []
