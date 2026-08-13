@@ -103,10 +103,7 @@
 (declare clause->descriptor)
 
 (defn- descriptor-variables [descriptors]
-  (->> descriptors
-       (mapcat (fn [{:keys [variables]}]
-                 variables))
-       util/distinctv))
+  (util/distinctv (mapcat :variables descriptors)))
 
 (defn- triple-descriptor [idx {:keys [e a v] :as clause}]
   (let [[attribute-type _attribute] a]
