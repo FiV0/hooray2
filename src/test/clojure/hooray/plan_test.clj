@@ -142,6 +142,31 @@
                             variables
                             [])))))
 
+#_
+(deftest plan-scope-partially-validates-patterns-after-grouped-or-test
+  (let [[x y z] ['?x '?y '?z]
+        or-descriptor {:kind :or
+                       :idx 1
+                       :variables [x y]
+                       :groundable (fn [bound]
+                                     (vec (remove bound [x y])))}
+        triple-descriptor {:kind :triple
+                           :idx 2
+                           :variables [y z]
+                           :groundable (fn [bound]
+                                         (vec (remove bound [y z])))}]
+    (is (= [{:added [x y]
+             :proposers [1]
+             :participants [1 2]
+             :target-variables [x y]}
+            {:added [z]
+             :proposers [2]
+             :participants [2]
+             :target-variables [x y z]}]
+           (plan/plan-scope [or-descriptor triple-descriptor]
+                            [x y z]
+                            [])))))
+
 (deftest plan-scope-keep-only-relevant-incoming-variables-test
   (let [incoming-a '?incoming-a
         incoming-b '?incoming-b
