@@ -279,6 +279,7 @@
                    :target-variables target}
            :completed (->> or-validators
                            (filter #(fully-validatable? % target))
+                           (map :idx)
                            (into #{idx}))})))))
 
 (defn- add-validation-stage [descriptors completed bound stages]
