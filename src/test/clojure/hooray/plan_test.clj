@@ -142,7 +142,6 @@
                             variables
                             [])))))
 
-#_
 (deftest plan-scope-partially-validates-patterns-after-grouped-or-test
   (let [[x y z] ['?x '?y '?z]
         or-descriptor {:kind :or

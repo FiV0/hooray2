@@ -219,6 +219,12 @@
   (and (not= :or kind)
        (some #{variable} (groundable-variables descriptor bound))))
 
+(defn- can-validate? [{:keys [kind] :as descriptor} bound new-variables]
+  (when (not= :or kind)
+    (let [new-groundable (groundable-variables descriptor bound)]
+      (and (seq new-groundable)
+           (seq (set/intersection (set new-groundable) (set new-variables)))))))
+
 (defn- or-proposal [{:keys [kind variables] :as descriptor}
                     bound]
   (when (= :or kind)
@@ -263,12 +269,17 @@
                  (first (filter #(->> (or-proposal % bound)
                                       (some #{variable}))
                                 eligible-descriptors))]
-        (let [or-added (or-proposal selected-or bound)]
+        (let [or-added (or-proposal selected-or bound)
+              or-validators (->> eligible-descriptors
+                                 (filter #(can-validate? % bound or-added)))
+              target (bound-target variable-order bound or-added)]
           {:stage {:added or-added
                    :proposers [idx]
-                   :participants [idx]
-                   :target-variables (bound-target variable-order bound or-added)}
-           :completed #{idx}})))))
+                   :participants (into [idx] (map :idx or-validators))
+                   :target-variables target}
+           :completed (->> or-validators
+                           (filter #(fully-validatable? % target))
+                           (into #{idx}))})))))
 
 (defn- add-validation-stage [descriptors completed bound stages]
   (if-let [validation-descriptors (->> descriptors
