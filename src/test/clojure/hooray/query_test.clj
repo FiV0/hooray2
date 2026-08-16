@@ -248,17 +248,32 @@
                         [(> ?amount 35)]]}
               (h/db fix/*node*)))))
 
-(deftest test-triple-partially-validates-grouped-or-results-before-proposing-remaining-variable
-  (h/transact fix/*node* [{:db/id :alice :name "Alice" :last-name "Alias"}
-                          {:db/id :bob :name "Bob" :last-name "Alice"}])
+(def parents-schema
+  [{:db/id :db/mother
+    :db/ident :mother
+    :db/valueType :db.type/keyword
+    :db/cardinality :db.cardinality/one}
+   {:db/id :db/father
+    :db/ident :father
+    :db/valueType :db.type/keyword
+    :db/cardinality :db.cardinality/one}])
 
-  (is (= #{[:alice "Alice" :alice]
-           [:bob "Alice" :alice]
-           [:bob "Bob" :bob]}
-         (set (h/q '{:find [?x ?y ?z]
-                     :where [(or [?x :name ?y]
-                                 [?x :last-name ?y])
-                             [?z :name ?y]]}
+(deftest triple-partially-validates-parents-selected-by-grouped-or
+  (h/transact fix/*node* parents-schema)
+  (h/transact fix/*node* [{:db/id :alice :mother :mary :father :john}
+                          {:db/id :bob :mother :mary :father :unknown}
+                          {:db/id :mary :name "Mary"}
+                          {:db/id :john :name "John"}])
+
+  (is (= #{[:alice :mary "Mary"]
+           [:alice :john "John"]
+           [:bob :mary "Mary"]}
+         (set (h/q '{:find [?child ?parent ?parent-name]
+                     ;; or proposes ?child and ?parent
+                     ;; triple validates ?parent
+                     :where [(or [?child :mother ?parent]
+                                 [?child :father ?parent])
+                             [?parent :name ?parent-name]]}
                    (h/db fix/*node*))))))
 
 (deftest test-nested-or-groundability-is-all-or-nothing
