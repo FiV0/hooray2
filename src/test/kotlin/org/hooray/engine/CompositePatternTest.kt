@@ -16,10 +16,10 @@ class CompositePatternTest {
         val firstTriple = binaryTriplePattern(0, x, y, 1 to "a")
         val secondTriple = binaryTriplePattern(1, y, x, "b" to 2)
         val first = listOf(
-            Stage(listOf(x, y), listOf(firstTriple), listOf(x, y)),
+            Stage(listOf(x, y), listOf(firstTriple), listOf(0), listOf(x, y)),
         )
         val second = listOf(
-            Stage(listOf(y, x), listOf(secondTriple), listOf(y, x)),
+            Stage(listOf(y, x), listOf(secondTriple), listOf(0), listOf(y, x)),
         )
 
         val pattern = OrPattern(2, listOf(first, second))
@@ -30,7 +30,7 @@ class CompositePatternTest {
                 rows = listOf(listOf(1, "a"), listOf(2, "b")),
             ),
             GenericJoinEngine().execute(
-                stages = listOf(Stage(listOf(x, y), listOf(pattern), listOf(x, y))),
+                stages = listOf(Stage(listOf(x, y), listOf(pattern), listOf(0), listOf(x, y))),
                 input = BindingSet(emptyList(), listOf(emptyList())),
             ),
         )
@@ -41,10 +41,10 @@ class CompositePatternTest {
         val binaryTriple = binaryTriplePattern(0, x, y)
         val unaryTriple = unaryTriplePattern(1, x)
         val first = listOf(
-            Stage(listOf(x, y), listOf(binaryTriple), listOf(x, y)),
+            Stage(listOf(x, y), listOf(binaryTriple), listOf(0), listOf(x, y)),
         )
         val second = listOf(
-            Stage(listOf(x), listOf(unaryTriple), listOf(x)),
+            Stage(listOf(x), listOf(unaryTriple), listOf(0), listOf(x)),
         )
 
         val error = assertThrows(IllegalArgumentException::class.java) {
@@ -58,7 +58,7 @@ class CompositePatternTest {
         val firstTriple = unaryTriplePattern(0, x, 1, 2)
         val secondTriple = unaryTriplePattern(1, x, 2, 3)
         fun branch(pattern: TriplePattern) =
-            listOf(Stage(listOf(x), listOf(pattern), listOf(x)))
+            listOf(Stage(listOf(x), listOf(pattern), listOf(0), listOf(x)))
         val pattern = OrPattern(
             idx = 5,
             branches = listOf(branch(firstTriple), branch(secondTriple)),
@@ -77,7 +77,7 @@ class CompositePatternTest {
         assertEquals(
             listOf(listOf(1), listOf(2), listOf(3)),
             GenericJoinEngine().execute(
-                listOf(Stage(listOf(x), listOf(pattern), listOf(x))),
+                listOf(Stage(listOf(x), listOf(pattern), listOf(0), listOf(x))),
                 BindingSet(emptyList(), listOf(emptyList())),
             ).rows,
         )
@@ -86,7 +86,7 @@ class CompositePatternTest {
     @Test
     fun `or joins wider input through its projected branch relation`() {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
-        val branch = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y)))
+        val branch = listOf(Stage(listOf(x, y), listOf(triple), listOf(0), listOf(x, y)))
         val pattern = OrPattern(1, listOf(branch))
         val outer = Symbol.intern("?outer")
         val proposalInput = BindingSet(
@@ -121,7 +121,7 @@ class CompositePatternTest {
                 listOf(listOf("a", "first", 1)),
             ),
             GenericJoinEngine().execute(
-                listOf(Stage(emptyList(), listOf(pattern), listOf(y, outer, x))),
+                listOf(Stage(emptyList(), listOf(pattern), emptyList(), listOf(y, outer, x))),
                 validationInput,
             ),
         )
@@ -141,7 +141,7 @@ class CompositePatternTest {
         val triple = binaryTriplePattern(0, x, y, 1 to "a", 2 to "b")
         val not = NotPattern(
             idx = 2,
-            stages = listOf(Stage(listOf(x, y), listOf(triple), listOf(x, y))),
+            stages = listOf(Stage(listOf(x, y), listOf(triple), listOf(0), listOf(x, y))),
         )
         val outer = Symbol.intern("?outer")
         val input = BindingSet(

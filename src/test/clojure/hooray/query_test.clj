@@ -248,6 +248,34 @@
                         [(> ?amount 35)]]}
               (h/db fix/*node*)))))
 
+(def parents-schema
+  [{:db/id :db/mother
+    :db/ident :mother
+    :db/valueType :db.type/keyword
+    :db/cardinality :db.cardinality/one}
+   {:db/id :db/father
+    :db/ident :father
+    :db/valueType :db.type/keyword
+    :db/cardinality :db.cardinality/one}])
+
+(deftest triple-partially-validates-parents-selected-by-grouped-or
+  (h/transact fix/*node* parents-schema)
+  (h/transact fix/*node* [{:db/id :alice :mother :mary :father :john}
+                          {:db/id :bob :mother :mary :father :unknown}
+                          {:db/id :mary :name "Mary"}
+                          {:db/id :john :name "John"}])
+
+  (is (= #{[:alice :mary "Mary"]
+           [:alice :john "John"]
+           [:bob :mary "Mary"]}
+         (set (h/q '{:find [?child ?parent ?parent-name]
+                     ;; or proposes ?child and ?parent
+                     ;; triple validates ?parent
+                     :where [(or [?child :mother ?parent]
+                                 [?child :father ?parent])
+                             [?parent :name ?parent-name]]}
+                   (h/db fix/*node*))))))
+
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id 1 :age 35}
                           {:db/id 2 :age 35}

@@ -10,7 +10,7 @@ package org.hooray.engine
  * Before nested execution, the branch-relevant input columns are projected into a [RelationPattern] that constrains
  * each branch. Branch results are aligned to a common variable order, unioned distinctly, and correlated with the
  * complete input so that unrelated outer columns are preserved.
- * [GenericJoinEngine] calls an OrPattern to propose only when it is the sole participant in a stage.
+ * [GenericJoinEngine] calls an OrPattern directly when it is the stage's sole proposer.
  */
 class OrPattern(
     override val idx: Int,
@@ -40,7 +40,7 @@ class OrPattern(
         added: List<Variable>,
         proposals: List<Proposal>,
     ): List<Proposal> {
-        // GenericJoinEngine bypasses counting when this is the stage's sole participant.
+        // GenericJoinEngine bypasses counting when this is the stage's sole proposer.
         // TODO: propose for disjunctions. Upper bound is at least sumOf(count(branch))
         return proposals
     }
@@ -95,9 +95,17 @@ class OrPattern(
         branches.forEach { stages ->
             val branchResult = engine.execute(stages.map { stage ->
                 if (stage.added.any { variable -> variable in inputRelation.variables }) {
+                    val inputRelationPosition = stage.participants.size
                     Stage(
                         added = stage.added,
                         participants = stage.participants + inputRelation,
+                        proposerPositions = if (
+                            stage.added.isNotEmpty() && inputRelation.variables.containsAll(stage.added)
+                        ) {
+                            stage.proposerPositions + inputRelationPosition
+                        } else {
+                            stage.proposerPositions
+                        },
                         targetVariables = stage.targetVariables,
                     )
                 } else {

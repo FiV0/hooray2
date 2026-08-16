@@ -18,24 +18,30 @@
     RelationPattern
     TriplePattern)))
 
-(defrecord Stage [added participants target-variables]
+(defrecord Stage [added participants proposer-positions target-variables]
   IStage
   (getAdded [_] added)
   (getParticipants [_] participants)
+  (getProposerPositions [_] proposer-positions)
   (getTargetVariables [_] target-variables))
 
 (defn- ensure-distinct [values message]
   (when-not (= (count values) (count (distinct values)))
     (throw (IllegalStateException. ^String message))))
 
-(defn- ->stage [added participants target-variables]
+(defn- ->stage [added participants proposers target-variables]
   (ensure-distinct added "Stage added variables must be distinct")
   (ensure-distinct target-variables "Stage target variables must be distinct")
   (ensure-distinct (mapv #(.getIdx ^ExecPattern %) participants)
                    "Stage participant indexes must be distinct")
+  ;; TODO bring this check back but currently we remove intermediate RelationPattern
+  #_
+  (when-not (= (empty? proposers) (empty? added))
+    (throw (IllegalStateException.
+            "Stage proposer positions must be empty exactly when added variables are empty")))
   (when-not (every? (set target-variables) added)
     (throw (IllegalStateException. "Stage target variables must contain added variables")))
-  (->Stage added participants target-variables))
+  (->Stage added participants proposers target-variables))
 
 (defonce ^:private next-pattern-index (atom 0))
 
@@ -384,7 +390,11 @@
            [{:keys [added proposers participants target-variables] :as logical-stage} & logical-stages] logical-stages]
       (if-not logical-stage
         stages
-        (let [participants (remove #{-1} participants)
+        (let [participants (vec (remove #{-1} participants))
+              positions-by-index (into {} (map-indexed (fn [position idx]
+                                                         [idx position])
+                                                       participants))
+              proposers-idxs (mapv positions-by-index (remove #{-1} proposers))
               patterns-by-index (reduce (fn [p-by-idx idx]
                                           (update p-by-idx idx #(or %
                                                                     (descriptor->exec-pattern
@@ -399,11 +409,10 @@
                                                                        bound
                                                                        target-variables)))))
                                         patterns-by-index participants)]
-          (recur
-           patterns-by-index
-           (conj stages (->stage added (mapv patterns-by-index participants) target-variables))
-           target-variables
-           logical-stages))))))
+          (recur patterns-by-index
+                 (conj stages (->stage added (mapv patterns-by-index participants) proposers-idxs target-variables))
+                 target-variables
+                 logical-stages))))))
 
 (defn- assemble-scope [db descriptors variable-order incoming]
   (fold-stages db descriptors (plan-scope descriptors variable-order incoming)))
