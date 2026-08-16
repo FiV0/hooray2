@@ -34,6 +34,8 @@
   (ensure-distinct target-variables "Stage target variables must be distinct")
   (ensure-distinct (mapv #(.getIdx ^ExecPattern %) participants)
                    "Stage participant indexes must be distinct")
+  ;; TODO bring this check back but currently we remove intermediate RelationPattern
+  #_
   (when-not (= (empty? proposers) (empty? added))
     (throw (IllegalStateException.
             "Stage proposer positions must be empty exactly when added variables are empty")))
@@ -392,7 +394,7 @@
               positions-by-index (into {} (map-indexed (fn [position idx]
                                                          [idx position])
                                                        participants))
-              proposers (mapv positions-by-index (remove #{-1} proposers))
+              proposers-idxs (mapv positions-by-index (remove #{-1} proposers))
               patterns-by-index (reduce (fn [p-by-idx idx]
                                           (update p-by-idx idx #(or %
                                                                     (descriptor->exec-pattern
@@ -408,7 +410,7 @@
                                                                        target-variables)))))
                                         patterns-by-index participants)]
           (recur patterns-by-index
-                 (conj stages (->stage added (mapv patterns-by-index participants) proposers target-variables))
+                 (conj stages (->stage added (mapv patterns-by-index participants) proposers-idxs target-variables))
                  target-variables
                  logical-stages))))))
 
