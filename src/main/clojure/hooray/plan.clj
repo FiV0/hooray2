@@ -388,11 +388,11 @@
            [{:keys [added proposers participants target-variables] :as logical-stage} & logical-stages] logical-stages]
       (if-not logical-stage
         stages
-        (let [participant-indexes (vec (remove #{-1} participants))
+        (let [participants (vec (remove #{-1} participants))
               positions-by-index (into {} (map-indexed (fn [position idx]
                                                          [idx position])
-                                                       participant-indexes))
-              proposer-positions (mapv positions-by-index (remove #{-1} proposers))
+                                                       participants))
+              proposers (mapv positions-by-index (remove #{-1} proposers))
               patterns-by-index (reduce (fn [p-by-idx idx]
                                           (update p-by-idx idx #(or %
                                                                     (descriptor->exec-pattern
@@ -406,12 +406,9 @@
                                                                      (if (some #{idx} proposers)
                                                                        bound
                                                                        target-variables)))))
-                                        patterns-by-index participant-indexes)]
+                                        patterns-by-index participants)]
           (recur patterns-by-index
-                 (conj stages (->stage added
-                                       (mapv patterns-by-index participant-indexes)
-                                       proposer-positions
-                                       target-variables))
+                 (conj stages (->stage added (mapv patterns-by-index participants) proposers target-variables))
                  target-variables
                  logical-stages))))))
 
