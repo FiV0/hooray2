@@ -18,24 +18,34 @@
     RelationPattern
     TriplePattern)))
 
-(defrecord Stage [added participants target-variables]
+(defrecord Stage [added participants proposer-positions target-variables]
   IStage
   (getAdded [_] added)
   (getParticipants [_] participants)
+  (getProposerPositions [_] proposer-positions)
   (getTargetVariables [_] target-variables))
 
 (defn- ensure-distinct [values message]
   (when-not (= (count values) (count (distinct values)))
     (throw (IllegalStateException. ^String message))))
 
-(defn- ->stage [added participants target-variables]
+(defn- ->stage [added participants proposer-positions target-variables deferred-incoming?]
   (ensure-distinct added "Stage added variables must be distinct")
   (ensure-distinct target-variables "Stage target variables must be distinct")
   (ensure-distinct (mapv #(.getIdx ^ExecPattern %) participants)
                    "Stage participant indexes must be distinct")
+  (when-not (or (< (count proposer-positions) 2)
+                (apply < proposer-positions))
+    (throw (IllegalStateException. "Stage proposer positions must be ordered and unique")))
+  (when-not (every? #(< -1 % (count participants)) proposer-positions)
+    (throw (IllegalStateException. "Stage proposer positions must be in bounds")))
+  (when-not (or (= (empty? proposer-positions) (empty? added))
+                (and deferred-incoming? (seq added) (empty? proposer-positions)))
+    (throw (IllegalStateException.
+            "Stage proposer positions must be empty exactly when added variables are empty")))
   (when-not (every? (set target-variables) added)
     (throw (IllegalStateException. "Stage target variables must contain added variables")))
-  (->Stage added participants target-variables))
+  (->Stage added participants proposer-positions target-variables))
 
 (defonce ^:private next-pattern-index (atom 0))
 
@@ -384,7 +394,12 @@
            [{:keys [added proposers participants target-variables] :as logical-stage} & logical-stages] logical-stages]
       (if-not logical-stage
         stages
-        (let [participants (remove #{-1} participants)
+        (let [deferred-incoming? (boolean (some #{-1} participants))
+              participant-indexes (vec (remove #{-1} participants))
+              positions-by-index (into {} (map-indexed (fn [position idx]
+                                                         [idx position])
+                                                       participant-indexes))
+              proposer-positions (mapv positions-by-index (remove #{-1} proposers))
               patterns-by-index (reduce (fn [p-by-idx idx]
                                           (update p-by-idx idx #(or %
                                                                     (descriptor->exec-pattern
@@ -398,10 +413,14 @@
                                                                      (if (some #{idx} proposers)
                                                                        bound
                                                                        target-variables)))))
-                                        patterns-by-index participants)]
+                                        patterns-by-index participant-indexes)
+              stage-arguments [added
+                               (mapv patterns-by-index participant-indexes)
+                               proposer-positions
+                               target-variables]]
           (recur
            patterns-by-index
-           (conj stages (->stage added (mapv patterns-by-index participants) target-variables))
+           (conj stages (apply ->stage (conj stage-arguments deferred-incoming?)))
            target-variables
            logical-stages))))))
 

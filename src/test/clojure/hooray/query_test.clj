@@ -248,6 +248,19 @@
                         [(> ?amount 35)]]}
               (h/db fix/*node*)))))
 
+(deftest test-triple-partially-validates-grouped-or-results-before-proposing-remaining-variable
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :last-name "Alias"}
+                          {:db/id :bob :name "Bob" :last-name "Alice"}])
+
+  (is (= #{[:alice "Alice" :alice]
+           [:bob "Alice" :alice]
+           [:bob "Bob" :bob]}
+         (set (h/q '{:find [?x ?y ?z]
+                     :where [(or [?x :name ?y]
+                                 [?x :last-name ?y])
+                             [?z :name ?y]]}
+                   (h/db fix/*node*))))))
+
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id 1 :age 35}
                           {:db/id 2 :age 35}

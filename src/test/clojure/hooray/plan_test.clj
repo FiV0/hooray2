@@ -364,6 +364,6 @@
         (is (every? #(instance? Stage %) stages))
         (is (instance? TriplePattern participant))
         (is (= #{'?e '?name} (.getVariables ^TriplePattern participant)))
-        (is (= [(plan/->Stage ['?e] [participant] ['?e])
-                (plan/->Stage ['?name] [participant] ['?e '?name])]
+        (is (= [(plan/->Stage ['?e] [participant] [0] ['?e])
+                (plan/->Stage ['?name] [participant] [0] ['?e '?name])]
                stages))))))

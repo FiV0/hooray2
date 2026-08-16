@@ -41,9 +41,17 @@ class NotPattern(
         val inputRelation = RelationPattern(idx, input.project(orderedVariables))
         val unit = BindingSet(emptyList(), listOf(emptyList()))
         val matches = engine.execute(stages.map { stage ->
+            val inputRelationPosition = stage.participants.size
             Stage(
                 added = stage.added,
                 participants = stage.participants + inputRelation,
+                proposerPositions = if (
+                    stage.added.isNotEmpty() && inputRelation.variables.containsAll(stage.added)
+                ) {
+                    stage.proposerPositions + inputRelationPosition
+                } else {
+                    stage.proposerPositions
+                },
                 targetVariables = stage.targetVariables,
             )
         }, unit)

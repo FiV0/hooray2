@@ -48,7 +48,7 @@ class PredicateFunctionPatternTest {
         assertEquals(
             BindingSet(listOf(x, y), listOf(listOf(5, 7), listOf(8, 10))),
             GenericJoinEngine().execute(
-                listOf(Stage(listOf(y), listOf(pattern), listOf(x, y))),
+                listOf(Stage(listOf(y), listOf(pattern), listOf(0), listOf(x, y))),
                 input,
             ),
         )

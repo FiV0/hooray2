@@ -5,18 +5,21 @@ package org.hooray.engine
  *
  * @property added The variables added by this stage.
  * @property participants The patterns that participate in this stage.
+ * @property proposerPositions The positions of proposing patterns in [participants].
  * @property targetVariables The variables that are bound after this stage. The resulting binding must contain
  * the variables in that order.
  *
  * If [added] is empty the stages is a validation stage, meaning all participants purely validate the input. If [added]
- * is non-empty, the stages does the usual WCO count, propose and validation work, meaning tuples are sharded by the best
- * proposer and validated against all other patterns. If added is non-empty and there is only one participant,
- * the stage simply runs the one proposal immediately.
+ * is non-empty, the stage either runs its sole proposer directly or does the usual WCO count and proposal arbitration
+ * across its designated proposers. Proposed tuples are validated against every other participant.
  *
  */
 interface IStage {
     val added: List<Variable>
     val participants: List<ExecPattern>
+    val proposerPositions: List<Int>
+    val proposers: List<ExecPattern>
+        get() = proposerPositions.map(participants::get)
     val targetVariables: List<Variable>
 }
 
@@ -26,6 +29,7 @@ interface IStage {
 data class Stage(
     override val added: List<Variable>,
     override val participants: List<ExecPattern>,
+    override val proposerPositions: List<Int>,
     override val targetVariables: List<Variable>,
 ) : IStage {
     init {
@@ -41,6 +45,15 @@ data class Stage(
         require(participants.isNotEmpty()) { "Stage must have at least one participant" }
         require(participants.map { it.idx }.toSet().size == participants.size) {
             "Stage participant indexes must be distinct"
+        }
+        require(proposerPositions.zipWithNext().all { (left, right) -> left < right }) {
+            "Stage proposer positions must be ordered and unique"
+        }
+        require(proposerPositions.all { it in participants.indices }) {
+            "Stage proposer positions must be in bounds"
+        }
+        require(proposerPositions.isEmpty() == added.isEmpty()) {
+            "Stage proposer positions must be empty exactly when added variables are empty"
         }
     }
 }

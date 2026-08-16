@@ -28,9 +28,11 @@ class GenericJoinEngine {
     }
 
     private fun executeProposingStage(stage: IStage, input: BindingSet): BindingSet {
-        // If the stage has a single participant, we can skip the count, propose and validation.
-        if (stage.participants.size == 1) {
-            val proposer = stage.participants.first()
+        val proposers = stage.proposers
+
+        // A sole proposer does not need count arbitration, even when other participants validate its output.
+        if (proposers.size == 1) {
+            val proposer = proposers.first()
             val proposed = proposer.join(
                 input = input,
                 added = stage.added,
@@ -39,23 +41,27 @@ class GenericJoinEngine {
             check(proposed.variables == stage.targetVariables) {
                 "Pattern ${proposer.idx} proposed layout ${proposed.variables}, expected ${stage.targetVariables}"
             }
-            return proposed
+            return validateAll(
+                proposed,
+                stage,
+                stage.participants.filterNot { it.idx == proposer.idx },
+            )
         }
 
-        val participantIds = stage.participants.mapTo(hashSetOf()) { it.idx }
+        val proposerIds = proposers.mapTo(hashSetOf()) { it.idx }
         val initial = List(input.rowCount) { Proposal(NO_PROPOSER, Int.MAX_VALUE) }
 
-        // Count the number of proposals for each row from each participant
-        val proposals = stage.participants.fold(initial) { current, participant ->
-            val updated = participant.count(input, stage.added, current)
+        // Count the number of proposals for each row from each designated proposer.
+        val proposals = proposers.fold(initial) { current, proposer ->
+            val updated = proposer.count(input, stage.added, current)
             check(updated.size == input.rowCount) {
-                "Pattern ${participant.idx} returned ${updated.size} proposals, expected ${input.rowCount}"
+                "Pattern ${proposer.idx} returned ${updated.size} proposals, expected ${input.rowCount}"
             }
             updated
         }
 
         proposals.forEach { proposal ->
-            check(proposal.proposer == NO_PROPOSER || proposal.proposer in participantIds) {
+            check(proposal.proposer == NO_PROPOSER || proposal.proposer in proposerIds) {
                 "Unknown proposer index ${proposal.proposer}"
             }
         }
