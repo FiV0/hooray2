@@ -29,23 +29,17 @@
   (when-not (= (count values) (count (distinct values)))
     (throw (IllegalStateException. ^String message))))
 
-(defn- ->stage [added participants proposer-positions target-variables deferred-incoming?]
+(defn- ->stage [added participants proposers target-variables]
   (ensure-distinct added "Stage added variables must be distinct")
   (ensure-distinct target-variables "Stage target variables must be distinct")
   (ensure-distinct (mapv #(.getIdx ^ExecPattern %) participants)
                    "Stage participant indexes must be distinct")
-  (when-not (or (< (count proposer-positions) 2)
-                (apply < proposer-positions))
-    (throw (IllegalStateException. "Stage proposer positions must be ordered and unique")))
-  (when-not (every? #(< -1 % (count participants)) proposer-positions)
-    (throw (IllegalStateException. "Stage proposer positions must be in bounds")))
-  (when-not (or (= (empty? proposer-positions) (empty? added))
-                (and deferred-incoming? (seq added) (empty? proposer-positions)))
+  (when-not (= (empty? proposers) (empty? added))
     (throw (IllegalStateException.
             "Stage proposer positions must be empty exactly when added variables are empty")))
   (when-not (every? (set target-variables) added)
     (throw (IllegalStateException. "Stage target variables must contain added variables")))
-  (->Stage added participants proposer-positions target-variables))
+  (->Stage added participants proposers target-variables))
 
 (defonce ^:private next-pattern-index (atom 0))
 
@@ -394,8 +388,7 @@
            [{:keys [added proposers participants target-variables] :as logical-stage} & logical-stages] logical-stages]
       (if-not logical-stage
         stages
-        (let [deferred-incoming? (boolean (some #{-1} participants))
-              participant-indexes (vec (remove #{-1} participants))
+        (let [participant-indexes (vec (remove #{-1} participants))
               positions-by-index (into {} (map-indexed (fn [position idx]
                                                          [idx position])
                                                        participant-indexes))
@@ -413,16 +406,14 @@
                                                                      (if (some #{idx} proposers)
                                                                        bound
                                                                        target-variables)))))
-                                        patterns-by-index participant-indexes)
-              stage-arguments [added
-                               (mapv patterns-by-index participant-indexes)
-                               proposer-positions
-                               target-variables]]
-          (recur
-           patterns-by-index
-           (conj stages (apply ->stage (conj stage-arguments deferred-incoming?)))
-           target-variables
-           logical-stages))))))
+                                        patterns-by-index participant-indexes)]
+          (recur patterns-by-index
+                 (conj stages (->stage added
+                                       (mapv patterns-by-index participant-indexes)
+                                       proposer-positions
+                                       target-variables))
+                 target-variables
+                 logical-stages))))))
 
 (defn- assemble-scope [db descriptors variable-order incoming]
   (fold-stages db descriptors (plan-scope descriptors variable-order incoming)))
