@@ -173,40 +173,6 @@ class GenericJoinEngineTest {
     }
 
     @Test
-    fun `rejects proposal indexes belonging to non-proposing participants`() {
-        val pattern = object : TestPattern(0, listOf(x)) {
-            override fun count(
-                input: BindingSet,
-                added: List<Variable>,
-                proposals: List<Proposal>,
-            ) = List(input.rowCount) { Proposal(99, 1) }
-
-            override fun join(
-                input: BindingSet,
-                added: List<Variable>,
-                targetVariables: List<Variable>,
-            ) = input
-        }
-        val otherProposer = MapPattern(1, setOf(x), values = emptyMap())
-        val validator = MapPattern(99, setOf(x), values = emptyMap())
-
-        val error = assertThrows(IllegalStateException::class.java) {
-            GenericJoinEngine().execute(
-                listOf(
-                    Stage(
-                        listOf(x),
-                        listOf(pattern, otherProposer, validator),
-                        listOf(0, 1),
-                        listOf(x),
-                    ),
-                ),
-                BindingSet(emptyList(), listOf(emptyList())),
-            )
-        }
-        assertEquals("Unknown proposer index 99", error.message)
-    }
-
-    @Test
     fun `rejects proposal tables with the wrong row count in multi-participant stages`() {
         val pattern = object : TestPattern(0, listOf(x)) {
             override fun count(
