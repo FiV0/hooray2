@@ -1160,6 +1160,25 @@
                     :where [[?monster :heads ?heads]]}
                   (h/db fix/*node*))))))
 
+#_
+(deftest test-aggregate-position-in-find-preserved
+  (h/transact fix/*node* [{:db/id :ivan1 :name "Ivan" :age 30}
+                          {:db/id :ivan2 :name "Ivan" :age 40}
+                          {:db/id :petr :name "Petr" :age 50}])
+
+  (t/testing "aggregate before the grouping variable"
+    (t/is (= #{[2 "Ivan"] [1 "Petr"]}
+             (set (h/q '{:find [(count ?p) ?name]
+                         :where [[?p :name ?name]]}
+                       (h/db fix/*node*))))))
+
+  (t/testing "aggregates interleaved with grouping variables"
+    (t/is (= #{[70 "Ivan" 2] [50 "Petr" 1]}
+             (set (h/q '{:find [(sum ?age) ?name (count ?p)]
+                         :where [[?p :name ?name]
+                                 [?p :age ?age]]}
+                       (h/db fix/*node*)))))))
+
 (deftest test-predicate-expression
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
                           {:db/id :bob :name "Bob" :last-name "Ivanov" :age 40}
