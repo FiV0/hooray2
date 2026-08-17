@@ -276,6 +276,21 @@
                              [?parent :name ?parent-name]]}
                    (h/db fix/*node*))))))
 
+#_
+(deftest relation-input-cannot-introduce-a-variable-after-a-prefix-gap
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}])
+
+  (t/is (= [[:alice :middel 30]]
+           (h/q '{:find [?a ?b ?c]
+                  ;; Variable order is [?a ?c ?b], but the relation
+                  ;; can only introduce variables in [?a ?b ?c] prefix order.
+                  :in [?a ?c [[?a ?b ?c]]]
+                  :where [[:alice :name "Alice"]]}
+                (h/db fix/*node*)
+                :alice
+                30
+                [[:alice :middle 30]]))))
+
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id 1 :age 35}
                           {:db/id 2 :age 35}
