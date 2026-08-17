@@ -97,10 +97,14 @@
       missing
       [])))
 
+(defn- relation-prefix? [variables bound-set]
+  (let [bound-variables (filter bound-set variables)]
+    (= bound-variables (take (count bound-variables) variables))))
+
 (defn- relation-groundable [variables bound]
   (let [bound-set (set bound)
-        bound-variables (vec (filter bound-set variables))]
-    (if (= bound-variables (vec (take (count bound-variables) variables)))
+        bound-variables (filter bound-set variables)]
+    (if (relation-prefix? variables bound-set)
       (if-let [variable (nth variables (count bound-variables) nil)]
         [variable]
         [])
@@ -225,11 +229,13 @@
   (and (not= :or kind)
        (some #{variable} (groundable-variables descriptor bound))))
 
-(defn- can-validate? [{:keys [kind] :as descriptor} bound new-variables]
+(defn- can-validate? [{:keys [kind variables] :as descriptor} bound new-variables]
   (when (not= :or kind)
     (let [new-groundable (groundable-variables descriptor bound)]
       (and (seq new-groundable)
-           (seq (set/intersection (set new-groundable) (set new-variables)))))))
+           (seq (set/intersection (set new-groundable) (set new-variables)))
+           (or (not= :relation kind)
+               (relation-prefix? variables (into (set bound) new-variables)))))))
 
 (defn- or-proposal [{:keys [kind variables] :as descriptor}
                     bound]

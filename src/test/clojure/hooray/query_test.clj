@@ -291,6 +291,29 @@
                 30
                 [[:alice :middle 30]]))))
 
+(deftest grouped-or-does-not-validate-non-prefix-input-relation
+  (h/transact fix/*node* [{:db/id :alice :name "Alice" :age 30}
+                          {:db/id :witness :age 20}])
+
+  (is (= [[:alice "Alice" 20 30]]
+         (h/q '{:find [?x ?a ?b ?c]
+                ;; overall order [y x a b c]
+                ;; y gets introduced
+                ;; the second relation can not ground x
+                ;; the or introduces [x a c]
+                ;; the 3rd relation tries to validate [y x a c]
+                :in [?y [[?x ?y]] [[?a ?b ?c]]]
+                :where [(or (and [?x :name ?a]
+                                 [?x :age ?c])
+                            (and [?x :name ?a]
+                                 [?x :salary ?c]))
+                        ;; witness necessary because of the issue above
+                        [:witness :age ?b]]}
+              (h/db fix/*node*)
+              :seed
+              [[:alice :seed]]
+              [["Alice" 20 30]]))))
+
 (deftest test-nested-or-groundability-is-all-or-nothing
   (h/transact fix/*node* [{:db/id 1 :age 35}
                           {:db/id 2 :age 35}

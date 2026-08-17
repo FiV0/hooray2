@@ -187,6 +187,35 @@
                               [x y]
                               []))))))
 
+(deftest plan-scope-does-not-validate-non-prefix-relation-after-grouped-or-test
+  (let [[x a b c] ['?x '?a '?b '?c]
+        conformed-query (s/conform ::query/query
+                                   '{:find [?x ?a ?b ?c]
+                                     :in [[[?a ?b ?c]]]
+                                     :where [(or (and [?x :name ?a]
+                                                      [?x :age ?c])
+                                                 (and [?x :name ?a]
+                                                      [?x :salary ?c]))
+                                             [:witness :age ?b]]})
+        [relation-descriptor] (plan/inputs->descriptors (:in conformed-query)
+                                                        [[[:alice :middle 30]]])
+        [or-descriptor triple-descriptor]
+        (plan/clauses->descriptors (:where conformed-query))
+        relation-idx (:idx relation-descriptor)
+        or-idx (:idx or-descriptor)
+        triple-idx (:idx triple-descriptor)]
+    (is (= [{:added [x a c]
+             :proposers [or-idx]
+             :participants [or-idx]
+             :target-variables [x a c]}
+            {:added [b]
+             :proposers [triple-idx]
+             :participants [relation-idx triple-idx]
+             :target-variables [x a b c]}]
+           (plan/plan-scope [relation-descriptor or-descriptor triple-descriptor]
+                            [x a b c]
+                            [])))))
+
 (deftest plan-scope-keep-only-relevant-incoming-variables-test
   (let [incoming-a '?incoming-a
         incoming-b '?incoming-b
