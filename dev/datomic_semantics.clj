@@ -167,9 +167,22 @@
                                                     [(> ?v 3)]))))]}
                         (d/db *conn*))))))))
 
+(def ^:private team-schema
+  [{:db/ident :team/name
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db/unique :db.unique/identity}])
+
+(deftest upsert-doesnt-use-old-entity-id
+  (transact! team-schema)
+  (let [eid1 (-> (transact! [[:db/add "team-frontend" :team/name "Frontend"]]) :tempids (get "team-frontend"))]
+    (transact! [[:db/retract eid1 :team/name "Frontend"]])
+    (let [eid2 (-> (transact! [[:db/add "team-frontend" :team/name "Frontend"]]) :tempids (get "team-frontend"))]
+      (is (not= eid1 eid2)))))
+
 (comment
   (t/run-all-tests)
-  (t/run-test-var #'cyclic-or-dependency-not-grounded-throws))
+  (t/run-test-var #'upsert-doesnt-use-old-entity-id))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; tx-report-queue auto retraction
