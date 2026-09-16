@@ -180,6 +180,24 @@
     (let [eid2 (-> (transact! [[:db/add "team-frontend" :team/name "Frontend"]]) :tempids (get "team-frontend"))]
       (is (not= eid1 eid2)))))
 
+(deftest or-join-can-introduce-unbound-join-variables
+  (transact! people-schema)
+  (transact! [{:name "Ivan" :age 25}
+              {:name "Bob" :age 35}
+              {:name "Alice" :age 30}])
+
+  (testing "both join variables are bound only inside the or-join branches"
+    (is (= #{["Ivan" 25] ["Bob" 35]}
+           (d/q '{:find [?name ?age]
+                  :where [(or-join [?name ?age]
+                                   (and [?young :name ?name]
+                                        [?young :age ?age]
+                                        [(< ?age 30)])
+                                   (and [?older :name ?name]
+                                        [?older :age ?age]
+                                        [(> ?age 30)]))]}
+                (d/db *conn*))))))
+
 (comment
   (t/run-all-tests)
   (t/run-test-var #'upsert-doesnt-use-old-entity-id))
