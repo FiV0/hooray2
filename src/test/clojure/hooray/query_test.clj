@@ -739,7 +739,7 @@
            (count (h/q '{:find [e] :where [[e :name "Ivan"]]}
                        (h/db fix/*node*))))))
 
-#_
+
 (t/deftest test-fn-clause-before-input-binding
   (h/transact fix/*node* [{:db/id :ivan :name "Ivan" :age 30}])
   (t/is (= [[31]] (h/q '{:find [y]
