@@ -1,0 +1,19 @@
+<section id="query" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">Datomic recap</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Queries: patterns joined by shared variables</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:760px;background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;line-height:1.5;color:#E6E1D6;white-space:nowrap">{:find&#160;&#160;[?name&#160;?age]<br>&#160;:where&#160;[[?e&#160;:name&#160;?name]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?e&#160;:age&#160;?age]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?e&#160;:follows&#160;?f]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[(&lt;&#160;?age&#160;40)]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;(or&#160;[?f&#160;:name&#160;"Alan"]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?f&#160;:name&#160;"Grace"])<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;(not&#160;[?e&#160;:banned&#160;true])]}</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">A pattern [e a v]</b> matches datoms: constants filter, variables bind.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">A shared variable is a join.</b> ?e joins three patterns and the not, ?f joins a pattern and the or.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">or</b> keeps rows that match any branch. <b style="color:#16202A">not</b> removes rows that match its body.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">Each pattern is answered by an index: AVE when the value is known, AEV otherwise.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 4</p>
+<aside>The query language is Datalog in EDN. A where clause is a list of patterns. Constants restrict, variables bind, and a variable that appears in several patterns joins them. Here: people under 40 who follow Alan or Grace and are not banned. Besides patterns there are predicates like the age check, functions that bind a new variable, or, which keeps a row if any branch matches, and not, which removes rows that match its body. So every query is a multi-way join over the indexes, and the question for the rest of the talk is how to evaluate that join.</aside>
+</section>

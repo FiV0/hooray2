@@ -1,0 +1,77 @@
+{
+  "v": 4,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-05T12:00:00Z"
+  },
+  "lists": "css",
+  "title": "Worst-Case Optimal Joins in Hooray",
+  "cover": "cover",
+  "order": [
+    "cover",
+    "datoms",
+    "indexes",
+    "query",
+    "binary-plan",
+    "star",
+    "var-at-a-time",
+    "result-flat",
+    "result-dfs",
+    "result-bfs",
+    "holy-grail",
+    "prefix-extender",
+    "gj-old-loop",
+    "extenders",
+    "issues",
+    "exec-pattern",
+    "stages",
+    "gj-loop",
+    "gj-planning",
+    "gj-triangle",
+    "or-stages",
+    "resolved",
+    "reading",
+    "thanks"
+  ],
+  "sections": {
+    "s1": {
+      "description": "A short recap of Datomic-style databases: datoms, covering indexes and the query language.",
+      "start": "cover"
+    },
+    "s2": {
+      "description": "How joins are usually done: a tree of binary joins, and how it blows up on the triangle query.",
+      "start": "binary-plan"
+    },
+    "s3": {
+      "description": "Worst-case optimal joins and the result set as a trie, built depth first or breadth first.",
+      "start": "var-at-a-time"
+    },
+    "s4": {
+      "description": "Hooray's old PrefixExtender interface for Generic Join and where it broke down.",
+      "start": "prefix-extender"
+    },
+    "s5": {
+      "description": "The ExecPattern interface and stages, and how they fix the old problems.",
+      "start": "exec-pattern"
+    },
+    "s6": {
+      "description": "Further reading and questions.",
+      "start": "reading"
+    }
+  },
+  "faces": {
+    "source-serif-4": {
+      "family": "Source Serif 4",
+      "href": "https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400..700&display=swap"
+    },
+    "ibm-plex-sans": {
+      "family": "IBM Plex Sans",
+      "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&display=swap"
+    },
+    "jetbrains-mono": {
+      "family": "JetBrains Mono",
+      "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+    }
+  },
+  "designSystems": []
+}

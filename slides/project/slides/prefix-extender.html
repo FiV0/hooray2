@@ -1,0 +1,15 @@
+<section id="prefix-extender" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">The old interface</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">The PrefixExtender interface</h2>
+</div>
+<div style="background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap">typealias&#160;Prefix&#160;=&#160;ResultTuple<br><br>interface&#160;PrefixExtender&#160;{<br>&#160;&#160;&#160;&#160;fun&#160;count(prefix:&#160;Prefix):&#160;Int<br>&#160;&#160;&#160;&#160;fun&#160;propose(prefix:&#160;Prefix):&#160;List&lt;Extension&gt;<br>&#160;&#160;&#160;&#160;fun&#160;intersect(prefix:&#160;Prefix,&#160;extensions:&#160;List&lt;Extension&gt;):&#160;List&lt;Extension&gt;<br>}</p>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1"><b style="color:#16202A">count, propose, intersect:</b> the three steps of Generic Join, for one prefix.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1"><b style="color:#16202A">Prefix:</b> the values bound so far, one per variable of the join order.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 12</p>
+<aside>This is the interface Generic Join in Hooray used before the rewrite, modelled on Frank McSherry&#x27;s description of Generic Join. A prefix is the tuple of values bound so far, one per level. count says how many extensions a pattern would propose for that prefix, propose returns them, and intersect keeps the extensions the pattern agrees with.</aside>
+</section>

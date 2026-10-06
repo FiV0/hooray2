@@ -1,0 +1,17 @@
+<section id="gj-planning" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Planning: who may propose, who validates</h2>
+</div>
+<table style="width:1664px;font-family:'IBM Plex Sans', Arial, sans-serif;font-size:28px;color:#3E4A56;padding:14px 20px">
+<tr style="background:#ECE8DF"><th style="width:20%;text-align:left;color:#16202A">Pattern</th><th style="width:40%;text-align:left;color:#16202A">Proposes</th><th style="width:40%;text-align:left;color:#16202A">Validates</th></tr>
+<tr><td style="text-align:left">Triple</td><td style="text-align:left">either variable, via AEV or AVE</td><td style="text-align:left">when its variables are bound</td></tr>
+<tr><td style="text-align:left">Predicate</td><td style="text-align:left">nothing</td><td style="text-align:left">once all arguments are bound</td></tr>
+<tr><td style="text-align:left">Function</td><td style="text-align:left">its output, after its arguments</td><td style="text-align:left">a bound output against the result</td></tr>
+<tr><td style="text-align:left">or</td><td style="text-align:left">all missing variables, alone</td><td style="text-align:left">semijoin once all are bound</td></tr>
+<tr><td style="text-align:left">not</td><td style="text-align:left">nothing</td><td style="text-align:left">antijoin once all are bound</td></tr>
+</table>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">The planner takes the next variable that some pattern can ground, preferring the order of appearance.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 19</p>
+<aside>Each pattern kind has its own rule for when it may propose and when it validates. Triples can propose either side. Functions propose their output only after their arguments are bound, and otherwise compare. or proposes all its missing variables at once and alone in its stage. Predicates and not never propose. The planner only picks a variable that some pattern can actually ground.</aside>
+</section>

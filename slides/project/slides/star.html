@@ -1,0 +1,28 @@
+<section id="star" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">Binary joins</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Skewed data breaks every binary plan</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:600px;display:flex;flex-direction:column;gap:0px">
+<svg aria-label="A star graph: six accounts follow a hub (orange edges) and the hub follows six other accounts (blue edges)" width="600" height="600" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"><line x1="240.5" y1="522.2" x2="300" y2="300" stroke="#D9622B" stroke-width="6"/><line x1="137.4" y1="462.6" x2="300" y2="300" stroke="#D9622B" stroke-width="6"/><line x1="77.8" y1="359.5" x2="300" y2="300" stroke="#D9622B" stroke-width="6"/><line x1="77.8" y1="240.5" x2="300" y2="300" stroke="#D9622B" stroke-width="6"/><line x1="137.4" y1="137.4" x2="300" y2="300" stroke="#D9622B" stroke-width="6"/><line x1="240.5" y1="77.8" x2="300" y2="300" stroke="#D9622B" stroke-width="6"/><line x1="359.5" y1="77.8" x2="300" y2="300" stroke="#2C64A6" stroke-width="6"/><line x1="462.6" y1="137.4" x2="300" y2="300" stroke="#2C64A6" stroke-width="6"/><line x1="522.2" y1="240.5" x2="300" y2="300" stroke="#2C64A6" stroke-width="6"/><line x1="522.2" y1="359.5" x2="300" y2="300" stroke="#2C64A6" stroke-width="6"/><line x1="462.6" y1="462.6" x2="300" y2="300" stroke="#2C64A6" stroke-width="6"/><line x1="359.5" y1="522.2" x2="300" y2="300" stroke="#2C64A6" stroke-width="6"/><circle cx="240.5" cy="522.2" r="24" fill="#FBFAF6" stroke="#D9622B" stroke-width="5"/><circle cx="137.4" cy="462.6" r="24" fill="#FBFAF6" stroke="#D9622B" stroke-width="5"/><circle cx="77.8" cy="359.5" r="24" fill="#FBFAF6" stroke="#D9622B" stroke-width="5"/><circle cx="77.8" cy="240.5" r="24" fill="#FBFAF6" stroke="#D9622B" stroke-width="5"/><circle cx="137.4" cy="137.4" r="24" fill="#FBFAF6" stroke="#D9622B" stroke-width="5"/><circle cx="240.5" cy="77.8" r="24" fill="#FBFAF6" stroke="#D9622B" stroke-width="5"/><circle cx="359.5" cy="77.8" r="24" fill="#FBFAF6" stroke="#2C64A6" stroke-width="5"/><circle cx="462.6" cy="137.4" r="24" fill="#FBFAF6" stroke="#2C64A6" stroke-width="5"/><circle cx="522.2" cy="240.5" r="24" fill="#FBFAF6" stroke="#2C64A6" stroke-width="5"/><circle cx="522.2" cy="359.5" r="24" fill="#FBFAF6" stroke="#2C64A6" stroke-width="5"/><circle cx="462.6" cy="462.6" r="24" fill="#FBFAF6" stroke="#2C64A6" stroke-width="5"/><circle cx="359.5" cy="522.2" r="24" fill="#FBFAF6" stroke="#2C64A6" stroke-width="5"/><circle cx="300" cy="300" r="44" fill="#16202A"/></svg>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">A hub: <span style="color:#B4501E"><b>N/2 accounts follow it</b></span> and <span style="color:#2C64A6"><b>it follows N/2 others</b></span>.</p>
+<div style="display:flex;gap:32px;align-items:start">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:72px;font-weight:600;line-height:1.1;color:#B4501E">(N/2)²</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">tuples from any first pairwise join</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:72px;font-weight:600;line-height:1.1;color:#2C64A6">0</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">triangles in the result</p>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">All three pairwise joins meet at the hub, so reordering does not help. Yet no input has more than N¹·⁵ triangles (the AGM bound).</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">Worst-case optimal joins</b> run within that bound on every input.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 6</p>
+<aside>Here is why that is a problem. One hub account: N/2 accounts follow it and it follows N/2 others. Joining any two of the three patterns first meets at the hub and builds (N/2) squared tuples, but there is not a single triangle. Atserias, Grohe and Marx showed the output of the triangle query is at most N to the 1.5. Any plan of binary joins is Omega(N squared) on some input. A worst-case optimal join never does more work than that bound, up to log factors.</aside>
+</section>

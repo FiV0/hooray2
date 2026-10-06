@@ -1,0 +1,23 @@
+<section id="indexes" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">Datomic recap</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Covering indexes: the same datoms, sorted four ways</h2>
+</div>
+<table style="width:1664px;font-family:'IBM Plex Sans', Arial, sans-serif;font-size:28px;color:#3E4A56;padding:14px 20px">
+<tr style="background:#ECE8DF"><th style="width:12%;text-align:left;color:#16202A">Index</th><th style="width:40%;text-align:left;color:#16202A">Sorted by</th><th style="width:48%;text-align:left;color:#16202A">Answers</th></tr>
+<tr><td style="text-align:left">EAV</td><td style="text-align:left">entity → attribute → value</td><td style="text-align:left">everything about one entity</td></tr>
+<tr><td style="text-align:left">AVE</td><td style="text-align:left">attribute → value → entity</td><td style="text-align:left">[?e :name "Ada"]: entities by value</td></tr>
+<tr><td style="text-align:left">AEV</td><td style="text-align:left">attribute → entity → value</td><td style="text-align:left">[?e :follows ?f] for a known or every ?e</td></tr>
+<tr><td style="text-align:left">VAE</td><td style="text-align:left">value → attribute → entity</td><td style="text-align:left">reverse references: who follows :alan?</td></tr>
+</table>
+<div style="display:flex;gap:32px;align-items:start">
+<div style="background:#1E2A36;border-radius:16px;padding:40px 48px;flex:1">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap"><span style="color:#9AA7B4">;;&#160;AVE:&#160;attribute&#160;→&#160;value&#160;→&#160;entities</span><br>:follows<br>&#160;&#160;:alan&#160;&#160;→&#160;:ada<br>&#160;&#160;:grace&#160;→&#160;:ada,&#160;:alan</p>
+</div>
+<div style="background:#1E2A36;border-radius:16px;padding:40px 48px;flex:1">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap"><span style="color:#9AA7B4">;;&#160;AEV:&#160;attribute&#160;→&#160;entity&#160;→&#160;values</span><br>:follows<br>&#160;&#160;:ada&#160;&#160;&#160;→&#160;:alan,&#160;:grace<br>&#160;&#160;:alan&#160;&#160;→&#160;:grace</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 3</p>
+<aside>Every datom lives in several sorted indexes, so each access pattern is a lookup or a range scan. AVE answers: given an attribute and a value, which entities. AEV answers: given an attribute and an entity, what are the values. In Hooray every index is a nested sorted map. Keep that in mind: a nested map is a trie, and tries are exactly what worst-case optimal joins want.</aside>
+</section>

@@ -1,0 +1,19 @@
+<section id="exec-pattern" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">The new ExecPattern interface</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:880px;background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap">interface&#160;ExecPattern&#160;{<br>&#160;&#160;&#160;&#160;val&#160;variables:&#160;Set&lt;Variable&gt;<br><span style="color:#9AA7B4">&#160;&#160;&#160;&#160;//&#160;lower&#160;a&#160;row's&#160;proposal&#160;if&#160;cheaper</span><br>&#160;&#160;&#160;&#160;fun&#160;count(input:&#160;BindingSet,<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;added:&#160;List&lt;Variable&gt;,<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;proposals:&#160;List&lt;Proposal&gt;)<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;:&#160;List&lt;Proposal&gt;<br><br><span style="color:#9AA7B4">&#160;&#160;&#160;&#160;//&#160;extend&#160;if&#160;added&#160;is&#160;non-empty,&#160;else&#160;filter</span><br>&#160;&#160;&#160;&#160;fun&#160;join(input:&#160;BindingSet,<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;added:&#160;List&lt;Variable&gt;,<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;targetVariables:&#160;List&lt;Variable&gt;)<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;:&#160;BindingSet<br>}</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">Variables, not levels.</b> A pattern names the variables it binds.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">A BindingSet per call.</b> All rows of a stage at once, not one prefix.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">added holds one or more variables</b>, or none: then join only filters.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">Planning is separate.</b> In Clojure, each pattern says what it can ground given what is bound.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 16</p>
+<aside>The new interface, inspired by ExecAtom in datatoad. Two methods instead of three. count updates the per-row proposal if this pattern is cheaper. join either extends the input by the added variables, or, when added is empty, filters it. Everything is addressed by variable name, and every call gets a whole binding set. Planning moved to Clojure: each pattern has a groundable function that says which variables it can introduce given the bound ones.</aside>
+</section>

@@ -1,0 +1,27 @@
+<section id="var-at-a-time" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">Worst-case optimal joins</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Join one variable at a time, not one relation</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:760px;background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:30px;line-height:1.5;color:#E6E1D6;white-space:nowrap">for&#160;a&#160;in&#160;R.a&#160;∩&#160;T.a:<br>&#160;&#160;for&#160;b&#160;in&#160;R[a]&#160;∩&#160;S.b:<br>&#160;&#160;&#160;&#160;for&#160;c&#160;in&#160;S[b]&#160;∩&#160;T[a]:<br>&#160;&#160;&#160;&#160;&#160;&#160;emit&#160;(a,&#160;b,&#160;c)</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">1</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Fix an order of the variables: a, then b, then c.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">2</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">At each level, intersect the candidates of every pattern that mentions the variable.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">3</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">If each intersection costs about its smallest input, the loop nest stays within the AGM bound.</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 7</p>
+<aside>The idea behind every worst-case optimal join: bind variables one at a time instead of joining relations pairwise. For each variable, every pattern that mentions it offers candidates given what is already bound, and we intersect. The indexes from the recap give each pattern as a trie in whatever order we need. On the star, the innermost intersection is tiny for every a, so the blow-up never happens.</aside>
+</section>

@@ -1,0 +1,15 @@
+<section id="gj-loop" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Executing a stage: proposer chosen per row</h2>
+</div>
+<div style="background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap"><span style="color:#9AA7B4">//&#160;every&#160;proposer&#160;may&#160;lower&#160;each&#160;row's&#160;(proposer,&#160;count)</span><br>val&#160;proposals&#160;=&#160;proposers.fold(initial)&#160;{&#160;acc,&#160;p&#160;-&gt;<br>&#160;&#160;&#160;&#160;p.count(input,&#160;stage.added,&#160;acc)<br>}<br><br><span style="color:#9AA7B4">//&#160;group&#160;rows&#160;by&#160;their&#160;winning&#160;proposer,&#160;extend,&#160;then&#160;validate</span><br>for&#160;((id,&#160;rows)&#160;in&#160;shards)&#160;{<br>&#160;&#160;&#160;&#160;val&#160;proposed&#160;=&#160;patterns[id].join(input.selectRows(rows),<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;stage.added,&#160;stage.targetVariables)<br>&#160;&#160;&#160;&#160;result&#160;=&#160;result.union(validateAll(proposed,&#160;others(id)))<br>}</p>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1"><b style="color:#16202A">Still breadth first.</b> A stage handles every row before the next stage starts.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1"><b style="color:#16202A">Still worst-case optimal.</b> The smallest candidate set drives every row.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 18</p>
+<aside>The core of GenericJoinEngine, slightly simplified. It is the same Generic Join as before, count, propose, intersect, but over a whole binding set, with the choice of proposer made row by row. Skew in one row does not affect the choice for others.</aside>
+</section>

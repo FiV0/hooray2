@@ -1,0 +1,18 @@
+<section id="resolved" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">What Stages and ExecPattern fixed</h2>
+</div>
+<table style="width:1664px;font-family:'IBM Plex Sans', Arial, sans-serif;font-size:28px;color:#3E4A56;padding:14px 20px">
+<tr style="background:#ECE8DF"><th style="width:22%;text-align:left;color:#16202A">Problem</th><th style="width:39%;text-align:left;color:#16202A">PrefixExtender</th><th style="width:39%;text-align:left;color:#16202A">Stages + ExecPattern</th></tr>
+<tr><td style="text-align:left">Variable order</td><td style="text-align:left">one global order, fixed up front</td><td style="text-align:left">planner picks a groundable variable</td></tr>
+<tr><td style="text-align:left">Functions</td><td style="text-align:left">output level after the inputs</td><td style="text-align:left">propose after inputs, else validate</td></tr>
+<tr><td style="text-align:left">or branches</td><td style="text-align:left">unioned level by level</td><td style="text-align:left">each branch is a nested plan</td></tr>
+<tr><td style="text-align:left">Several variables</td><td style="text-align:left">one per level</td><td style="text-align:left">a stage may add several</td></tr>
+<tr><td style="text-align:left">not, predicates</td><td style="text-align:left">fake count, throw in propose</td><td style="text-align:left">validation-only participants</td></tr>
+<tr><td style="text-align:left">Granularity</td><td style="text-align:left">one prefix per call</td><td style="text-align:left">a whole BindingSet per call</td></tr>
+</table>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">Both failing queries now return the right answer, and so does a query whose functions need b before a and a before b.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 22</p>
+<aside>Summary of the rewrite. The planner chooses variables that can actually be grounded, so clause order no longer matters for functions. Functions whose output is already bound simply validate, which handles mutually dependent functions. or and not run as nested plans. A stage can add several variables. Patterns that cannot propose are not forced to pretend. And everything is batched over binding sets. I ran the examples from this talk against the current engine: the or query returns B 35, the inc age query returns y, and [(inc a) b], [(dec b) a], [a :foo b] returns [1 2].</aside>
+</section>

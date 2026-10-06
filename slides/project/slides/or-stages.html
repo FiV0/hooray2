@@ -1,0 +1,31 @@
+<section id="or-stages" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">or and not run as nested plans</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:760px;background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap">{:find&#160;[?name&#160;?age]<br>&#160;:where&#160;[[?e&#160;:age&#160;?age]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;(or&#160;(and&#160;[?e&#160;:name&#160;"A"]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[(&lt;&#160;?age&#160;30)])<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;(and&#160;[?e&#160;:name&#160;"B"]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[(&lt;&#160;?age&#160;40)]))<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?e&#160;:name&#160;?name]]}<br><span style="color:#9AA7B4">;;&#160;=&gt;&#160;[["B"&#160;35]]</span></p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">1</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">The triples bind ?e and ?age. The or cannot propose: no branch can ground ?age.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">2</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Once ?e and ?age are bound, each branch runs as its own plan over those rows.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">3</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Branch results are unioned and matched back. Branch A keeps nothing, branch B keeps ("b", 35).</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">4</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">not works the same way, as one antijoin over the whole BindingSet.</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 21</p>
+<aside>How the or query from before runs now. The or cannot introduce age, because branch two only has a predicate on it, so the triples bind e and age first. Once both are bound, the or validates as a unit: each branch is a complete nested plan that receives the bound rows as an input relation. Branch identity cannot leak, because a branch only ever sees whole tuples. not is the same idea with an antijoin. I checked: the query now returns only B, 35.</aside>
+</section>

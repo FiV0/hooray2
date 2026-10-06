@@ -1,0 +1,16 @@
+<section id="gj-triangle" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">The triangle query as three stages</h2>
+</div>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#16202A">P1 = [?a :follows ?b]&#160;&#160;&#160;P2 = [?b :follows ?c]&#160;&#160;&#160;P3 = [?a :follows ?c]</p>
+<table style="width:1664px;font-family:'IBM Plex Sans', Arial, sans-serif;font-size:28px;color:#3E4A56;padding:14px 20px">
+<tr style="background:#ECE8DF"><th style="width:12%;text-align:left;color:#16202A">Stage</th><th style="width:10%;text-align:left;color:#16202A">Adds</th><th style="width:50%;text-align:left;color:#16202A">Candidates per row</th><th style="width:28%;text-align:left;color:#16202A">Result</th></tr>
+<tr><td style="text-align:left">1</td><td style="text-align:left">?a</td><td style="text-align:left">P1, P3: every entity with :follows</td><td style="text-align:left">a tie; P1 proposes</td></tr>
+<tr><td style="text-align:left">2</td><td style="text-align:left">?b</td><td style="text-align:left">P1: follows(a) · P2: every entity with :follows</td><td style="text-align:left">usually P1 proposes</td></tr>
+<tr><td style="text-align:left">3</td><td style="text-align:left">?c</td><td style="text-align:left">P2: follows(b) · P3: follows(a)</td><td style="text-align:left">the smaller side proposes</td></tr>
+</table>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">On the star:</b> rows with a = hub die in stage 2, because followees follow nobody. For each follower, stage 3 proposes from follows(a), which has one entry. The work stays linear.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 20</p>
+<aside>Back to the triangle, with variable order a, b, c. In every stage the losing proposer validates. Stage 3 is exactly the intersection of follows(a) and follows(b). On the star, every row is cut off early, because the smaller side always drives.</aside>
+</section>

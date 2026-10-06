@@ -1,0 +1,36 @@
+<section id="stages" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">ExecPattern and stages</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">Stages: the plan as a sequence of layout changes</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:700px;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">BindingSet:</b> ordered variables and rows of the same arity.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;"><b style="color:#16202A">Stage:</b> the variables it adds, who may propose them, who participates, and the output layout.</p>
+<div style="background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap">{:added&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?name]<br>&#160;:proposers&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[1]<br>&#160;:participants&#160;&#160;&#160;&#160;&#160;[1&#160;2]<br>&#160;:target-variables&#160;[?e&#160;?name]}</p>
+</div>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">1</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Every proposer counts its candidates for every row.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">2</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Per row, the cheapest positive count wins. Rows nobody can extend are dropped.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">3</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Rows are grouped by winner, and the winner extends its group.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">4</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Every other participant validates. The groups are unioned.</p>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">A stage that adds nothing is <b style="color:#16202A">validation only</b>: every participant filters.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 17</p>
+<aside>A plan is a list of stages. Each stage takes a binding set to a new layout: it adds some variables, and lists the participating patterns. Some participants may propose, the rest validate. Executing a proposing stage is count, pick the cheapest proposer per row, shard the rows by proposer, extend, and validate with everyone else. A stage that adds no variables just filters, which is where predicates, not and complete or clauses live.</aside>
+</section>

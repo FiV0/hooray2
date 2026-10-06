@@ -1,0 +1,32 @@
+<section id="datoms" data-transition="fade" style="display:flex; flex-direction:column; gap:48px; padding:128px 128px 160px; background:#f6f4ef">
+  <div style="display:flex; flex-direction:column; gap:12px">
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:#b4501e">Datomic recap</p>
+    <h2 style="font-family:'Source Serif 4', Georgia, serif; font-size:64px; font-weight:600; line-height:1.1; color:#16202a">Data model: every fact is a datom</h2>
+  </div>
+  <div style="display:flex; flex-direction:row; gap:64px; align-items:start">
+    <div style="width:700px; display:flex; flex-direction:column; gap:24px">
+      <div style="display:flex; flex-direction:column; padding:40px 48px; background:#1e2a36; border-radius:16px">
+        <p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:30px; line-height:1.5; white-space:nowrap; color:#e6e1d6">[:db/add&nbsp;:ada&nbsp;:first-name&nbsp;"Ada"]</p>
+      </div>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; line-height:1.4; color:#3e4a56"><span style="color:#16202a"><b>:db/add</b></span> asserts a single datom.</p>
+      <div style="display:flex; flex-direction:column; padding:40px 48px; background:#1e2a36; border-radius:16px">
+        <p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:30px; line-height:1.5; white-space:nowrap; color:#e6e1d6">{:db/id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:ada<br>&nbsp;:name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Ada"<br>&nbsp;:last-name&nbsp;"Lovelace"<br>&nbsp;:follows&nbsp;&nbsp;&nbsp;:alan}</p>
+      </div>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; line-height:1.4; color:#3e4a56">Transacting an entity map adds one datom per attribute.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:28px; flex:1">
+      <table style="width:900px; padding:14px 20px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; color:#3e4a56">
+        <tr style="background:#ece8df"><th style="width:30%; color:#16202a">Entity</th><th style="width:36%; color:#16202a">Attribute</th><th style="width:34%; color:#16202a">Value</th></tr>
+        <tr><td>:ada</td><td>:first-name</td><td>"Ada"</td></tr>
+        <tr><td>:ada</td><td>:name</td><td>"Ada"</td></tr>
+        <tr><td>:ada</td><td>:last-name</td><td>"Lovelace"</td></tr>
+        <tr><td>:ada</td><td>:follows</td><td>:alan</td></tr>
+      </table>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; line-height:1.4; color:#3e4a56"><span style="color:#16202a"><b>Schema:</b></span> each attribute declares a value type and a cardinality.</p>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; line-height:1.4; color:#3e4a56">Datomic also records the transaction of each datom. Hooray keeps only entity, attribute and value.</p>
+    </div>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#5f6a74">Worst-case optimal joins in Hooray · 2</p>
+  <x-shape kind="line" id="99fe4e23" style="position:absolute; top:50%; left:50%; width:480px; height:8px; background:#1a1a1a; transform:translate(-50%, -50%)"></x-shape>
+  <aside>A quick recap for anyone who has not used Datomic or one of its relatives like Datascript or XTDB v1. The database is a set of facts, called datoms: entity, attribute, value. The basic operation is :db/add, which asserts one datom. An entity map is just sugar for several datoms with the same entity id. The table shows the datoms from both. Attributes are declared in a schema with a type and a cardinality. Datomic adds the transaction and an added or retracted flag; Hooray only stores the triple.</aside>
+</section>

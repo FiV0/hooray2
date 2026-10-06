@@ -1,0 +1,27 @@
+<section id="binary-plan" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">Binary joins</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">The usual way: a tree of binary joins</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:960px;display:flex;flex-direction:column;gap:28px">
+<div style="background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap">{:find&#160;[?a&#160;?b&#160;?c]<br>&#160;:where&#160;[[?a&#160;:follows&#160;?b]&#160;&#160;&#160;;;&#160;R(a,b)<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?b&#160;:follows&#160;?c]&#160;&#160;&#160;;;&#160;S(b,c)<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?a&#160;:follows&#160;?c]]}&#160;;;&#160;T(a,c)</p>
+</div>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">Join two relations, materialise the result, then join the next one.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">Each step is a hash or merge join on the variables the two inputs share.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;">The optimiser chooses only the order of the pairwise joins.</p>
+</div>
+<div style="position:relative;width:640px;height:500px">
+<svg aria-label="" style="position:absolute;left:0px;top:0px;width:640px;height:500px" width="640" height="500" viewBox="0 0 640 500" xmlns="http://www.w3.org/2000/svg"><line x1="370.0" y1="68" x2="170.0" y2="192" stroke="#9C9486" stroke-width="3"/><line x1="370.0" y1="68" x2="520.0" y2="192" stroke="#9C9486" stroke-width="3"/><line x1="170.0" y1="248" x2="90.0" y2="372" stroke="#9C9486" stroke-width="3"/><line x1="170.0" y1="248" x2="310.0" y2="372" stroke="#9C9486" stroke-width="3"/></svg>
+<div style="position:absolute;left:240px;top:12px;width:260px;height:56px;display:flex;align-items:center;justify-content:center;background:#16202A;border:2px solid #16202A;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#EDEAE2;white-space:nowrap">⋈ on a, c</p></div>
+<div style="position:absolute;left:60px;top:192px;width:220px;height:56px;display:flex;align-items:center;justify-content:center;background:#16202A;border:2px solid #16202A;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#EDEAE2;white-space:nowrap">⋈ on b</p></div>
+<div style="position:absolute;left:420px;top:192px;width:200px;height:56px;display:flex;align-items:center;justify-content:center;background:#FBFAF6;border:2px solid #D6CFC2;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#16202A;white-space:nowrap">T(a,c)</p></div>
+<div style="position:absolute;left:0px;top:372px;width:180px;height:56px;display:flex;align-items:center;justify-content:center;background:#FBFAF6;border:2px solid #D6CFC2;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#16202A;white-space:nowrap">R(a,b)</p></div>
+<div style="position:absolute;left:220px;top:372px;width:180px;height:56px;display:flex;align-items:center;justify-content:center;background:#FBFAF6;border:2px solid #D6CFC2;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:26px;color:#16202A;white-space:nowrap">S(b,c)</p></div>
+<p style="position:absolute;left:0px;top:452px;width:640px;font-size:24px;color:#B4501E;text-align:center">R ⋈ S builds every 2-path a → b → c</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 5</p>
+<aside>The triangle query: a follows b, b follows c, and a follows c. A classic relational engine picks a tree of binary joins. Here: first R join S on b, which produces every two-step path, then join that with T on a and c. Each step is a hash join or a sort-merge join. The optimiser can reorder the joins, but the shape stays pairwise and every intermediate result is materialised.</aside>
+</section>

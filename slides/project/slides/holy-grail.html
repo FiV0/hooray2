@@ -1,0 +1,31 @@
+<section id="holy-grail" data-transition="fade" style="background:#F6F4EF;color:#3E4A56;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#B4501E">Worst-case optimal joins</p>
+<h2 style="font-family:'Source Serif 4', Georgia, serif;font-size:64px;font-weight:600;line-height:1.1;color:#16202A">The holy grail: one WCOJ over the whole query</h2>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<div style="width:760px;background:#1E2A36;border-radius:16px;padding:40px 48px;">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;line-height:1.5;color:#E6E1D6;white-space:nowrap">{:find&#160;[?country&#160;?city&#160;?district]<br>&#160;:where&#160;[[?city&#160;:city/country&#160;?country]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?city&#160;:city/pop&#160;?pop]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[(&gt;&#160;?pop&#160;3000000)]<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;[?district&#160;:district/city&#160;?city]]}<br><span style="color:#9AA7B4">;;&#160;?country&#160;→&#160;?city&#160;→&#160;?pop&#160;→&#160;?district</span></p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">1</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">Fix one order over all variables of the query.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">2</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">For each variable, every clause that mentions it takes part: patterns propose candidates, predicates and functions check or compute them.</p>
+</div>
+<div style="display:flex;gap:24px;align-items:start">
+<p style="font-family:'Source Serif 4', Georgia, serif;font-size:40px;font-weight:600;line-height:1.1;color:#B4501E;width:40px">3</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1">At ?pop, the predicate drops Munich before any of its districts are looked at.</p>
+</div>
+</div>
+</div>
+<div style="display:flex;gap:64px;align-items:start">
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1"><b style="color:#16202A">Conjunctive queries fit.</b> Every clause must hold, so each one can extend or reject a row at the variables it mentions.</p>
+<p style="font-size:30px;line-height:1.4;color:#3E4A56;flex:1"><b style="color:#16202A">Disjunction does not.</b> An or holds only if one branch accepts the whole row. Spread over the variable order, the branches lose track of each other.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#5F6A74">Worst-case optimal joins in Hooray · 11</p>
+<aside>Before the implementation, the goal. The holy grail is a single worst-case optimal join over the whole query, not a few worst-case optimal joins glued together. That means the trie construction from the last slides for every clause at once: one variable order, and at each variable every clause that mentions it takes part. Patterns propose candidates, predicates filter them, functions compute them. In the example, the order is country, city, population, district. The first pattern proposes Germany and USA, then their cities. Once a city's population is bound, the predicate rejects Munich, so its districts are never looked at, and the last pattern proposes the districts of Berlin, NYC and LA. Every clause takes part in the one join, and the result is the trie from before minus Munich. For conjunctive queries, where every clause must hold, this works directly: a clause can extend or reject a row at any of its variables. Disjunction is the problem. An or only holds if one branch accepts the complete row, but once its branches are spread over the levels of the variable order, nothing remembers which branch admitted which value. We will see exactly that bug in a moment. So for now we focus on conjunctive queries.</aside>
+</section>
