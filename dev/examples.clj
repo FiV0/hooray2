@@ -4,6 +4,15 @@
 
 (def node (h/connect {:type :mem :storage :hash :algo :generic}))
 
+(h/transact node [{:db/id :db/person-name-attr
+                   :db/ident :name
+                   :db/valueType :db.type/string
+                   :db/cardinality :db.cardinality/one}
+                  {:db/id :db/person-last-name-attr
+                   :db/ident :last-name
+                   :db/valueType :db.type/string
+                   :db/cardinality :db.cardinality/one}])
+
 (h/transact node [{:db/id :ada :name "Ada" :last-name "Lovelace"}
                   {:db/id :petr :name "Alan" :last-name "Turing"}])
 
